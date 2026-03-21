@@ -1,13 +1,22 @@
 [tool.poetry]
 name = "planner-service"
 version = "0.1.0"
-description = ""
-authors = ["Your Name <you@example.com>"]
+description = "Planning engine service (FastAPI + OR-Tools)"
+authors = ["Soj044"]
 readme = "README.md"
+packages = [{ include = "app" }]
 
 [tool.poetry.dependencies]
-python = "3.12.3"
+python = "^3.12"
+fastapi = ">=0.115,<1.0"
+uvicorn = { extras = ["standard"], version = ">=0.30,<1.0" }
+ortools = ">=9.10,<10.0"
+pydantic = ">=2.8,<3.0"
+python-dotenv = "^1.1.1"
+workestrator-contracts = { path = "../../packages/contracts", develop = true }
 
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.2"
 
 [build-system]
 requires = ["poetry-core"]

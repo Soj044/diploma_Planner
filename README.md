@@ -7,59 +7,43 @@
 - `services/core-service` — Django + DRF, источник бизнес-истины.
 - `services/planner-service` — FastAPI + OR-Tools/CP-SAT, расчет предложений по назначениям.
 - `packages/contracts` — общий слой DTO/схем между сервисами.
-- `ai-layer` — в будущем, сейчас не реализуется.
+- `services/ai-layer` — future-only слой, без реализации в MVP.
 
 ## Границы MVP
 
 В MVP включено:
 - CRUD по ключевым сущностям core-domain.
-- Запуск planning-run и генерация proposals в planner-service.
+- Запуск `plan-run` и генерация `proposals` в planner-service.
 - Базовая explainability через diagnostics по неназначенным задачам.
+- Docker-запуск двух сервисов + PostgreSQL.
 
 В MVP не включено:
 - frontend;
 - RAG/LLM и любые AI-зависимости;
 - сложные fairness/soft-constraint профили.
 
-## Минимальная структура
+## Локальный запуск через Docker
 
-```text
-services/
-  core-service/
-  planner-service/
-packages/
-  contracts/
-docs/
+1. Скопировать переменные окружения:
+```bash
+cp .env.example .env
 ```
 
-## Быстрый старт (локально)
+2. Поднять сервисы:
+```bash
+docker compose up --build
+```
 
-1. Core service:
+3. Проверить health:
+- core-service: `http://localhost:8000/api/v1/`
+- planner-service: `http://localhost:8001/health`
+
+## Локальная разработка через Poetry
+
 ```bash
 cd services/core-service
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-python manage.py migrate
-python manage.py runserver
+poetry install
+
+cd ../planner-service
+poetry install
 ```
-
-2. Planner service:
-```bash
-cd services/planner-service
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-uvicorn app.main:app --reload
-```
-
-3. Контракты:
-```bash
-pip install -e packages/contracts
-```
-
-## Порядок реализации
-
-1. `core-service` (стабилизация доменной истины и approval flow).
-2. `planner-service` (snapshot -> eligibility -> scoring -> CP-SAT -> proposals).
-3. AI-слой после MVP.
