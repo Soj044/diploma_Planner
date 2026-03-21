@@ -16,11 +16,17 @@
 ```bash
 # Core service
 cd services/core-service
-python manage.py makemigrations --check
-python manage.py migrate
-python manage.py test
+poetry install
+poetry run python manage.py makemigrations --check
+poetry run python manage.py migrate
+poetry run python manage.py test
 
 # Planner service
 cd services/planner-service
-pytest -q
+poetry install
+poetry run pytest -q
+
+# Container smoke
+cd /path/to/repo
+docker compose up --build
 ```

@@ -11,6 +11,21 @@ manager -> core-service: approve proposals
 core-service: store final approved assignments
 ```
 
+## Runtime Diagram (Docker)
+
+```text
++---------------------+      +-----------------------+
+|   core-service      |<---->|       postgres        |
+|   django + drf      |      |      postgres:16      |
++----------+----------+      +-----------------------+
+           |
+           v
++---------------------+
+|   planner-service   |
+|  fastapi + or-tools |
++---------------------+
+```
+
 ## Data Ownership
 
 ```text
