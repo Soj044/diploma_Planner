@@ -1,13 +1,14 @@
 # Testing Strategy
 
 ## Priorities
+- core-service model constraints and CRUD smoke tests
 - eligibility logic
 - scoring logic
 - planning constraints
 - assignment approval flow
 
 ## Basic checks
-- core-service: local startup and migration workflow
+- core-service: local startup, migration workflow, authenticated CRUD smoke tests, model constraints, serializer validation
 - planner-service: unit and integration tests for planning pipeline
 - contracts: schema compatibility between services
 
@@ -18,8 +19,12 @@
 cd services/core-service
 poetry install
 poetry run python manage.py makemigrations --check
+poetry run python manage.py check
 poetry run python manage.py migrate
 poetry run python manage.py test
+
+# Core service quick unit checks without a local PostgreSQL container
+DJANGO_TEST_SQLITE=true poetry run python manage.py test
 
 # Planner service
 cd services/planner-service

@@ -6,6 +6,16 @@ FastAPI сервис планирования для MVP.
 
 `PlanRequest` -> eligibility -> scoring -> CP-SAT -> proposals + diagnostics
 
+Текущий MVP хранит planner artifacts in-memory:
+- plan run summary
+- input snapshot hash + JSON model
+- assignment proposals
+- unassigned task diagnostics
+- solver statistics
+
+Нормализованные `candidate_eligibility`, `candidate_scores`, `constraint_violations` и `replanning_events`
+остаются целевой схемой из `docs/dbdiagrams/planner_service.md`, но не внедряются до необходимости.
+
 ## API
 
 - `GET /health`

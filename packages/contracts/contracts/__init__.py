@@ -2,12 +2,14 @@
 
 from .schemas import (
     AssignmentProposal,
+    CreatePlanRunRequest,
     EmployeeAvailability,
     EmployeeSnapshot,
     PlanRequest,
     PlanResponse,
     PlanRunArtifacts,
     PlanRunSummary,
+    PlanningSnapshot,
     SkillRequirement,
     TaskSnapshot,
     UnassignedTaskDiagnostic,
@@ -15,12 +17,14 @@ from .schemas import (
 
 __all__ = [
     "AssignmentProposal",
+    "CreatePlanRunRequest",
     "EmployeeAvailability",
     "EmployeeSnapshot",
     "PlanRequest",
     "PlanResponse",
     "PlanRunArtifacts",
     "PlanRunSummary",
+    "PlanningSnapshot",
     "SkillRequirement",
     "TaskSnapshot",
     "UnassignedTaskDiagnostic",

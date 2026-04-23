@@ -11,6 +11,15 @@ manager -> core-service: approve proposals
 core-service: store final approved assignments
 ```
 
+## Approval Handoff
+
+```text
+manager -> planner-service: review proposal
+manager -> core-service: POST /api/v1/assignments/approve-proposal/
+core-service -> core database: create approved Assignment + AssignmentChangeLog
+planner-service: keeps proposal as planning artifact only
+```
+
 ## Runtime Diagram (Docker)
 
 ```text
@@ -30,13 +39,32 @@ core-service: store final approved assignments
 
 ```text
 core-service:
-  User, Department, Employee, Skill, EmployeeSkill,
-  WorkSchedule, WorkScheduleDay, EmployeeLeave,
-  EmployeeAvailabilityOverride, Task, TaskRequirement,
-  Assignment, AssignmentChangeLog
+  users app:
+    User
+
+  operations app:
+    Department, Employee, Skill, EmployeeSkill,
+    WorkSchedule, WorkScheduleDay, EmployeeLeave,
+    EmployeeAvailabilityOverride, Task, TaskRequirement,
+    Assignment, AssignmentChangeLog
 
 planner-service:
   PlanRun, PlanInputSnapshot, CandidateEligibility,
   CandidateScore, AssignmentProposal, UnassignedTask,
   ConstraintViolation, SolverStatistics
+```
+
+## Core Model Boundary
+
+```text
+users.User
+  -> operations.Employee
+  -> operations.EmployeeSkill
+  -> operations.WorkSchedule / WorkScheduleDay
+  -> operations.EmployeeLeave / EmployeeAvailabilityOverride
+
+operations.Task
+  -> operations.TaskRequirement
+  -> operations.Assignment
+  -> operations.AssignmentChangeLog
 ```
