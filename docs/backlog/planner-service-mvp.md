@@ -8,7 +8,7 @@ Sequence planner-service work in small steps without turning it into a second so
 - `planner-service` owns only planning artifacts and derived diagnostics.
 - Shared snapshot and response DTOs live in `packages/contracts`.
 - Keep the first iterations synchronous and easy to test.
-- Keep the current embedded-snapshot contract only as a bootstrap/testing seam until the real service boundary is added.
+- Keep embedded `PlanningSnapshot` usage only as a bootstrap/testing seam; the public planner boundary is `CreatePlanRunRequest`.
 - Treat `docs/dbdiagrams/planner_service.md` as a target artifact model, not an all-at-once implementation mandate.
 
 ## Phase 1: Plan Run Boundary
@@ -16,6 +16,7 @@ Sequence planner-service work in small steps without turning it into a second so
 - Define planner-side `PlanRun` lifecycle states: `created`, `running`, `completed`, `failed`.
 - Define the snapshot pull contract from `planner-service` to `core-service`.
 - Keep routes thin and move orchestration into a dedicated application service.
+- Current MVP cut: `POST /api/v1/plan-runs` accepts `CreatePlanRunRequest`, then planner pulls `/api/v1/planning-snapshot/` from core-service.
 
 ## Phase 2: Pipeline Split
 - Split planning into separate modules for snapshot loading, eligibility, scoring, optimization, diagnostics, and response assembly.

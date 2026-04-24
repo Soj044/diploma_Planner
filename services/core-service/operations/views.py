@@ -2,10 +2,10 @@
 
 from contracts.schemas import CreatePlanRunRequest
 from pydantic import ValidationError as PydanticValidationError
-from rest_framework import permissions, status, viewsets
-from rest_framework.views import APIView
 from rest_framework.decorators import action
+from rest_framework import status, viewsets
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from .models import (
     Assignment,
@@ -21,6 +21,7 @@ from .models import (
     WorkSchedule,
     WorkScheduleDay,
 )
+from .permissions import HasPlannerServiceAccess
 from .snapshots import build_planning_snapshot
 from .serializers import (
     AssignmentChangeLogSerializer,
@@ -40,7 +41,7 @@ from .serializers import (
 
 
 class PlanningSnapshotView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [HasPlannerServiceAccess]
 
     def post(self, request):
         try:

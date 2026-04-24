@@ -26,6 +26,7 @@ Keep `core-service` as the source of truth for users, employees, schedules, task
 
 ## Phase 4: Planner Snapshot Boundary
 - Export stable planning snapshots from core data.
+- Allow planner-service to fetch snapshots via a minimal internal token or authenticated user access.
 - Ensure planner receives copied business truth and uses only logical external IDs.
 - Keep approved assignment creation in `core-service`.
 

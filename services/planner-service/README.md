@@ -4,7 +4,7 @@ FastAPI сервис планирования для MVP.
 
 ## Поток
 
-`PlanRequest` -> eligibility -> scoring -> CP-SAT -> proposals + diagnostics
+`CreatePlanRunRequest` -> fetch snapshot from `core-service` -> eligibility -> scoring -> CP-SAT -> proposals + diagnostics
 
 Текущий MVP хранит planner artifacts in-memory:
 - plan run summary
@@ -19,8 +19,13 @@ FastAPI сервис планирования для MVP.
 ## API
 
 - `GET /health`
-- `POST /api/v1/plan-runs`
+- `POST /api/v1/plan-runs` with `CreatePlanRunRequest`
 - `GET /api/v1/plan-runs/{plan_run_id}`
+
+## Конфигурация
+
+- `CORE_SERVICE_URL` — base URL для `core-service`
+- `INTERNAL_SERVICE_TOKEN` — shared token для вызова `/api/v1/planning-snapshot/`
 
 ## Запуск
 

@@ -5,7 +5,7 @@ from uuid import uuid4
 
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from rest_framework.test import APITestCase
 
 from operations.models import (
@@ -271,6 +271,24 @@ class CoreApiSmokeTests(APITestCase):
         )
 
         self.assertIn(response.status_code, {401, 403})
+
+    @override_settings(INTERNAL_SERVICE_TOKEN="planner-service-secret")
+    def test_planning_snapshot_endpoint_accepts_internal_service_token(self) -> None:
+        response = self.client.post(
+            "/api/v1/planning-snapshot/",
+            {
+                "planning_period_start": "2026-05-01",
+                "planning_period_end": "2026-05-02",
+                "initiated_by_user_id": str(uuid4()),
+            },
+            format="json",
+            HTTP_X_INTERNAL_SERVICE_TOKEN="planner-service-secret",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        snapshot = PlanningSnapshot.model_validate(response.data)
+        self.assertEqual(snapshot.tasks, [])
+        self.assertEqual(snapshot.employees, [])
 
     def test_planning_snapshot_endpoint_skips_tasks_starting_before_period(self) -> None:
         user_model = get_user_model()

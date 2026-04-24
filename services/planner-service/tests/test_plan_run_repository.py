@@ -1,13 +1,13 @@
 from datetime import datetime, timezone
 
-from contracts.schemas import EmployeeAvailability, EmployeeSnapshot, PlanRequest, TaskSnapshot
+from contracts.schemas import EmployeeAvailability, EmployeeSnapshot, PlanningSnapshot, TaskSnapshot
 
 from app.infrastructure.repositories.in_memory import InMemoryPlanRunRepository
 from app.planning.runner import run_planning
 
 
 def test_in_memory_repository_stores_mvp_artifacts() -> None:
-    request = PlanRequest(
+    request = PlanningSnapshot(
         planning_period_start=datetime(2026, 3, 23, 0, 0, tzinfo=timezone.utc),
         planning_period_end=datetime(2026, 3, 24, 0, 0, tzinfo=timezone.utc),
         employees=[

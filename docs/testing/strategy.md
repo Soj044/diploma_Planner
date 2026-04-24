@@ -2,14 +2,15 @@
 
 ## Priorities
 - core-service model constraints and CRUD smoke tests
+- core-service planning snapshot export and internal planner access
 - eligibility logic
 - scoring logic
 - planning constraints
 - assignment approval flow
 
 ## Basic checks
-- core-service: local startup, migration workflow, authenticated CRUD smoke tests, model constraints, serializer validation
-- planner-service: unit and integration tests for planning pipeline
+- core-service: local startup, migration workflow, authenticated CRUD smoke tests, model constraints, serializer validation, planning snapshot export for authenticated users and internal token calls
+- planner-service: unit and integration tests for planning pipeline, `CreatePlanRunRequest` boundary, snapshot client failure handling
 - contracts: schema compatibility between services
 
 ## Suggested MVP Commands

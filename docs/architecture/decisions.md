@@ -58,3 +58,21 @@
 ### Consequences
 - Плюсы: schema ближе к дипломной модели, кастомный пользователь зафиксирован рано, CRUD остается простым.
 - Минусы: initial migration reset допустим только пока проект находится в bootstrap-стадии.
+
+## ADR-004: Planner Snapshot Pull Boundary
+
+- Date: 2026-04-24
+- Status: accepted
+
+### Context
+Planner-service больше не должен принимать business truth как внешний embedded payload в production-like flow. Нужна простая и проверяемая граница между `core-service` и `planner-service`, не создающая второй источник истины.
+
+### Decision
+- Публичная команда planner-service: `CreatePlanRunRequest`.
+- Planner-service сам запрашивает `PlanningSnapshot` у `core-service` через `POST /api/v1/planning-snapshot/`.
+- `core-service` отдает snapshot для аутентифицированного пользователя или для внутреннего service-to-service вызова с shared header token `X-Internal-Service-Token`.
+- Полный `PlanningSnapshot` остается допустимым только для внутренних planning tests и низкоуровневых pipeline checks.
+
+### Consequences
+- Плюсы: одна стабильная service boundary, planner не дублирует бизнес-логику core, интеграцию проще тестировать.
+- Минусы: появляется простая внутренняя secret-конфигурация между сервисами, а planner create flow теперь зависит от доступности `core-service`.

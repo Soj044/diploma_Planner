@@ -4,7 +4,8 @@
 
 ```text
 manager -> core-service: create/update employees, skills, schedules, tasks
-planner-service -> core-service: read snapshot inputs for planning run
+manager -> planner-service: POST /api/v1/plan-runs (CreatePlanRunRequest)
+planner-service -> core-service: POST /api/v1/planning-snapshot/ + X-Internal-Service-Token
 planner-service (CP-SAT): eligibility -> scoring -> optimization
 planner-service -> manager: assignment proposals + diagnostics
 manager -> core-service: approve proposals
@@ -27,12 +28,15 @@ planner-service: keeps proposal as planning artifact only
 |   core-service      |<---->|       postgres        |
 |   django + drf      |      |      postgres:16      |
 +----------+----------+      +-----------------------+
+           ^
+           | POST /api/v1/planning-snapshot/
+           | X-Internal-Service-Token
            |
-           v
-+---------------------+
-|   planner-service   |
-|  fastapi + or-tools |
-+---------------------+
+           |
+ +---------------------+
+ |   planner-service   |
+ |  fastapi + or-tools |
+ +---------------------+
 ```
 
 ## Data Ownership
