@@ -2,7 +2,8 @@ from datetime import datetime, timezone
 
 from contracts.schemas import EmployeeAvailability, EmployeeSnapshot, SkillRequirement, TaskSnapshot
 
-from app.planning import calculate_scores, evaluate_eligibility
+from app.planning.eligibility import evaluate_eligibility
+from app.planning.scoring import calculate_scores
 
 
 def test_eligibility_filters_by_department_availability_and_skill() -> None:

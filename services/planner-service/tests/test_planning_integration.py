@@ -8,7 +8,7 @@ from contracts.schemas import (
     TaskSnapshot,
 )
 
-from app.planning import run_planning
+from app.planning.runner import run_planning
 
 
 def test_snapshot_to_proposals_and_unassigned_diagnostics() -> None:
@@ -51,8 +51,12 @@ def test_snapshot_to_proposals_and_unassigned_diagnostics() -> None:
     response = run_planning(request)
 
     assert response.summary.assigned_count == 1
+    assert response.summary.status == "completed"
+    assert response.summary.planning_period_start == request.planning_period_start
     assert len(response.proposals) == 1
     assert response.proposals[0].task_id == "t-ok"
+    assert response.proposals[0].planned_hours == 1
+    assert response.proposals[0].status == "proposed"
 
     assert response.summary.unassigned_count == 1
     assert response.unassigned[0].task_id == "t-no-eligible"

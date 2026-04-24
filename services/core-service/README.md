@@ -2,14 +2,45 @@
 
 Django + DRF сервис с бизнес-сущностями и хранением final approved assignments.
 
-## Основные API
+## Конфигурация
 
-Базовый CRUD доступен через `/api/v1/`.
+Настройки читаются из `services/core-service/.env` (или из переменных контейнера).
+Ключевые переменные:
+- `DJANGO_SECRET_KEY`
+- `DJANGO_DEBUG`
+- `DJANGO_ALLOWED_HOSTS`
+- `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_HOST`, `POSTGRES_PORT`
+
+## Запуск
+
+```bash
+poetry install
+poetry run python manage.py migrate
+poetry run python manage.py runserver 0.0.0.0:8000
+```
+
+Для быстрых unit-проверок без локального PostgreSQL контейнера:
+
+```bash
+DJANGO_TEST_SQLITE=true poetry run python manage.py test
+```
 
 ## Сущности MVP
 
+- User
 - Department, Skill, Employee, EmployeeSkill
 - WorkSchedule, WorkScheduleDay
 - EmployeeLeave, EmployeeAvailabilityOverride
 - Task, TaskRequirement
 - Assignment, AssignmentChangeLog
+
+## Структура приложений
+
+- `users` — кастомная модель пользователя и роли MVP.
+- `operations` — бизнес-сущности и простой DRF CRUD для MVP.
+
+## Approval handoff
+
+`POST /api/v1/assignments/approve-proposal/` creates an approved core `Assignment`
+from a selected planner proposal payload. Planner proposals remain artifacts; final
+assignments are stored by `core-service`.

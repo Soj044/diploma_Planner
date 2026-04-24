@@ -1,20 +1,15 @@
-[build-system]
-requires = ["setuptools>=68", "wheel"]
-build-backend = "setuptools.build_meta"
-
-[project]
+[tool.poetry]
 name = "workestrator-contracts"
 version = "0.1.0"
 description = "Shared DTO contracts for Workestrator services"
+authors = ["Soj044"]
 readme = "README.md"
-requires-python = ">=3.11"
-dependencies = [
-  "pydantic>=2.8,<3.0",
-]
+packages = [{ include = "contracts" }]
 
-[tool.setuptools]
-package-dir = {"" = "."}
+[tool.poetry.dependencies]
+python = "^3.12"
+pydantic = ">=2.8,<3.0"
 
-[tool.setuptools.packages.find]
-where = ["."]
-include = ["contracts*"]
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

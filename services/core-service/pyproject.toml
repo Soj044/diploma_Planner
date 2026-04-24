@@ -1,0 +1,20 @@
+[tool.poetry]
+name = "core-service"
+version = "0.1.0"
+description = "Core business truth service (Django + DRF)"
+authors = ["Soj044"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.12"
+django = ">=5.1,<6.0"
+djangorestframework = ">=3.15,<4.0"
+psycopg = { extras = ["binary"], version = "^3.3.3" }
+python-dotenv = "^1.1.1"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.2"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

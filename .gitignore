@@ -205,3 +205,13 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Local notes / cheatsheets
+CODEX_CLI_COMMANDS.md
+
+# Local agent / editor state
+.codex
+.codex/
+.serena/
+.tools/
+.vscode/
