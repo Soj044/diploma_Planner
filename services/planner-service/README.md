@@ -6,12 +6,14 @@ FastAPI сервис планирования для MVP.
 
 `CreatePlanRunRequest` -> fetch snapshot from `core-service` -> eligibility -> scoring -> CP-SAT -> proposals + diagnostics
 
-Текущий MVP хранит planner artifacts in-memory:
+Текущий MVP хранит planner artifacts в SQLite-backed persistence:
 - plan run summary
 - input snapshot hash + JSON model
 - assignment proposals
 - unassigned task diagnostics
 - solver statistics
+
+`eligibility` и `scores` пока сохраняются как JSON columns на `plan_runs`, а не как отдельные нормализованные таблицы.
 
 Нормализованные `candidate_eligibility`, `candidate_scores`, `constraint_violations` и `replanning_events`
 остаются целевой схемой из `docs/dbdiagrams/planner_service.md`, но не внедряются до необходимости.
@@ -26,6 +28,7 @@ FastAPI сервис планирования для MVP.
 
 - `CORE_SERVICE_URL` — base URL для `core-service`
 - `INTERNAL_SERVICE_TOKEN` — shared token для вызова `/api/v1/planning-snapshot/`
+- `PLANNER_DB_PATH` — путь к SQLite-файлу planner artifacts
 
 ## Запуск
 

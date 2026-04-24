@@ -12,3 +12,4 @@ load_dotenv(BASE_DIR / ".env")
 
 CORE_SERVICE_URL = os.getenv("CORE_SERVICE_URL", "http://localhost:8000")
 INTERNAL_SERVICE_TOKEN = os.getenv("INTERNAL_SERVICE_TOKEN", "")
+PLANNER_DB_PATH = os.getenv("PLANNER_DB_PATH", str(BASE_DIR / "data" / "planner.sqlite3"))

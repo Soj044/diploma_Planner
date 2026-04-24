@@ -10,6 +10,8 @@ def build_unassigned_diagnostics(
     proposals: list[AssignmentProposal],
     eligibility: EligibilityResult,
 ) -> list[UnassignedTaskDiagnostic]:
+    """Explain whether a task failed at eligibility or later scheduling constraints."""
+
     assigned_task_ids = {proposal.task_id for proposal in proposals}
     diagnostics: list[UnassignedTaskDiagnostic] = []
 
@@ -19,6 +21,7 @@ def build_unassigned_diagnostics(
 
         eligible = eligibility.by_task.get(task.task_id, [])
         if not eligible:
+            # No candidate survived hard filters, so the task failed before optimization started.
             diagnostics.append(
                 UnassignedTaskDiagnostic(
                     task_id=task.task_id,
@@ -27,6 +30,7 @@ def build_unassigned_diagnostics(
                 )
             )
         else:
+            # Candidates existed, but optimization could not place the task without conflicts.
             diagnostics.append(
                 UnassignedTaskDiagnostic(
                     task_id=task.task_id,

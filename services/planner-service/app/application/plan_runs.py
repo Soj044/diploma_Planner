@@ -15,10 +15,14 @@ class PlanRunService:
         self._snapshot_client = snapshot_client
 
     def create(self, request: CreatePlanRunRequest) -> PlanResponse:
+        """Build a snapshot, run planning, and persist the resulting artifacts."""
+
         snapshot = self._snapshot_client.fetch_snapshot(request)
         response = run_planning(snapshot)
-        self._repository.save(snapshot=snapshot, response=response)
+        self._repository.save(command=request, snapshot=snapshot, response=response)
         return response
 
     def get(self, plan_run_id: str) -> PlanResponse | None:
+        """Return a persisted plan run by its public UUID."""
+
         return self._repository.get(plan_run_id)

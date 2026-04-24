@@ -6,12 +6,12 @@ from contracts.schemas import CreatePlanRunRequest, PlanResponse
 
 from app.application.plan_runs import PlanRunService
 from app.application.snapshot_client import SnapshotClientError
-from app.config import CORE_SERVICE_URL, INTERNAL_SERVICE_TOKEN
+from app.config import CORE_SERVICE_URL, INTERNAL_SERVICE_TOKEN, PLANNER_DB_PATH
 from app.infrastructure.clients.core_service import CoreServiceSnapshotClient
-from app.infrastructure.repositories.in_memory import InMemoryPlanRunRepository
+from app.infrastructure.repositories.sqlite import SqlitePlanRunRepository
 
 router = APIRouter(prefix="/api/v1/plan-runs", tags=["plan-runs"])
-repository = InMemoryPlanRunRepository()
+repository = SqlitePlanRunRepository(db_path=PLANNER_DB_PATH)
 snapshot_client = CoreServiceSnapshotClient(
     base_url=CORE_SERVICE_URL,
     internal_service_token=INTERNAL_SERVICE_TOKEN,

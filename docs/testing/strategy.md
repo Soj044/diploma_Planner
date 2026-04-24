@@ -6,11 +6,12 @@
 - eligibility logic
 - scoring logic
 - planning constraints
+- planner artifact persistence and retrieval
 - assignment approval flow
 
 ## Basic checks
 - core-service: local startup, migration workflow, authenticated CRUD smoke tests, model constraints, serializer validation, planning snapshot export for authenticated users and internal token calls
-- planner-service: unit and integration tests for planning pipeline, `CreatePlanRunRequest` boundary, snapshot client failure handling
+- planner-service: unit and integration tests for planning pipeline, `CreatePlanRunRequest` boundary, snapshot client failure handling, SQLite persistence of run/snapshot/proposals/unassigned/solver stats
 - contracts: schema compatibility between services
 
 ## Suggested MVP Commands

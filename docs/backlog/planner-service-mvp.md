@@ -28,6 +28,7 @@ Sequence planner-service work in small steps without turning it into a second so
 - Keep normalized `CandidateEligibility`, `CandidateScore`, and `ConstraintViolation` deferred until diagnostics need queryable history.
 - Support retrieving a full plan run with summary, proposals, diagnostics, and solver metadata.
 - Preserve enough snapshot metadata to explain why a proposal was produced.
+- Current MVP cut: use a SQLite-backed repository that mirrors these planner tables and keeps `eligibility` / `scores` in JSON columns on `plan_runs` until normalization is justified.
 
 ## Phase 4: Approval Handoff
 - Stabilize proposal DTOs for manager review in `core-service`.

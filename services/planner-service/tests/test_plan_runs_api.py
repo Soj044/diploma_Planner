@@ -10,9 +10,15 @@ from app.application.snapshot_client import SnapshotClientError
 
 
 class StubPlanRunService:
-    def __init__(self, response: PlanResponse | None = None, error: Exception | None = None) -> None:
+    def __init__(
+        self,
+        response: PlanResponse | None = None,
+        error: Exception | None = None,
+        get_response: PlanResponse | None = None,
+    ) -> None:
         self.response = response
         self.error = error
+        self.get_response = get_response
         self.payloads = []
 
     def create(self, payload):
@@ -22,7 +28,7 @@ class StubPlanRunService:
         return self.response
 
     def get(self, plan_run_id: str):
-        return None
+        return self.get_response
 
 
 def build_response() -> PlanResponse:
@@ -82,3 +88,23 @@ def test_create_plan_run_returns_502_when_snapshot_fetch_fails(monkeypatch) -> N
 
     assert exc_info.value.status_code == 502
     assert exc_info.value.detail == "core-service returned 403 while building a planning snapshot"
+
+
+def test_get_plan_run_returns_persisted_response(monkeypatch) -> None:
+    stub_service = StubPlanRunService(get_response=build_response())
+    monkeypatch.setattr(plan_runs, "service", stub_service)
+
+    response = plan_runs.get_plan_run("plan-1")
+
+    assert response.summary.plan_run_id == "plan-1"
+
+
+def test_get_plan_run_raises_404_when_missing(monkeypatch) -> None:
+    stub_service = StubPlanRunService(get_response=None)
+    monkeypatch.setattr(plan_runs, "service", stub_service)
+
+    with pytest.raises(HTTPException) as exc_info:
+        plan_runs.get_plan_run("missing-plan")
+
+    assert exc_info.value.status_code == 404
+    assert exc_info.value.detail == "Plan run not found"

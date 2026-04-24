@@ -7,7 +7,9 @@ manager -> core-service: create/update employees, skills, schedules, tasks
 manager -> planner-service: POST /api/v1/plan-runs (CreatePlanRunRequest)
 planner-service -> core-service: POST /api/v1/planning-snapshot/ + X-Internal-Service-Token
 planner-service (CP-SAT): eligibility -> scoring -> optimization
+planner-service -> planner artifact store: save run + snapshot + proposals + diagnostics
 planner-service -> manager: assignment proposals + diagnostics
+manager -> planner-service: GET /api/v1/plan-runs/{id}
 manager -> core-service: approve proposals
 core-service: store final approved assignments
 ```
@@ -33,10 +35,10 @@ planner-service: keeps proposal as planning artifact only
            | X-Internal-Service-Token
            |
            |
- +---------------------+
- |   planner-service   |
- |  fastapi + or-tools |
- +---------------------+
++---------------------+      +-----------------------+
+|   planner-service   |----->|   planner sqlite db   |
+|  fastapi + or-tools |      |   planner.sqlite3     |
++---------------------+      +-----------------------+
 ```
 
 ## Data Ownership
@@ -56,6 +58,12 @@ planner-service:
   PlanRun, PlanInputSnapshot, CandidateEligibility,
   CandidateScore, AssignmentProposal, UnassignedTask,
   ConstraintViolation, SolverStatistics
+
+MVP runtime storage:
+  SQLite-backed planner artifact repository
+  Current persisted slice:
+    plan_runs, plan_input_snapshots, assignment_proposals,
+    unassigned_tasks, solver_statistics
 ```
 
 ## Core Model Boundary

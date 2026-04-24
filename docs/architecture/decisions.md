@@ -76,3 +76,21 @@ Planner-service больше не должен принимать business truth
 ### Consequences
 - Плюсы: одна стабильная service boundary, planner не дублирует бизнес-логику core, интеграцию проще тестировать.
 - Минусы: появляется простая внутренняя secret-конфигурация между сервисами, а planner create flow теперь зависит от доступности `core-service`.
+
+## ADR-005: Minimal Planner Artifact Persistence
+
+- Date: 2026-04-24
+- Status: accepted
+
+### Context
+После стабилизации snapshot boundary planner-service всё ещё хранил результаты planning run только в памяти процесса. Это не позволяло читать run после рестарта сервиса и мешало двигаться к approval flow, завязанному на реальные planner artifacts.
+
+### Decision
+- Перевести runtime planner repository с `in-memory` на локальный SQLite-backed storage.
+- Сохранять минимальный Stage 6 slice: `plan_runs`, `plan_input_snapshots`, `assignment_proposals`, `unassigned_tasks`, `solver_statistics`.
+- Держать `eligibility` и `scores` в JSON columns на `plan_runs`, а не раскладывать их сразу по отдельным таблицам.
+- Считать PostgreSQL из `docs/dbdiagrams/planner_service.md` целевой схемой следующего уровня, а SQLite — MVP runtime persistence без лишней инфраструктуры.
+
+### Consequences
+- Плюсы: planner runs переживают рестарт процесса, retrieval API читает реальные артефакты, код остаётся простым и без ORM.
+- Минусы: SQLite подходит только для MVP single-instance режима; при росте нагрузки и multi-instance planner понадобится переход к полноценной planner DB.

@@ -1,13 +1,20 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
-from contracts.schemas import EmployeeAvailability, EmployeeSnapshot, PlanningSnapshot, TaskSnapshot
+from contracts.schemas import CreatePlanRunRequest, EmployeeAvailability, EmployeeSnapshot, PlanningSnapshot, TaskSnapshot
 
 from app.infrastructure.repositories.in_memory import InMemoryPlanRunRepository
 from app.planning.runner import run_planning
 
 
 def test_in_memory_repository_stores_mvp_artifacts() -> None:
-    request = PlanningSnapshot(
+    command = CreatePlanRunRequest(
+        planning_period_start=date(2026, 3, 23),
+        planning_period_end=date(2026, 3, 23),
+        initiated_by_user_id="manager-1",
+        department_id="dep-1",
+        task_ids=["t1"],
+    )
+    snapshot = PlanningSnapshot(
         planning_period_start=datetime(2026, 3, 23, 0, 0, tzinfo=timezone.utc),
         planning_period_end=datetime(2026, 3, 24, 0, 0, tzinfo=timezone.utc),
         employees=[
@@ -32,17 +39,17 @@ def test_in_memory_repository_stores_mvp_artifacts() -> None:
             )
         ],
     )
-    response = run_planning(request)
+    response = run_planning(snapshot)
     repository = InMemoryPlanRunRepository()
 
-    repository.save(snapshot=request, response=response)
+    repository.save(command=command, snapshot=snapshot, response=response)
 
     stored_response = repository.get(response.summary.plan_run_id)
     records = repository.list_records()
     record = records[response.summary.plan_run_id]
 
     assert stored_response == response
-    assert record.snapshot == request
+    assert record.snapshot == snapshot
     assert record.source_hash
     assert record.proposals == response.proposals
     assert record.unassigned == response.unassigned

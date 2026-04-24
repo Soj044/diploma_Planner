@@ -42,6 +42,8 @@ def build_planning_snapshot(request: CreatePlanRunRequest) -> PlanningSnapshot:
 
 
 def _get_tasks(request: CreatePlanRunRequest):
+    """Select planner-visible tasks that still need assignment in the requested window."""
+
     tasks = (
         Task.objects.select_related("department", "created_by_user")
         .prefetch_related("requirements")
@@ -60,6 +62,8 @@ def _get_tasks(request: CreatePlanRunRequest):
 
 
 def _get_employees(request: CreatePlanRunRequest):
+    """Select active employees and prefetch the data needed to build planner availability."""
+
     employees = (
         Employee.objects.select_related("department")
         .prefetch_related(
@@ -77,6 +81,8 @@ def _get_employees(request: CreatePlanRunRequest):
 
 
 def _build_task_snapshot(task: Task) -> TaskSnapshot:
+    """Translate a core task into the normalized planner task shape."""
+
     starts_at = datetime.combine(task.start_date or task.due_date, DEFAULT_SLOT_START, tzinfo=timezone.utc)
     ends_at = _next_day_start(task.due_date)
     return TaskSnapshot(
@@ -102,6 +108,8 @@ def _build_employee_snapshot(
     period_start: date,
     period_end: date,
 ) -> EmployeeSnapshot:
+    """Build employee availability slots for the planning window from schedules and overrides."""
+
     availability = []
     default_schedule = _get_default_schedule(employee)
     leave_dates = _leave_dates(employee, period_start, period_end)
@@ -115,6 +123,7 @@ def _build_employee_snapshot(
         if override is not None:
             if override.available_hours <= 0:
                 continue
+            # A daily override replaces the default schedule capacity for that date.
             availability.append(_build_override_slot(default_schedule, current_date, override.available_hours))
             continue
 
@@ -146,6 +155,8 @@ def _build_employee_snapshot(
 
 
 def _build_override_slot(schedule: WorkSchedule | None, current_date: date, available_hours: int) -> EmployeeAvailability:
+    """Turn an availability override into a planner slot with schedule-aligned boundaries."""
+
     schedule_day = _get_schedule_day(schedule, current_date.weekday())
     start_at = datetime.combine(
         current_date,
@@ -161,12 +172,16 @@ def _build_override_slot(schedule: WorkSchedule | None, current_date: date, avai
 
 
 def _daterange(period_start: date, period_end: date):
+    """Yield every date in the inclusive planning range."""
+
     day_count = (period_end - period_start).days + 1
     for offset in range(day_count):
         yield period_start + timedelta(days=offset)
 
 
 def _get_default_schedule(employee: Employee) -> WorkSchedule | None:
+    """Choose the employee's default schedule or a deterministic fallback."""
+
     schedules = sorted(employee.schedules.all(), key=lambda schedule: schedule.id)
     for schedule in schedules:
         if schedule.is_default:
@@ -175,6 +190,8 @@ def _get_default_schedule(employee: Employee) -> WorkSchedule | None:
 
 
 def _get_schedule_day(schedule: WorkSchedule | None, weekday: int):
+    """Return the schedule rule that applies to a concrete weekday."""
+
     if schedule is None:
         return None
     for day in schedule.days.all():
@@ -184,6 +201,8 @@ def _get_schedule_day(schedule: WorkSchedule | None, weekday: int):
 
 
 def _leave_dates(employee: Employee, period_start: date, period_end: date) -> set[date]:
+    """Expand approved leave periods into concrete dates excluded from planning."""
+
     dates: set[date] = set()
     for leave in employee.leaves.all():
         if leave.status != EmployeeLeave.Status.APPROVED:
@@ -197,4 +216,6 @@ def _leave_dates(employee: Employee, period_start: date, period_end: date) -> se
 
 
 def _next_day_start(current_date: date) -> datetime:
+    """Return the exclusive upper boundary for a date-based planning interval."""
+
     return datetime.combine(current_date + timedelta(days=1), time.min, tzinfo=timezone.utc)
