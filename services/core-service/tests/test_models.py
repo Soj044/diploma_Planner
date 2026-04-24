@@ -20,6 +20,7 @@ from operations.models import (
     WorkScheduleDay,
 )
 from operations.serializers import AssignmentSerializer, EmployeeLeaveSerializer, TaskSerializer, WorkScheduleDaySerializer
+from contracts.schemas import PlanningSnapshot
 
 
 class CoreModelTests(TestCase):
@@ -196,3 +197,111 @@ class CoreApiSmokeTests(APITestCase):
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.data["status"], "approved")
         self.assertEqual(response.data["approved_by_user"], manager.id)
+
+    def test_planning_snapshot_endpoint_exports_core_truth(self) -> None:
+        user_model = get_user_model()
+        manager = user_model.objects.create_user(
+            username="snapshot-manager",
+            email="snapshot-manager@example.com",
+            password="test-pass",
+        )
+        self.client.force_authenticate(user=manager)
+        employee_user = user_model.objects.create_user(
+            username="snapshot-employee",
+            email="snapshot-employee@example.com",
+            password="test-pass",
+        )
+        department = Department.objects.create(name="Dispatch")
+        skill = Skill.objects.create(name="Forklift")
+        employee = Employee.objects.create(
+            user=employee_user,
+            department=department,
+            full_name="Taylor Worker",
+            position_name="Operator",
+        )
+        EmployeeSkill.objects.create(employee=employee, skill=skill, level=4)
+        schedule = WorkSchedule.objects.create(employee=employee, name="Default", is_default=True)
+        WorkScheduleDay.objects.create(schedule=schedule, weekday=4, capacity_hours=8)
+        EmployeeAvailabilityOverride.objects.create(
+            employee=employee,
+            date=date(2026, 5, 2),
+            available_hours=4,
+            created_by_user=manager,
+        )
+        task = Task.objects.create(
+            department=department,
+            title="Move pallets",
+            status=Task.Status.PLANNED,
+            estimated_hours=4,
+            due_date=date(2026, 5, 2),
+            created_by_user=manager,
+        )
+        task.requirements.create(skill=skill, min_level=2, weight=1.5)
+
+        response = self.client.post(
+            "/api/v1/planning-snapshot/",
+            {
+                "planning_period_start": "2026-05-01",
+                "planning_period_end": "2026-05-02",
+                "initiated_by_user_id": str(manager.id),
+                "department_id": str(department.id),
+                "task_ids": [str(task.id)],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        snapshot = PlanningSnapshot.model_validate(response.data)
+        self.assertEqual(snapshot.tasks[0].task_id, str(task.id))
+        self.assertEqual(snapshot.tasks[0].starts_at.isoformat(), "2026-05-02T00:00:00+00:00")
+        self.assertEqual(snapshot.tasks[0].ends_at.isoformat(), "2026-05-03T00:00:00+00:00")
+        self.assertEqual(snapshot.employees[0].employee_id, str(employee.id))
+        override_slot = next(slot for slot in snapshot.employees[0].availability if slot.start_at.date() == date(2026, 5, 2))
+        self.assertEqual(override_slot.available_hours, 4)
+
+    def test_planning_snapshot_endpoint_requires_authentication(self) -> None:
+        response = self.client.post(
+            "/api/v1/planning-snapshot/",
+            {
+                "planning_period_start": "2026-05-01",
+                "planning_period_end": "2026-05-02",
+                "initiated_by_user_id": str(uuid4()),
+            },
+            format="json",
+        )
+
+        self.assertIn(response.status_code, {401, 403})
+
+    def test_planning_snapshot_endpoint_skips_tasks_starting_before_period(self) -> None:
+        user_model = get_user_model()
+        manager = user_model.objects.create_user(
+            username="snapshot-period-manager",
+            email="snapshot-period-manager@example.com",
+            password="test-pass",
+        )
+        self.client.force_authenticate(user=manager)
+        department = Department.objects.create(name="Planning")
+        Task.objects.create(
+            department=department,
+            title="Carry-over task",
+            status=Task.Status.PLANNED,
+            estimated_hours=2,
+            start_date=date(2026, 4, 30),
+            due_date=date(2026, 5, 2),
+            created_by_user=manager,
+        )
+
+        response = self.client.post(
+            "/api/v1/planning-snapshot/",
+            {
+                "planning_period_start": "2026-05-01",
+                "planning_period_end": "2026-05-02",
+                "initiated_by_user_id": str(manager.id),
+                "department_id": str(department.id),
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        snapshot = PlanningSnapshot.model_validate(response.data)
+        self.assertEqual(snapshot.tasks, [])
