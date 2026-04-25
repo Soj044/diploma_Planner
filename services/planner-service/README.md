@@ -32,6 +32,12 @@ FastAPI сервис планирования для MVP.
   persisted plan run from planner-service before creating the final `Assignment`.
 - Planner proposals stay immutable artifacts after run completion.
 
+## Hardening status
+
+- Shared contracts validate planning period boundaries and proposal assignment dates.
+- Planner tests cover hard eligibility failures, weighted scoring, overlap conflicts,
+  persisted artifact roundtrip, and approval-critical response fields.
+
 ## Конфигурация
 
 - `CORE_SERVICE_URL` — base URL для `core-service`

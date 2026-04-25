@@ -35,11 +35,11 @@ Sequence planner-service work in small steps without turning it into a second so
 - Support the handoff boundary where `core-service` reads persisted planner artifacts before creating final `Assignment` records.
 - Keep planner outputs immutable after run completion; approvals remain outside planner ownership.
 
-## Phase 5: Hardening
+## Phase 5: Hardening (completed)
 - Add unit tests for eligibility, scoring, diagnostics, and optimization constraints.
 - Add integration tests for create-run, snapshot loading, planning, and retrieval.
 - Add contracts compatibility checks between `core-service`, `planner-service`, and `packages/contracts`.
-- Current progress: planner retrieval tests and core approval handoff tests now cover persisted run reading, idempotent approvals, upstream failure handling, and final-assignment conflicts.
+- Final MVP cut: planner tests now cover partial/insufficient availability, weighted scoring with cap, overlap conflicts, SQLite artifact roundtrip, and shared contracts validation for planning periods and proposal dates.
 
 ## Explicitly Out of Scope for MVP
 - RAG or LLM-based planning logic.
