@@ -1,4 +1,9 @@
-"""Snapshot client boundary for planner orchestration."""
+"""Контракт получения PlanningSnapshot для planner-service.
+
+Этот файл описывает boundary между planner orchestration и источником snapshot
+данных из core-service. Его используют application use cases, чтобы не
+зависеть напрямую от конкретной HTTP-реализации клиента.
+"""
 
 from typing import Protocol
 

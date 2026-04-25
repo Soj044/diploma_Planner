@@ -1,4 +1,9 @@
-"""DRF views for MVP CRUD surface and planner support."""
+"""DRF endpoints core-service для задач, snapshot export и approval handoff.
+
+Этот файл публикует CRUD API для основных сущностей, endpoint выгрузки
+PlanningSnapshot в planner-service и endpoint утверждения выбранного proposal.
+Он связывает serializers, snapshot builders и approval business logic.
+"""
 
 from contracts.schemas import CreatePlanRunRequest
 from pydantic import ValidationError as PydanticValidationError

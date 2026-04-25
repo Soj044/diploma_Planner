@@ -1,4 +1,9 @@
-"""SQLite-backed planner artifact repository for MVP persistence."""
+"""SQLite-хранилище planner artifacts для MVP расчета задач и назначений.
+
+Этот файл сохраняет plan runs, snapshots, proposals и diagnostics между
+запусками planner-service. Он связывает application layer с persisted artifact
+store и поддерживает manager review и approval handoff в core-service.
+"""
 
 import json
 import sqlite3

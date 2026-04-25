@@ -1,4 +1,9 @@
-"""Business logic for turning persisted planner proposals into final core assignments."""
+"""Бизнес-логика утверждения planner proposals в финальные назначения core-service.
+
+Этот файл получает выбранный manager proposal, перечитывает persisted plan run из
+planner-service, валидирует его и создает итоговый Assignment вместе с audit log.
+Он связывает planner artifacts с final business truth, которая хранится в core.
+"""
 
 from uuid import UUID
 

@@ -1,4 +1,9 @@
-"""Repository boundary for planner run artifacts."""
+"""Контракт хранения planner artifacts для задач и назначений.
+
+Этот файл описывает абстракцию репозитория plan runs, snapshots, proposals и
+diagnostics. Его используют application use cases, чтобы planner мог менять
+способ хранения без изменения planning business logic.
+"""
 
 from typing import Protocol
 

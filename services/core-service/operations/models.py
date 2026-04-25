@@ -1,4 +1,9 @@
-"""Core business models used by the planning MVP."""
+"""Основные бизнес-сущности core-service для задач и назначений.
+
+Этот файл хранит source of truth для сотрудников, навыков, графиков, задач,
+требований и финальных assignments. На эти модели опираются serializers, views,
+snapshot export в planner-service и approval handoff из planner proposals.
+"""
 
 from decimal import Decimal
 

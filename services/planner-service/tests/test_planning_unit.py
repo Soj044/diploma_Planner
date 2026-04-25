@@ -1,5 +1,7 @@
 from datetime import datetime, timezone
 
+import pytest
+
 from contracts.schemas import EmployeeAvailability, EmployeeSnapshot, SkillRequirement, TaskSnapshot
 
 from app.planning.eligibility import evaluate_eligibility
@@ -47,6 +49,46 @@ def test_eligibility_filters_by_department_availability_and_skill() -> None:
     assert eligibility.by_task["t1"] == ["e-ok"]
 
 
+def test_eligibility_rejects_employee_with_partial_or_insufficient_availability() -> None:
+    task = TaskSnapshot(
+        task_id="t1",
+        department_id="dep-1",
+        title="Task",
+        starts_at=datetime(2026, 3, 23, 9, 0, tzinfo=timezone.utc),
+        ends_at=datetime(2026, 3, 23, 13, 0, tzinfo=timezone.utc),
+        estimated_hours=4,
+    )
+
+    employees = [
+        EmployeeSnapshot(
+            employee_id="e-partial-slot",
+            department_id="dep-1",
+            availability=[
+                EmployeeAvailability(
+                    start_at=datetime(2026, 3, 23, 9, 0, tzinfo=timezone.utc),
+                    end_at=datetime(2026, 3, 23, 11, 0, tzinfo=timezone.utc),
+                    available_hours=4,
+                )
+            ],
+        ),
+        EmployeeSnapshot(
+            employee_id="e-insufficient-hours",
+            department_id="dep-1",
+            availability=[
+                EmployeeAvailability(
+                    start_at=datetime(2026, 3, 23, 8, 0, tzinfo=timezone.utc),
+                    end_at=datetime(2026, 3, 23, 18, 0, tzinfo=timezone.utc),
+                    available_hours=2,
+                )
+            ],
+        ),
+    ]
+
+    eligibility = evaluate_eligibility(employees, [task])
+
+    assert eligibility.by_task["t1"] == []
+
+
 def test_scoring_returns_positive_ratio() -> None:
     task = TaskSnapshot(
         task_id="t1",
@@ -71,3 +113,58 @@ def test_scoring_returns_positive_ratio() -> None:
     eligibility = evaluate_eligibility([employee], [task])
     scores = calculate_scores([employee], [task], eligibility)
     assert scores.by_task["t1"]["e1"] >= 1.0
+
+
+def test_scoring_uses_requirement_weights_and_caps_skill_bonus() -> None:
+    task = TaskSnapshot(
+        task_id="t1",
+        department_id="dep-1",
+        title="Weighted task",
+        starts_at=datetime(2026, 3, 23, 9, 0, tzinfo=timezone.utc),
+        ends_at=datetime(2026, 3, 23, 10, 0, tzinfo=timezone.utc),
+        requirements=[
+            SkillRequirement(skill_id="skill-a", min_level=2, weight=1.0),
+            SkillRequirement(skill_id="skill-b", min_level=1, weight=3.0),
+        ],
+    )
+    employee = EmployeeSnapshot(
+        employee_id="e1",
+        department_id="dep-1",
+        skill_levels={"skill-a": 10, "skill-b": 1},
+        availability=[
+            EmployeeAvailability(
+                start_at=datetime(2026, 3, 23, 8, 0, tzinfo=timezone.utc),
+                end_at=datetime(2026, 3, 23, 18, 0, tzinfo=timezone.utc),
+            )
+        ],
+    )
+
+    eligibility = evaluate_eligibility([employee], [task])
+    scores = calculate_scores([employee], [task], eligibility)
+
+    assert scores.by_task["t1"]["e1"] == pytest.approx(1.25)
+
+
+def test_scoring_defaults_to_one_without_requirements() -> None:
+    task = TaskSnapshot(
+        task_id="t1",
+        department_id="dep-1",
+        title="Unspecified skill task",
+        starts_at=datetime(2026, 3, 23, 9, 0, tzinfo=timezone.utc),
+        ends_at=datetime(2026, 3, 23, 10, 0, tzinfo=timezone.utc),
+    )
+    employee = EmployeeSnapshot(
+        employee_id="e1",
+        department_id="dep-1",
+        availability=[
+            EmployeeAvailability(
+                start_at=datetime(2026, 3, 23, 8, 0, tzinfo=timezone.utc),
+                end_at=datetime(2026, 3, 23, 18, 0, tzinfo=timezone.utc),
+            )
+        ],
+    )
+
+    eligibility = evaluate_eligibility([employee], [task])
+    scores = calculate_scores([employee], [task], eligibility)
+
+    assert scores.by_task["t1"]["e1"] == 1.0

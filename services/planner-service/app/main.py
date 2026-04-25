@@ -1,4 +1,9 @@
-"""FastAPI entrypoint for planner-service MVP."""
+"""Точка входа planner-service для расчета и чтения назначений.
+
+Этот файл собирает FastAPI-приложение, подключает routes plan runs и публикует
+health endpoint. Через него planner-service отдает proposals для review и
+использует внутренние planning/application модули.
+"""
 
 from fastapi import FastAPI
 

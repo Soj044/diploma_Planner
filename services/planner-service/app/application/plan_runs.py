@@ -1,4 +1,9 @@
-"""Application use cases for planner runs."""
+"""Application-layer orchestration для планирования и чтения planner runs.
+
+Этот файл координирует создание snapshot, запуск planning pipeline и сохранение
+artifact-результатов. Он связывает API слой planner-service с planning logic и
+репозиториями хранения plan runs.
+"""
 
 from contracts.schemas import CreatePlanRunRequest, PlanResponse
 

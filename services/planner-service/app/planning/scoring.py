@@ -1,4 +1,9 @@
-"""Deterministic candidate scoring."""
+"""Детерминированный скоринг допустимых кандидатов на задачи.
+
+Этот файл рассчитывает числовую силу соответствия сотрудника задаче после
+hard-filter eligibility. Его результаты передаются в optimizer и сохраняются в
+artifact store как часть объяснимого planner output.
+"""
 
 from contracts.schemas import EmployeeSnapshot, TaskSnapshot
 

@@ -1,4 +1,9 @@
-"""HTTP client for reading persisted planner artifacts during approval handoff."""
+"""HTTP-клиент core-service для чтения planner artifacts при approval handoff.
+
+Этот файл нужен только в момент утверждения назначения: core-service читает
+persisted plan run из planner-service, чтобы не доверять timing-данным из
+клиентского payload. Он используется модулем approvals.py.
+"""
 
 import json
 from urllib.error import HTTPError, URLError

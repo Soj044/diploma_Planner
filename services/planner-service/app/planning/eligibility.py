@@ -1,4 +1,9 @@
-"""Hard candidate eligibility filters."""
+"""Жесткие фильтры допустимости кандидатов для назначения на задачу.
+
+Этот файл отбрасывает сотрудников, которые не подходят по департаменту,
+доступности и обязательным навыкам. Его результат используется scoring,
+optimizer и diagnostics внутри planning pipeline.
+"""
 
 from contracts.schemas import EmployeeSnapshot, TaskSnapshot
 

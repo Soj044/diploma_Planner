@@ -1,4 +1,9 @@
-"""CP-SAT assignment optimization."""
+"""CP-SAT оптимизация назначений между задачами и сотрудниками.
+
+Этот файл выбирает лучший набор непересекающихся assignments на основе
+eligibility и scoring. Он связывает planner business rules с solver output,
+который затем уходит в proposals и diagnostics.
+"""
 
 from math import ceil
 

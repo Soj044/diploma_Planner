@@ -1,4 +1,9 @@
-"""DRF serializers for core-service business entities."""
+"""DRF-сериализаторы core-service для задач, snapshot boundary и назначений.
+
+Этот файл преобразует core модели в API payloads и обратно. Он используется
+CRUD-viewsets, snapshot export и approval handoff, где менеджер утверждает
+planner proposal и превращает его в финальный Assignment в core-service.
+"""
 
 from rest_framework import serializers
 
