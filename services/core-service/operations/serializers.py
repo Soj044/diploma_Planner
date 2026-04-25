@@ -1,8 +1,8 @@
 """DRF serializers for core-service business entities."""
 
-from django.utils import timezone
 from rest_framework import serializers
 
+from .approvals import approve_planner_proposal
 from .models import (
     Assignment,
     AssignmentChangeLog,
@@ -193,35 +193,19 @@ class AssignmentSerializer(serializers.ModelSerializer):
 class AssignmentApprovalSerializer(serializers.Serializer):
     task = serializers.PrimaryKeyRelatedField(queryset=Task.objects.all())
     employee = serializers.PrimaryKeyRelatedField(queryset=Employee.objects.all())
-    source_plan_run_id = serializers.UUIDField(required=False, allow_null=True)
-    planned_hours = serializers.IntegerField(min_value=1)
-    start_date = serializers.DateField()
-    end_date = serializers.DateField()
+    source_plan_run_id = serializers.UUIDField()
     notes = serializers.CharField(required=False, allow_blank=True)
 
     def validate(self, attrs: dict) -> dict:
-        if attrs["start_date"] > attrs["end_date"]:
-            raise serializers.ValidationError("Assignment start_date must be before or equal to end_date.")
         return attrs
 
     def create(self, validated_data: dict) -> Assignment:
         approved_by_user = validated_data.pop("approved_by_user")
-        assignment = Assignment.objects.create(
-            **validated_data,
-            status=Assignment.Status.APPROVED,
-            assigned_by_type=Assignment.SourceType.MANAGER,
-            assigned_by_user=approved_by_user,
+        validated_data.setdefault("notes", "")
+        return approve_planner_proposal(
             approved_by_user=approved_by_user,
-            approved_at=timezone.now(),
+            **validated_data,
         )
-        AssignmentChangeLog.objects.create(
-            assignment=assignment,
-            old_employee=None,
-            new_employee=assignment.employee,
-            change_reason="Approved planner proposal",
-            changed_by_user=approved_by_user,
-        )
-        return assignment
 
 
 class AssignmentChangeLogSerializer(serializers.ModelSerializer):

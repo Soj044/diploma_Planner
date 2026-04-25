@@ -1,14 +1,18 @@
 """Core-service model and serializer checks for the MVP schema."""
 
 from datetime import date
+from unittest.mock import patch
 from uuid import uuid4
 
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError
 from django.test import TestCase, override_settings
+from django.utils import timezone
 from rest_framework.test import APITestCase
 
+from contracts.schemas import AssignmentProposal, PlanResponse, PlanRunArtifacts, PlanRunSummary, PlanningSnapshot
 from operations.models import (
+    Assignment,
     Department,
     Employee,
     EmployeeAvailabilityOverride,
@@ -19,8 +23,8 @@ from operations.models import (
     WorkSchedule,
     WorkScheduleDay,
 )
+from operations.planner_client import PlannerServiceError
 from operations.serializers import AssignmentSerializer, EmployeeLeaveSerializer, TaskSerializer, WorkScheduleDaySerializer
-from contracts.schemas import PlanningSnapshot
 
 
 class CoreModelTests(TestCase):
@@ -152,7 +156,8 @@ class CoreApiSmokeTests(APITestCase):
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.data["name"], "Dispatch")
 
-    def test_approve_proposal_endpoint_creates_approved_assignment(self) -> None:
+    @patch("operations.approvals.PlannerServiceClient.fetch_plan_run")
+    def test_approve_proposal_endpoint_creates_approved_assignment(self, fetch_plan_run_mock) -> None:
         user_model = get_user_model()
         manager = user_model.objects.create_user(
             username="manager-api",
@@ -180,6 +185,29 @@ class CoreApiSmokeTests(APITestCase):
             created_by_user=manager,
         )
         source_plan_run_id = uuid4()
+        fetch_plan_run_mock.return_value = PlanResponse(
+            summary=PlanRunSummary(
+                plan_run_id=str(source_plan_run_id),
+                status="completed",
+                created_at=timezone.now(),
+                planning_period_start=timezone.now(),
+                planning_period_end=timezone.now(),
+                assigned_count=1,
+                unassigned_count=0,
+            ),
+            proposals=[
+                AssignmentProposal(
+                    task_id=str(task.id),
+                    employee_id=str(employee.id),
+                    score=1.5,
+                    planned_hours=3,
+                    start_date=date(2026, 5, 2),
+                    end_date=date(2026, 5, 2),
+                )
+            ],
+            unassigned=[],
+            artifacts=PlanRunArtifacts(),
+        )
 
         response = self.client.post(
             "/api/v1/assignments/approve-proposal/",
@@ -187,9 +215,6 @@ class CoreApiSmokeTests(APITestCase):
                 "task": task.id,
                 "employee": employee.id,
                 "source_plan_run_id": str(source_plan_run_id),
-                "planned_hours": 3,
-                "start_date": "2026-05-02",
-                "end_date": "2026-05-02",
             },
             format="json",
         )
@@ -197,6 +222,260 @@ class CoreApiSmokeTests(APITestCase):
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.data["status"], "approved")
         self.assertEqual(response.data["approved_by_user"], manager.id)
+
+    @patch("operations.approvals.PlannerServiceClient.fetch_plan_run")
+    def test_approve_proposal_endpoint_rejects_missing_planner_proposal(self, fetch_plan_run_mock) -> None:
+        user_model = get_user_model()
+        manager = user_model.objects.create_user(
+            username="manager-missing",
+            email="manager-missing@example.com",
+            password="test-pass",
+        )
+        employee_user = user_model.objects.create_user(
+            username="employee-missing",
+            email="employee-missing@example.com",
+            password="test-pass",
+        )
+        self.client.force_authenticate(user=manager)
+        department = Department.objects.create(name="Planning")
+        employee = Employee.objects.create(
+            user=employee_user,
+            department=department,
+            full_name="Morgan Employee",
+            position_name="Operator",
+        )
+        task = Task.objects.create(
+            department=department,
+            title="Missing planner proposal",
+            estimated_hours=2,
+            due_date=date(2026, 5, 5),
+            created_by_user=manager,
+        )
+        source_plan_run_id = uuid4()
+        fetch_plan_run_mock.return_value = PlanResponse(
+            summary=PlanRunSummary(
+                plan_run_id=str(source_plan_run_id),
+                status="completed",
+                created_at=timezone.now(),
+                planning_period_start=timezone.now(),
+                planning_period_end=timezone.now(),
+                assigned_count=0,
+                unassigned_count=0,
+            ),
+            proposals=[],
+            unassigned=[],
+            artifacts=PlanRunArtifacts(),
+        )
+
+        response = self.client.post(
+            "/api/v1/assignments/approve-proposal/",
+            {
+                "task": task.id,
+                "employee": employee.id,
+                "source_plan_run_id": str(source_plan_run_id),
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Planner proposal not found", str(response.data))
+
+    @patch("operations.approvals.PlannerServiceClient.fetch_plan_run")
+    def test_approve_proposal_endpoint_is_idempotent_for_same_plan_run_and_pair(self, fetch_plan_run_mock) -> None:
+        user_model = get_user_model()
+        manager = user_model.objects.create_user(
+            username="manager-idempotent",
+            email="manager-idempotent@example.com",
+            password="test-pass",
+        )
+        employee_user = user_model.objects.create_user(
+            username="employee-idempotent",
+            email="employee-idempotent@example.com",
+            password="test-pass",
+        )
+        self.client.force_authenticate(user=manager)
+        department = Department.objects.create(name="Planning")
+        employee = Employee.objects.create(
+            user=employee_user,
+            department=department,
+            full_name="Taylor Employee",
+            position_name="Operator",
+        )
+        task = Task.objects.create(
+            department=department,
+            title="Idempotent approval task",
+            estimated_hours=2,
+            due_date=date(2026, 5, 6),
+            created_by_user=manager,
+        )
+        source_plan_run_id = uuid4()
+        fetch_plan_run_mock.return_value = PlanResponse(
+            summary=PlanRunSummary(
+                plan_run_id=str(source_plan_run_id),
+                status="completed",
+                created_at=timezone.now(),
+                planning_period_start=timezone.now(),
+                planning_period_end=timezone.now(),
+                assigned_count=1,
+                unassigned_count=0,
+            ),
+            proposals=[
+                AssignmentProposal(
+                    task_id=str(task.id),
+                    employee_id=str(employee.id),
+                    score=1.0,
+                    planned_hours=2,
+                    start_date=date(2026, 5, 6),
+                    end_date=date(2026, 5, 6),
+                )
+            ],
+            unassigned=[],
+            artifacts=PlanRunArtifacts(),
+        )
+
+        payload = {
+            "task": task.id,
+            "employee": employee.id,
+            "source_plan_run_id": str(source_plan_run_id),
+        }
+        first_response = self.client.post("/api/v1/assignments/approve-proposal/", payload, format="json")
+        second_response = self.client.post("/api/v1/assignments/approve-proposal/", payload, format="json")
+
+        self.assertEqual(first_response.status_code, 201)
+        self.assertEqual(second_response.status_code, 201)
+        self.assertEqual(first_response.data["id"], second_response.data["id"])
+
+    @patch("operations.approvals.PlannerServiceClient.fetch_plan_run")
+    def test_approve_proposal_endpoint_returns_502_when_planner_is_unavailable(self, fetch_plan_run_mock) -> None:
+        user_model = get_user_model()
+        manager = user_model.objects.create_user(
+            username="manager-upstream",
+            email="manager-upstream@example.com",
+            password="test-pass",
+        )
+        employee_user = user_model.objects.create_user(
+            username="employee-upstream",
+            email="employee-upstream@example.com",
+            password="test-pass",
+        )
+        self.client.force_authenticate(user=manager)
+        department = Department.objects.create(name="Planning")
+        employee = Employee.objects.create(
+            user=employee_user,
+            department=department,
+            full_name="Jordan Employee",
+            position_name="Operator",
+        )
+        task = Task.objects.create(
+            department=department,
+            title="Upstream planner task",
+            estimated_hours=2,
+            due_date=date(2026, 5, 7),
+            created_by_user=manager,
+        )
+        fetch_plan_run_mock.side_effect = PlannerServiceError("planner-service is unavailable during approval handoff")
+
+        response = self.client.post(
+            "/api/v1/assignments/approve-proposal/",
+            {
+                "task": task.id,
+                "employee": employee.id,
+                "source_plan_run_id": str(uuid4()),
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 502)
+        self.assertEqual(response.data["detail"], "planner-service is unavailable during approval handoff")
+
+    @patch("operations.approvals.PlannerServiceClient.fetch_plan_run")
+    def test_approve_proposal_endpoint_rejects_second_final_assignment_for_task(self, fetch_plan_run_mock) -> None:
+        user_model = get_user_model()
+        manager = user_model.objects.create_user(
+            username="manager-duplicate-final",
+            email="manager-duplicate-final@example.com",
+            password="test-pass",
+        )
+        employee_user = user_model.objects.create_user(
+            username="employee-duplicate-final",
+            email="employee-duplicate-final@example.com",
+            password="test-pass",
+        )
+        other_employee_user = user_model.objects.create_user(
+            username="employee-existing-final",
+            email="employee-existing-final@example.com",
+            password="test-pass",
+        )
+        self.client.force_authenticate(user=manager)
+        department = Department.objects.create(name="Planning")
+        employee = Employee.objects.create(
+            user=employee_user,
+            department=department,
+            full_name="Primary Candidate",
+            position_name="Operator",
+        )
+        other_employee = Employee.objects.create(
+            user=other_employee_user,
+            department=department,
+            full_name="Existing Final Assignee",
+            position_name="Operator",
+        )
+        task = Task.objects.create(
+            department=department,
+            title="Already assigned task",
+            estimated_hours=2,
+            due_date=date(2026, 5, 8),
+            created_by_user=manager,
+        )
+        Assignment.objects.create(
+            task=task,
+            employee=other_employee,
+            planned_hours=2,
+            start_date=date(2026, 5, 8),
+            end_date=date(2026, 5, 8),
+            status=Assignment.Status.APPROVED,
+            assigned_by_type=Assignment.SourceType.MANAGER,
+            assigned_by_user=manager,
+            approved_by_user=manager,
+            approved_at=timezone.now(),
+        )
+        source_plan_run_id = uuid4()
+        fetch_plan_run_mock.return_value = PlanResponse(
+            summary=PlanRunSummary(
+                plan_run_id=str(source_plan_run_id),
+                status="completed",
+                created_at=timezone.now(),
+                planning_period_start=timezone.now(),
+                planning_period_end=timezone.now(),
+                assigned_count=1,
+                unassigned_count=0,
+            ),
+            proposals=[
+                AssignmentProposal(
+                    task_id=str(task.id),
+                    employee_id=str(employee.id),
+                    score=1.0,
+                    planned_hours=2,
+                    start_date=date(2026, 5, 8),
+                    end_date=date(2026, 5, 8),
+                )
+            ],
+            unassigned=[],
+            artifacts=PlanRunArtifacts(),
+        )
+
+        response = self.client.post(
+            "/api/v1/assignments/approve-proposal/",
+            {
+                "task": task.id,
+                "employee": employee.id,
+                "source_plan_run_id": str(source_plan_run_id),
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Task already has a final assignment", str(response.data))
 
     def test_planning_snapshot_endpoint_exports_core_truth(self) -> None:
         user_model = get_user_model()
