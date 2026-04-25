@@ -3,6 +3,7 @@
 from uuid import UUID
 
 from django.conf import settings
+from django.db import transaction
 from django.utils import timezone
 from rest_framework import serializers
 
@@ -30,11 +31,7 @@ def approve_planner_proposal(
     """Validate a persisted planner proposal and create the final core assignment from it."""
 
     # Repeating the same approval request should be safe for UI retries and network retries.
-    existing_assignment = Assignment.objects.filter(
-        task=task,
-        employee=employee,
-        source_plan_run_id=source_plan_run_id,
-    ).first()
+    existing_assignment = Assignment.objects.filter(task=task, employee=employee, source_plan_run_id=source_plan_run_id).first()
     if existing_assignment is not None:
         return existing_assignment
 
@@ -43,32 +40,43 @@ def approve_planner_proposal(
     proposal = _find_matching_proposal(plan_run, str(task.id), str(employee.id))
     _validate_planner_handoff(plan_run, proposal, task, employee)
 
-    # The task may move through only one final assignee in the MVP approval flow.
-    if Assignment.objects.filter(task=task, status__in=FINAL_TASK_STATUSES).exists():
-        raise serializers.ValidationError("Task already has a final assignment.")
+    with transaction.atomic():
+        # Lock the task row so concurrent approvals cannot create two final assignments for the same task.
+        Task.objects.select_for_update().get(pk=task.pk)
+        existing_assignment = Assignment.objects.filter(
+            task=task,
+            employee=employee,
+            source_plan_run_id=source_plan_run_id,
+        ).first()
+        if existing_assignment is not None:
+            return existing_assignment
 
-    assignment = Assignment.objects.create(
-        task=task,
-        employee=employee,
-        source_plan_run_id=source_plan_run_id,
-        planned_hours=proposal.planned_hours,
-        start_date=proposal.start_date,
-        end_date=proposal.end_date,
-        status=Assignment.Status.APPROVED,
-        assigned_by_type=Assignment.SourceType.MANAGER,
-        assigned_by_user=approved_by_user,
-        approved_by_user=approved_by_user,
-        approved_at=timezone.now(),
-        notes=notes,
-    )
-    AssignmentChangeLog.objects.create(
-        assignment=assignment,
-        old_employee=None,
-        new_employee=assignment.employee,
-        change_reason="Approved persisted planner proposal",
-        changed_by_user=approved_by_user,
-    )
-    return assignment
+        # The task may move through only one final assignee in the MVP approval flow.
+        if Assignment.objects.filter(task=task, status__in=FINAL_TASK_STATUSES).exists():
+            raise serializers.ValidationError("Task already has a final assignment.")
+
+        assignment = Assignment.objects.create(
+            task=task,
+            employee=employee,
+            source_plan_run_id=source_plan_run_id,
+            planned_hours=proposal.planned_hours,
+            start_date=proposal.start_date,
+            end_date=proposal.end_date,
+            status=Assignment.Status.APPROVED,
+            assigned_by_type=Assignment.SourceType.MANAGER,
+            assigned_by_user=approved_by_user,
+            approved_by_user=approved_by_user,
+            approved_at=timezone.now(),
+            notes=notes,
+        )
+        AssignmentChangeLog.objects.create(
+            assignment=assignment,
+            old_employee=None,
+            new_employee=assignment.employee,
+            change_reason="Approved persisted planner proposal",
+            changed_by_user=approved_by_user,
+        )
+        return assignment
 
 
 def _find_matching_proposal(plan_run: PlanResponse, task_id: str, employee_id: str) -> AssignmentProposal:
@@ -93,6 +101,8 @@ def _validate_planner_handoff(
         raise serializers.ValidationError("Planner run must be completed before approval.")
     if proposal.status != "proposed":
         raise serializers.ValidationError("Planner proposal is no longer in proposed status.")
+    if not proposal.is_selected:
+        raise serializers.ValidationError("Planner proposal must be selected before manager approval.")
     # The client supplies a pair to approve, but core re-checks it against planner artifacts before writing business truth.
     if proposal.task_id != str(task.id) or proposal.employee_id != str(employee.id):
         raise serializers.ValidationError("Planner proposal does not match the requested task/employee pair.")

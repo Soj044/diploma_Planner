@@ -477,6 +477,73 @@ class CoreApiSmokeTests(APITestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("Task already has a final assignment", str(response.data))
 
+    @patch("operations.approvals.PlannerServiceClient.fetch_plan_run")
+    def test_approve_proposal_endpoint_rejects_non_selected_proposal(self, fetch_plan_run_mock) -> None:
+        user_model = get_user_model()
+        manager = user_model.objects.create_user(
+            username="manager-non-selected",
+            email="manager-non-selected@example.com",
+            password="test-pass",
+        )
+        employee_user = user_model.objects.create_user(
+            username="employee-non-selected",
+            email="employee-non-selected@example.com",
+            password="test-pass",
+        )
+        self.client.force_authenticate(user=manager)
+        department = Department.objects.create(name="Planning")
+        employee = Employee.objects.create(
+            user=employee_user,
+            department=department,
+            full_name="Candidate Not Selected",
+            position_name="Operator",
+        )
+        task = Task.objects.create(
+            department=department,
+            title="Non selected planner proposal",
+            estimated_hours=2,
+            due_date=date(2026, 5, 9),
+            created_by_user=manager,
+        )
+        source_plan_run_id = uuid4()
+        fetch_plan_run_mock.return_value = PlanResponse(
+            summary=PlanRunSummary(
+                plan_run_id=str(source_plan_run_id),
+                status="completed",
+                created_at=timezone.now(),
+                planning_period_start=timezone.now(),
+                planning_period_end=timezone.now(),
+                assigned_count=1,
+                unassigned_count=0,
+            ),
+            proposals=[
+                AssignmentProposal(
+                    task_id=str(task.id),
+                    employee_id=str(employee.id),
+                    score=0.5,
+                    is_selected=False,
+                    planned_hours=2,
+                    start_date=date(2026, 5, 9),
+                    end_date=date(2026, 5, 9),
+                )
+            ],
+            unassigned=[],
+            artifacts=PlanRunArtifacts(),
+        )
+
+        response = self.client.post(
+            "/api/v1/assignments/approve-proposal/",
+            {
+                "task": task.id,
+                "employee": employee.id,
+                "source_plan_run_id": str(source_plan_run_id),
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("must be selected", str(response.data))
+
     def test_planning_snapshot_endpoint_exports_core_truth(self) -> None:
         user_model = get_user_model()
         manager = user_model.objects.create_user(
