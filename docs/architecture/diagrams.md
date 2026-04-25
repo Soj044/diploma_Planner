@@ -10,8 +10,9 @@ planner-service (CP-SAT): eligibility -> scoring -> optimization
 planner-service -> planner artifact store: save run + snapshot + proposals + diagnostics
 planner-service -> manager: assignment proposals + diagnostics
 manager -> planner-service: GET /api/v1/plan-runs/{id}
-manager -> core-service: approve proposals
-core-service: store final approved assignments
+manager -> core-service: POST /api/v1/assignments/approve-proposal/
+core-service -> planner-service: GET /api/v1/plan-runs/{id}
+core-service -> core database: store final approved assignments
 ```
 
 ## Approval Handoff
@@ -19,8 +20,10 @@ core-service: store final approved assignments
 ```text
 manager -> planner-service: review proposal
 manager -> core-service: POST /api/v1/assignments/approve-proposal/
+core-service -> planner-service: GET /api/v1/plan-runs/{id}
+core-service: validate run status + proposal pair + idempotency
 core-service -> core database: create approved Assignment + AssignmentChangeLog
-planner-service: keeps proposal as planning artifact only
+planner-service: keeps proposal immutable as planning artifact only
 ```
 
 ## Runtime Diagram (Docker)

@@ -27,3 +27,4 @@
 - `core-service` is the source of truth for employees, schedules, leaves, tasks, and approved assignments.
 - `planner-service` stores planning artifacts and never becomes a second source of truth for business entities.
 - `planner-service` uses logical external IDs for core entities; it must not create database foreign keys into `core-service`.
+- Manager review happens against persisted planner runs, but manager approval is executed by `core-service`, which re-reads the selected planner proposal before writing the final assignment.

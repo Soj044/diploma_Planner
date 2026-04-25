@@ -30,15 +30,16 @@ Sequence planner-service work in small steps without turning it into a second so
 - Preserve enough snapshot metadata to explain why a proposal was produced.
 - Current MVP cut: use a SQLite-backed repository that mirrors these planner tables and keeps `eligibility` / `scores` in JSON columns on `plan_runs` until normalization is justified.
 
-## Phase 4: Approval Handoff
-- Stabilize proposal DTOs for manager review in `core-service`.
-- Define the handoff boundary where approved proposals become `Assignment` records in `core-service`.
+## Phase 4: Approval Handoff (completed)
+- Stabilize proposal DTOs for manager review through `GET /api/v1/plan-runs/{plan_run_id}`.
+- Support the handoff boundary where `core-service` reads persisted planner artifacts before creating final `Assignment` records.
 - Keep planner outputs immutable after run completion; approvals remain outside planner ownership.
 
 ## Phase 5: Hardening
 - Add unit tests for eligibility, scoring, diagnostics, and optimization constraints.
 - Add integration tests for create-run, snapshot loading, planning, and retrieval.
 - Add contracts compatibility checks between `core-service`, `planner-service`, and `packages/contracts`.
+- Current progress: planner retrieval tests and core approval handoff tests now cover persisted run reading, idempotent approvals, upstream failure handling, and final-assignment conflicts.
 
 ## Explicitly Out of Scope for MVP
 - RAG or LLM-based planning logic.
