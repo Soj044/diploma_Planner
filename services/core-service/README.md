@@ -9,6 +9,7 @@ Django + DRF сервис с бизнес-сущностями и хранени
 - `DJANGO_SECRET_KEY`
 - `DJANGO_DEBUG`
 - `DJANGO_ALLOWED_HOSTS`
+- `INTERNAL_SERVICE_TOKEN`
 - `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_HOST`, `POSTGRES_PORT`
 
 ## Запуск
@@ -44,3 +45,10 @@ DJANGO_TEST_SQLITE=true poetry run python manage.py test
 `POST /api/v1/assignments/approve-proposal/` creates an approved core `Assignment`
 from a selected planner proposal payload. Planner proposals remain artifacts; final
 assignments are stored by `core-service`.
+
+## Planner snapshot boundary
+
+`POST /api/v1/planning-snapshot/` exports a planner-ready `PlanningSnapshot` from
+core business truth. The endpoint accepts either:
+- an authenticated core user request
+- an internal service request with `X-Internal-Service-Token`

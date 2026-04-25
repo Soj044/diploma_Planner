@@ -215,3 +215,4 @@ CODEX_CLI_COMMANDS.md
 .serena/
 .tools/
 .vscode/
+services/planner-service/data/

@@ -1,8 +1,11 @@
-"""DRF viewsets for MVP CRUD surface."""
+"""DRF views for MVP CRUD surface and planner support."""
 
-from rest_framework import status, viewsets
+from contracts.schemas import CreatePlanRunRequest
+from pydantic import ValidationError as PydanticValidationError
 from rest_framework.decorators import action
+from rest_framework import status, viewsets
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from .models import (
     Assignment,
@@ -18,6 +21,8 @@ from .models import (
     WorkSchedule,
     WorkScheduleDay,
 )
+from .permissions import HasPlannerServiceAccess
+from .snapshots import build_planning_snapshot
 from .serializers import (
     AssignmentChangeLogSerializer,
     AssignmentApprovalSerializer,
@@ -33,6 +38,19 @@ from .serializers import (
     WorkScheduleDaySerializer,
     WorkScheduleSerializer,
 )
+
+
+class PlanningSnapshotView(APIView):
+    permission_classes = [HasPlannerServiceAccess]
+
+    def post(self, request):
+        try:
+            payload = CreatePlanRunRequest.model_validate(request.data)
+        except PydanticValidationError as exc:
+            return Response({"detail": exc.errors()}, status=status.HTTP_400_BAD_REQUEST)
+
+        snapshot = build_planning_snapshot(payload)
+        return Response(snapshot.model_dump(mode="json"), status=status.HTTP_200_OK)
 
 
 class DepartmentViewSet(viewsets.ModelViewSet):

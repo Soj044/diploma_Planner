@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from contracts.schemas import (
     EmployeeAvailability,
     EmployeeSnapshot,
-    PlanRequest,
+    PlanningSnapshot,
     SkillRequirement,
     TaskSnapshot,
 )
@@ -12,7 +12,7 @@ from app.planning.runner import run_planning
 
 
 def test_snapshot_to_proposals_and_unassigned_diagnostics() -> None:
-    request = PlanRequest(
+    request = PlanningSnapshot(
         planning_period_start=datetime(2026, 3, 23, 0, 0, tzinfo=timezone.utc),
         planning_period_end=datetime(2026, 3, 24, 0, 0, tzinfo=timezone.utc),
         employees=[

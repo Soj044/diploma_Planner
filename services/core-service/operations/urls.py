@@ -1,5 +1,6 @@
 """API routes for core-service MVP."""
 
+from django.urls import path
 from rest_framework.routers import DefaultRouter
 
 from .views import (
@@ -13,6 +14,7 @@ from .views import (
     SkillViewSet,
     TaskRequirementViewSet,
     TaskViewSet,
+    PlanningSnapshotView,
     WorkScheduleDayViewSet,
     WorkScheduleViewSet,
 )
@@ -31,4 +33,7 @@ router.register("task-requirements", TaskRequirementViewSet)
 router.register("assignments", AssignmentViewSet)
 router.register("assignment-change-logs", AssignmentChangeLogViewSet)
 
-urlpatterns = router.urls
+urlpatterns = [
+    path("planning-snapshot/", PlanningSnapshotView.as_view(), name="planning-snapshot"),
+    *router.urls,
+]

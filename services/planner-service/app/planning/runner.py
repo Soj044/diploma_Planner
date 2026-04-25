@@ -12,6 +12,8 @@ from .time import utcnow
 
 
 def run_planning(snapshot: PlanningSnapshot) -> PlanResponse:
+    """Run the full planner pipeline from hard filters to solver artifacts."""
+
     eligibility = evaluate_eligibility(snapshot.employees, snapshot.tasks)
     scores = calculate_scores(snapshot.employees, snapshot.tasks, eligibility)
     proposals, solver_stats = build_plan(snapshot.tasks, snapshot.employees, eligibility, scores)

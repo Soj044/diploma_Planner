@@ -14,7 +14,9 @@
 
 ## MVP implementation notes
 
-- The first planner implementation may receive a full `PlanningSnapshot` payload for local testing.
+- The public planner-service boundary is `CreatePlanRunRequest`.
+- Planner-service fetches `PlanningSnapshot` from `core-service` truth before running eligibility, scoring, and optimization.
+- A full `PlanningSnapshot` payload remains acceptable only for internal planning tests and low-level pipeline checks.
 - The stable service boundary is `CreatePlanRunRequest` plus a snapshot built from `core-service` truth.
 - Planner stores run artifacts and diagnostics, but final assignments remain in `core-service`.
 - Planner persistence starts with run, snapshot, proposals, unassigned diagnostics, and solver statistics only.
