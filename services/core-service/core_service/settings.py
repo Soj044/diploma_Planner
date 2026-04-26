@@ -89,6 +89,7 @@ STATIC_URL = "static/"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 AUTH_USER_MODEL = "users.User"
 INTERNAL_SERVICE_TOKEN = os.getenv("INTERNAL_SERVICE_TOKEN", "")
+PLANNER_SERVICE_URL = os.getenv("PLANNER_SERVICE_URL", "http://localhost:8001")
 
 REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": [

@@ -24,6 +24,20 @@ FastAPI сервис планирования для MVP.
 - `POST /api/v1/plan-runs` with `CreatePlanRunRequest`
 - `GET /api/v1/plan-runs/{plan_run_id}`
 
+## Review and approval handoff
+
+- Manager reviews persisted proposals via `GET /api/v1/plan-runs/{plan_run_id}`.
+- Final approval is not stored in planner-service.
+- `core-service` receives `task`, `employee`, `source_plan_run_id`, then re-reads the
+  persisted plan run from planner-service before creating the final `Assignment`.
+- Planner proposals stay immutable artifacts after run completion.
+
+## Hardening status
+
+- Shared contracts validate planning period boundaries and proposal assignment dates.
+- Planner tests cover hard eligibility failures, weighted scoring, overlap conflicts,
+  persisted artifact roundtrip, and approval-critical response fields.
+
 ## Конфигурация
 
 - `CORE_SERVICE_URL` — base URL для `core-service`

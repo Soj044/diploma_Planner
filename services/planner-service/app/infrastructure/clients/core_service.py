@@ -1,4 +1,9 @@
-"""HTTP client for fetching planning snapshots from core-service."""
+"""HTTP-клиент planner-service для получения PlanningSnapshot из core-service.
+
+Этот файл реализует boundary из application layer и забирает snapshot бизнес-
+данных перед расчетом назначений. Он связывает planner orchestration с
+core-service, но не владеет самими сотрудниками или задачами.
+"""
 
 import json
 from urllib.error import HTTPError, URLError

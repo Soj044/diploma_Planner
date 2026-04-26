@@ -1,4 +1,9 @@
-"""Planning pipeline orchestration."""
+"""Оркестрация planning pipeline от snapshot до proposals и diagnostics.
+
+Этот файл последовательно запускает eligibility, scoring, optimizer и
+diagnostics, затем собирает итоговый PlanResponse. Он связывает внутренние
+planning модули в один воспроизводимый расчет назначений.
+"""
 
 from uuid import uuid4
 

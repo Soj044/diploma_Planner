@@ -43,8 +43,16 @@ DJANGO_TEST_SQLITE=true poetry run python manage.py test
 ## Approval handoff
 
 `POST /api/v1/assignments/approve-proposal/` creates an approved core `Assignment`
-from a selected planner proposal payload. Planner proposals remain artifacts; final
-assignments are stored by `core-service`.
+from a selected persisted planner proposal. The request accepts:
+- `task`
+- `employee`
+- `source_plan_run_id`
+- optional `notes`
+
+During approval, `core-service` reads the persisted planner run from `planner-service`,
+re-validates the requested proposal, keeps the operation idempotent for the same
+`task + employee + source_plan_run_id`, and writes the final `Assignment` plus
+`AssignmentChangeLog` in the core database. Planner proposals remain artifacts only.
 
 ## Planner snapshot boundary
 

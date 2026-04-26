@@ -1,4 +1,9 @@
-"""Helpers for exporting planning snapshots from core-service truth."""
+"""Сборка PlanningSnapshot из бизнес-истины core-service.
+
+Этот файл превращает core модели задач, сотрудников, графиков и ограничений в
+контрактный snapshot для planner-service. Он связывает source of truth из
+models.py с planning pipeline и не создает второй источник данных.
+"""
 
 from datetime import date, datetime, time, timedelta, timezone
 

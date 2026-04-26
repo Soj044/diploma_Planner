@@ -1,4 +1,9 @@
-"""Plan run API routes."""
+"""HTTP API planner-service для запуска и чтения расчетов назначений.
+
+Этот файл принимает команду на создание plan run и отдает persisted proposals
+для manager review. Он связывает FastAPI routes с application service,
+snapshot client и planner artifact repository.
+"""
 
 from fastapi import APIRouter, HTTPException
 

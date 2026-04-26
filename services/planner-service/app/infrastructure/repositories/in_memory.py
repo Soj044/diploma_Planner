@@ -1,4 +1,9 @@
-"""In-memory planner artifact repository for MVP and local development."""
+"""In-memory репозиторий planner artifacts для локальной разработки и unit tests.
+
+Этот файл хранит результаты планирования в памяти процесса и нужен как простой
+adapter для application layer. Он реализует контракт plan_runs.py без внешней
+БД и используется в локальных и тестовых сценариях.
+"""
 
 from dataclasses import dataclass
 from hashlib import sha256

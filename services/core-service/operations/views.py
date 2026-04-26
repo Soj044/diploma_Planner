@@ -1,4 +1,9 @@
-"""DRF views for MVP CRUD surface and planner support."""
+"""DRF endpoints core-service для задач, snapshot export и approval handoff.
+
+Этот файл публикует CRUD API для основных сущностей, endpoint выгрузки
+PlanningSnapshot в planner-service и endpoint утверждения выбранного proposal.
+Он связывает serializers, snapshot builders и approval business logic.
+"""
 
 from contracts.schemas import CreatePlanRunRequest
 from pydantic import ValidationError as PydanticValidationError
@@ -22,6 +27,7 @@ from .models import (
     WorkScheduleDay,
 )
 from .permissions import HasPlannerServiceAccess
+from .planner_client import PlannerServiceError
 from .snapshots import build_planning_snapshot
 from .serializers import (
     AssignmentChangeLogSerializer,
@@ -111,7 +117,10 @@ class AssignmentViewSet(viewsets.ModelViewSet):
     def approve_proposal(self, request):
         serializer = AssignmentApprovalSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        assignment = serializer.save(approved_by_user=request.user)
+        try:
+            assignment = serializer.save(approved_by_user=request.user)
+        except PlannerServiceError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
         response = AssignmentSerializer(assignment)
         return Response(response.data, status=status.HTTP_201_CREATED)
 

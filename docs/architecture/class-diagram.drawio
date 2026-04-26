@@ -1,0 +1,98 @@
+<mxfile host="app.diagrams.net" modified="2026-04-26T12:00:00.000Z" agent="Codex" version="24.7.17" editor="Codex" type="device">
+  <diagram id="workestrator-class-diagram" name="Class Diagram">
+    <mxGraphModel dx="1600" dy="1200" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1800" pageHeight="1400" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="2" value="&lt;b&gt;User&lt;/b&gt;&lt;br/&gt;id&lt;br/&gt;username&lt;br/&gt;email&lt;br/&gt;role" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;align=left;spacingLeft=8;" vertex="1" parent="1">
+          <mxGeometry x="40" y="40" width="180" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="3" value="&lt;b&gt;Department&lt;/b&gt;&lt;br/&gt;id&lt;br/&gt;name&lt;br/&gt;description" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;align=left;spacingLeft=8;" vertex="1" parent="1">
+          <mxGeometry x="40" y="220" width="180" height="100" as="geometry"/>
+        </mxCell>
+        <mxCell id="4" value="&lt;b&gt;Employee&lt;/b&gt;&lt;br/&gt;id&lt;br/&gt;user_id&lt;br/&gt;department_id&lt;br/&gt;full_name&lt;br/&gt;position_name&lt;br/&gt;employment_type&lt;br/&gt;weekly_capacity_hours" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;align=left;spacingLeft=8;" vertex="1" parent="1">
+          <mxGeometry x="290" y="40" width="240" height="170" as="geometry"/>
+        </mxCell>
+        <mxCell id="5" value="&lt;b&gt;Skill&lt;/b&gt;&lt;br/&gt;id&lt;br/&gt;name&lt;br/&gt;description" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;align=left;spacingLeft=8;" vertex="1" parent="1">
+          <mxGeometry x="40" y="380" width="180" height="100" as="geometry"/>
+        </mxCell>
+        <mxCell id="6" value="&lt;b&gt;EmployeeSkill&lt;/b&gt;&lt;br/&gt;employee_id&lt;br/&gt;skill_id&lt;br/&gt;level" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;align=left;spacingLeft=8;" vertex="1" parent="1">
+          <mxGeometry x="290" y="300" width="220" height="100" as="geometry"/>
+        </mxCell>
+        <mxCell id="7" value="&lt;b&gt;WorkSchedule&lt;/b&gt;&lt;br/&gt;id&lt;br/&gt;employee_id&lt;br/&gt;name&lt;br/&gt;is_default" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;align=left;spacingLeft=8;" vertex="1" parent="1">
+          <mxGeometry x="590" y="40" width="210" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="8" value="&lt;b&gt;WorkScheduleDay&lt;/b&gt;&lt;br/&gt;id&lt;br/&gt;schedule_id&lt;br/&gt;weekday&lt;br/&gt;capacity_hours" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;align=left;spacingLeft=8;" vertex="1" parent="1">
+          <mxGeometry x="860" y="40" width="230" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="9" value="&lt;b&gt;EmployeeLeave&lt;/b&gt;&lt;br/&gt;id&lt;br/&gt;employee_id&lt;br/&gt;leave_type&lt;br/&gt;start_date&lt;br/&gt;end_date&lt;br/&gt;status" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;align=left;spacingLeft=8;" vertex="1" parent="1">
+          <mxGeometry x="590" y="200" width="210" height="140" as="geometry"/>
+        </mxCell>
+        <mxCell id="10" value="&lt;b&gt;AvailabilityOverride&lt;/b&gt;&lt;br/&gt;id&lt;br/&gt;employee_id&lt;br/&gt;date&lt;br/&gt;available_hours&lt;br/&gt;reason" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;align=left;spacingLeft=8;" vertex="1" parent="1">
+          <mxGeometry x="860" y="200" width="230" height="130" as="geometry"/>
+        </mxCell>
+        <mxCell id="11" value="&lt;b&gt;Task&lt;/b&gt;&lt;br/&gt;id&lt;br/&gt;department_id&lt;br/&gt;title&lt;br/&gt;status&lt;br/&gt;priority&lt;br/&gt;estimated_hours&lt;br/&gt;start_date&lt;br/&gt;due_date&lt;br/&gt;created_by_user" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontStyle=1;align=left;spacingLeft=8;" vertex="1" parent="1">
+          <mxGeometry x="590" y="410" width="230" height="190" as="geometry"/>
+        </mxCell>
+        <mxCell id="12" value="&lt;b&gt;TaskRequirement&lt;/b&gt;&lt;br/&gt;id&lt;br/&gt;task_id&lt;br/&gt;skill_id&lt;br/&gt;min_level&lt;br/&gt;weight" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontStyle=1;align=left;spacingLeft=8;" vertex="1" parent="1">
+          <mxGeometry x="860" y="440" width="230" height="130" as="geometry"/>
+        </mxCell>
+        <mxCell id="13" value="&lt;b&gt;Assignment&lt;/b&gt;&lt;br/&gt;id&lt;br/&gt;task_id&lt;br/&gt;employee_id&lt;br/&gt;source_plan_run_id&lt;br/&gt;planned_hours&lt;br/&gt;start_date&lt;br/&gt;end_date&lt;br/&gt;status&lt;br/&gt;approved_by_user" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;align=left;spacingLeft=8;" vertex="1" parent="1">
+          <mxGeometry x="1140" y="250" width="250" height="190" as="geometry"/>
+        </mxCell>
+        <mxCell id="14" value="&lt;b&gt;AssignmentChangeLog&lt;/b&gt;&lt;br/&gt;id&lt;br/&gt;assignment_id&lt;br/&gt;old_employee&lt;br/&gt;new_employee&lt;br/&gt;change_reason&lt;br/&gt;changed_by_user" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;align=left;spacingLeft=8;" vertex="1" parent="1">
+          <mxGeometry x="1440" y="270" width="240" height="160" as="geometry"/>
+        </mxCell>
+        <mxCell id="15" value="&lt;b&gt;PlanRun (logical ref)&lt;/b&gt;&lt;br/&gt;external_uuid&lt;br/&gt;status&lt;br/&gt;proposals&lt;br/&gt;diagnostics" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontStyle=1;align=left;spacingLeft=8;" vertex="1" parent="1">
+          <mxGeometry x="1140" y="500" width="250" height="120" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="30" value="1:1" style="endArrow=block;html=1;rounded=0;strokeColor=#6c8ebf;" edge="1" parent="1" source="2" target="4">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="31" value="1:N" style="endArrow=block;html=1;rounded=0;strokeColor=#6c8ebf;" edge="1" parent="1" source="3" target="4">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="32" value="1:N" style="endArrow=block;html=1;rounded=0;strokeColor=#82b366;" edge="1" parent="1" source="4" target="6">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="33" value="1:N" style="endArrow=block;html=1;rounded=0;strokeColor=#6c8ebf;" edge="1" parent="1" source="5" target="6">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="34" value="1:N" style="endArrow=block;html=1;rounded=0;strokeColor=#82b366;" edge="1" parent="1" source="4" target="7">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="35" value="1:N" style="endArrow=block;html=1;rounded=0;strokeColor=#82b366;" edge="1" parent="1" source="7" target="8">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="36" value="1:N" style="endArrow=block;html=1;rounded=0;strokeColor=#82b366;" edge="1" parent="1" source="4" target="9">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="37" value="1:N" style="endArrow=block;html=1;rounded=0;strokeColor=#82b366;" edge="1" parent="1" source="4" target="10">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="38" value="1:N" style="endArrow=block;html=1;rounded=0;strokeColor=#d79b00;" edge="1" parent="1" source="3" target="11">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="39" value="1:N" style="endArrow=block;html=1;rounded=0;strokeColor=#d79b00;" edge="1" parent="1" source="11" target="12">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="40" value="1:N" style="endArrow=block;html=1;rounded=0;strokeColor=#d79b00;" edge="1" parent="1" source="5" target="12">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="41" value="1:N" style="endArrow=block;html=1;rounded=0;strokeColor=#b85450;" edge="1" parent="1" source="11" target="13">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="42" value="1:N" style="endArrow=block;html=1;rounded=0;strokeColor=#b85450;" edge="1" parent="1" source="4" target="13">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="43" value="1:N" style="endArrow=block;html=1;rounded=0;strokeColor=#b85450;" edge="1" parent="1" source="13" target="14">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="44" value="logical source_plan_run_id" style="dashed=1;endArrow=open;html=1;rounded=0;strokeColor=#9673a6;" edge="1" parent="1" source="13" target="15">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

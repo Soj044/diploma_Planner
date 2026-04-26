@@ -30,10 +30,10 @@ Keep `core-service` as the source of truth for users, employees, schedules, task
 - Ensure planner receives copied business truth and uses only logical external IDs.
 - Keep approved assignment creation in `core-service`.
 
-## Phase 5: Approval Handoff
-- Accept selected planner proposal data through an authenticated core endpoint.
-- Create approved `Assignment` records and assignment change logs in `core-service`.
-- Keep planner proposal status as artifact metadata, not final business truth.
+## Phase 5: Approval Handoff (completed)
+- Accept manager approval through an authenticated core endpoint with `task`, `employee`, `source_plan_run_id`, and optional notes.
+- Read the persisted planner run from `planner-service`, validate the selected proposal, and create approved `Assignment` records plus assignment change logs in `core-service`.
+- Keep planner proposal status as artifact metadata only; final business truth stays in `core-service`.
 
 ## Explicitly Out of Scope For This Stage
 - Frontend flows.

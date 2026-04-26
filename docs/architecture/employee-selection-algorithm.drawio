@@ -1,0 +1,87 @@
+<mxfile host="app.diagrams.net" modified="2026-04-26T12:10:00.000Z" agent="Codex" version="24.7.17" editor="Codex" type="device">
+  <diagram id="workestrator-selection-algorithm" name="Employee Selection Algorithm">
+    <mxGraphModel dx="1600" dy="1200" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1800" pageHeight="1600" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="2" value="Старт&lt;br/&gt;PlanningSnapshot" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="660" y="30" width="180" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="3" value="1. Взять список задач&lt;br/&gt;и сотрудников из snapshot" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="600" y="130" width="300" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="4" value="2. Для каждой задачи:&lt;br/&gt;фильтр только active employees" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="600" y="230" width="300" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="5" value="3. Совпадает департамент?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="650" y="340" width="200" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="6" value="4. Слот доступности покрывает&lt;br/&gt;весь интервал задачи?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="650" y="490" width="200" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="7" value="5. available_hours &gt;= task hours?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="650" y="650" width="200" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="8" value="6. Выполнены все&lt;br/&gt;skill requirements?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="650" y="800" width="200" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="9" value="7. Добавить сотрудника&lt;br/&gt;в eligible list задачи" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="1020" y="820" width="260" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="10" value="8. Eligible list пуст?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="650" y="960" width="200" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="11" value="Diagnostic:&lt;br/&gt;no_eligible_candidates" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="260" y="980" width="240" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="12" value="9. Рассчитать scores:&lt;br/&gt;weighted ratio, cap = 2.0" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="980" y="980" width="300" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="13" value="10. Построить CP-SAT variables&lt;br/&gt;x(task, employee)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="980" y="1080" width="300" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="14" value="11. Ограничения:&lt;br/&gt;- не более 1 сотрудника на задачу&lt;br/&gt;- без overlap на сотрудника" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="980" y="1180" width="300" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="15" value="12. Целевая функция:&lt;br/&gt;максимум назначенных задач,&lt;br/&gt;потом максимум score" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="980" y="1300" width="300" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="16" value="13. Solver выбирает&lt;br/&gt;selected proposals" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="600" y="1200" width="300" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="17" value="14. Есть задачи без assignment,&lt;br/&gt;но с eligible candidates?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="650" y="1310" width="200" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="18" value="Diagnostic:&lt;br/&gt;capacity_or_conflict" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="260" y="1335" width="240" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="19" value="15. Собрать PlanResponse:&lt;br/&gt;summary + proposals + diagnostics + artifacts" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="600" y="1470" width="300" height="80" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="30" value="" style="endArrow=block;html=1;strokeColor=#6c8ebf;" edge="1" parent="1" source="2" target="3"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="31" value="" style="endArrow=block;html=1;strokeColor=#6c8ebf;" edge="1" parent="1" source="3" target="4"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="32" value="" style="endArrow=block;html=1;strokeColor=#6c8ebf;" edge="1" parent="1" source="4" target="5"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="33" value="да" style="endArrow=block;html=1;strokeColor=#d6b656;" edge="1" parent="1" source="5" target="6"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="34" value="нет" style="endArrow=block;html=1;strokeColor=#b85450;" edge="1" parent="1" source="5" target="10"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="540" y="395"/></Array></mxGeometry></mxCell>
+        <mxCell id="35" value="да" style="endArrow=block;html=1;strokeColor=#d6b656;" edge="1" parent="1" source="6" target="7"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="36" value="нет" style="endArrow=block;html=1;strokeColor=#b85450;" edge="1" parent="1" source="6" target="10"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="540" y="550"/></Array></mxGeometry></mxCell>
+        <mxCell id="37" value="да" style="endArrow=block;html=1;strokeColor=#d6b656;" edge="1" parent="1" source="7" target="8"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="38" value="нет" style="endArrow=block;html=1;strokeColor=#b85450;" edge="1" parent="1" source="7" target="10"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="540" y="705"/></Array></mxGeometry></mxCell>
+        <mxCell id="39" value="да" style="endArrow=block;html=1;strokeColor=#d6b656;" edge="1" parent="1" source="8" target="9"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="40" value="нет" style="endArrow=block;html=1;strokeColor=#b85450;" edge="1" parent="1" source="8" target="10"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="540" y="855"/></Array></mxGeometry></mxCell>
+        <mxCell id="41" value="" style="endArrow=block;html=1;strokeColor=#82b366;" edge="1" parent="1" source="9" target="10"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="1150" y="1015"/></Array></mxGeometry></mxCell>
+        <mxCell id="42" value="да" style="endArrow=block;html=1;strokeColor=#b85450;" edge="1" parent="1" source="10" target="11"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="43" value="нет" style="endArrow=block;html=1;strokeColor=#82b366;" edge="1" parent="1" source="10" target="12"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="44" value="" style="endArrow=block;html=1;strokeColor=#6c8ebf;" edge="1" parent="1" source="12" target="13"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="45" value="" style="endArrow=block;html=1;strokeColor=#6c8ebf;" edge="1" parent="1" source="13" target="14"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="46" value="" style="endArrow=block;html=1;strokeColor=#6c8ebf;" edge="1" parent="1" source="14" target="15"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="47" value="" style="endArrow=block;html=1;strokeColor=#82b366;" edge="1" parent="1" source="15" target="16"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="1130" y="1425"/><mxPoint x="750" y="1425"/></Array></mxGeometry></mxCell>
+        <mxCell id="48" value="" style="endArrow=block;html=1;strokeColor=#6c8ebf;" edge="1" parent="1" source="16" target="17"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="49" value="да" style="endArrow=block;html=1;strokeColor=#b85450;" edge="1" parent="1" source="17" target="18"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="50" value="нет" style="endArrow=block;html=1;strokeColor=#82b366;" edge="1" parent="1" source="17" target="19"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="51" value="" style="endArrow=block;html=1;strokeColor=#82b366;" edge="1" parent="1" source="18" target="19"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="750" y="1510"/></Array></mxGeometry></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

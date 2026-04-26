@@ -1,4 +1,9 @@
-"""Diagnostics for tasks that remain unassigned after optimization."""
+"""Диагностика причин, по которым задача осталась без назначения.
+
+Этот файл объясняет, почему planner не выдал proposal для конкретной задачи:
+из-за отсутствия eligible кандидатов или из-за конфликтов расписания. Его
+результат используется в final PlanResponse и manager review.
+"""
 
 from contracts.schemas import AssignmentProposal, TaskSnapshot, UnassignedTaskDiagnostic
 

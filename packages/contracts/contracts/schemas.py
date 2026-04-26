@@ -1,4 +1,10 @@
-"""Shared Pydantic schemas for planning contracts."""
+"""Общие pydantic-контракты между core-service и planner-service.
+
+Этот файл задает DTO для запуска планирования, передачи snapshot-данных,
+возврата proposals и approval handoff. На него одновременно опираются
+planner-service при расчете назначений и core-service при валидации итоговых
+утверждений.
+"""
 
 from datetime import date, datetime
 from typing import Literal
@@ -79,6 +85,12 @@ class CreatePlanRunRequest(BaseModel):
     department_id: str | None = None
     task_ids: list[str] = Field(default_factory=list)
 
+    @model_validator(mode="after")
+    def validate_period(self) -> "CreatePlanRunRequest":
+        if self.planning_period_start > self.planning_period_end:
+            raise ValueError("planning_period_start must be before or equal to planning_period_end")
+        return self
+
 
 class AssignmentProposal(BaseModel):
     task_id: str
@@ -91,6 +103,14 @@ class AssignmentProposal(BaseModel):
     end_date: date | None = None
     status: ProposalStatus = "proposed"
     explanation_text: str = ""
+
+    @model_validator(mode="after")
+    def validate_dates(self) -> "AssignmentProposal":
+        if (self.start_date is None) != (self.end_date is None):
+            raise ValueError("assignment proposal must include both start_date and end_date")
+        if self.start_date and self.end_date and self.start_date > self.end_date:
+            raise ValueError("assignment proposal start_date must be before or equal to end_date")
+        return self
 
 
 class UnassignedTaskDiagnostic(BaseModel):

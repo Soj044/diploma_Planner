@@ -1,4 +1,9 @@
-"""API routes for core-service MVP."""
+"""Маршруты core-service для задач, snapshot export и финальных назначений.
+
+Этот файл связывает DRF viewsets и специальные endpoints в единый API surface
+core-service. Через него доступны CRUD операций по задачам и assignments, а
+также snapshot boundary для planner-service.
+"""
 
 from django.urls import path
 from rest_framework.routers import DefaultRouter

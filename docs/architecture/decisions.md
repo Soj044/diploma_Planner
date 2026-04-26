@@ -94,3 +94,22 @@ Planner-service больше не должен принимать business truth
 ### Consequences
 - Плюсы: planner runs переживают рестарт процесса, retrieval API читает реальные артефакты, код остаётся простым и без ORM.
 - Минусы: SQLite подходит только для MVP single-instance режима; при росте нагрузки и multi-instance planner понадобится переход к полноценной planner DB.
+
+## ADR-006: Approval Handoff Reads Persisted Planner Artifacts
+
+- Date: 2026-04-25
+- Status: accepted
+
+### Context
+После появления persisted planner runs менеджеру нужен простой и проверяемый способ утвердить одно из предложений, не превращая `planner-service` в владельца финальных назначений и не дублируя бизнес-истину между сервисами.
+
+### Decision
+- Менеджер читает proposals из `planner-service` через `GET /api/v1/plan-runs/{plan_run_id}`.
+- Менеджер отправляет в `core-service` только минимальный handoff payload: `task`, `employee`, `source_plan_run_id`, optional `notes`.
+- `core-service` сам перечитывает persisted plan run из `planner-service`, ищет matching proposal, валидирует `run.status == completed`, `proposal.status == proposed`, `proposal.is_selected == true`, и только после этого создаёт final `Assignment` и `AssignmentChangeLog`.
+- Planner proposals остаются immutable artifacts после завершения run; approval не меняет planner в MVP.
+- Handoff должен быть idempotent для одного и того же `task + employee + source_plan_run_id`.
+
+### Consequences
+- Плюсы: финальная бизнес-истина остаётся только в `core-service`, approval payload минимален, а retry/manager UI можно делать безопасно.
+- Минусы: approval flow теперь зависит от доступности `planner-service`, а полная защита от конкурентных approvals остаётся на стороне транзакций и core-service проверок.
