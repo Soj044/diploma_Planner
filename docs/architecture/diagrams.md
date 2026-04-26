@@ -1,5 +1,11 @@
 # Architecture Diagrams
 
+## Editable Draw.io Files
+
+- [class-diagram.drawio](/home/oleg/PycharmProjects/Workestrator/docs/architecture/class-diagram.drawio)
+- [task-creation-and-final-assignment-flow.drawio](/home/oleg/PycharmProjects/Workestrator/docs/architecture/task-creation-and-final-assignment-flow.drawio)
+- [employee-selection-algorithm.drawio](/home/oleg/PycharmProjects/Workestrator/docs/architecture/employee-selection-algorithm.drawio)
+
 ## High-Level Service Flow (MVP)
 
 ```text
