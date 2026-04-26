@@ -9,14 +9,15 @@
 ## High-Level Service Flow (MVP)
 
 ```text
-manager -> core-service: create/update employees, skills, schedules, tasks
-manager -> planner-service: POST /api/v1/plan-runs (CreatePlanRunRequest)
+manager -> frontend-app: navigate CRUD, planning, review, approval screens
+frontend-app -> core-service: create/update employees, skills, schedules, tasks
+frontend-app -> planner-service: POST /api/v1/plan-runs (CreatePlanRunRequest)
 planner-service -> core-service: POST /api/v1/planning-snapshot/ + X-Internal-Service-Token
 planner-service (CP-SAT): eligibility -> scoring -> optimization
 planner-service -> planner artifact store: save run + snapshot + proposals + diagnostics
-planner-service -> manager: assignment proposals + diagnostics
-manager -> planner-service: GET /api/v1/plan-runs/{id}
-manager -> core-service: POST /api/v1/assignments/approve-proposal/
+planner-service -> frontend-app: assignment proposals + diagnostics
+frontend-app -> planner-service: GET /api/v1/plan-runs/{id}
+frontend-app -> core-service: POST /api/v1/assignments/approve-proposal/
 core-service -> planner-service: GET /api/v1/plan-runs/{id}
 core-service -> core database: store final approved assignments
 ```
@@ -35,6 +36,16 @@ planner-service: keeps proposal immutable as planning artifact only
 ## Runtime Diagram (Docker)
 
 ```text
+browser
+  |
+  v
++---------------------+
+|    frontend-app     |
+|    vue + vite dev   |
+|       :5173         |
++----------+----------+
+           | /core-api, /planner-api
+           v
 +---------------------+      +-----------------------+
 |   core-service      |<---->|       postgres        |
 |   django + drf      |      |      postgres:16      |
@@ -48,6 +59,24 @@ planner-service: keeps proposal immutable as planning artifact only
 |   planner-service   |----->|   planner sqlite db   |
 |  fastapi + or-tools |      |   planner.sqlite3     |
 +---------------------+      +-----------------------+
+```
+
+## Frontend Boundary
+
+```text
+frontend-app:
+  routes:
+    shell, reference-data, tasks, planning, assignments
+
+  client modules:
+    services/core-service.ts
+    services/planner-service.ts
+    services/http.ts
+
+  rules:
+    no planner eligibility/scoring logic in browser
+    no frontend-owned business truth
+    local-only Basic auth env until dedicated auth flow exists
 ```
 
 ## Data Ownership

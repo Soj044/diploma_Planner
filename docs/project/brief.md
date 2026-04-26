@@ -10,4 +10,5 @@ It generates assignment proposals for a planning period and allows manager appro
 ## Services
 - core-service (Django + DRF)
 - planner-service (FastAPI + OR-Tools / CP-SAT)
+- frontend-app (Vue 3 + Vite thin client)
 - ai-layer (future RAG/LLM support)

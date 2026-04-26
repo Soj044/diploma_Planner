@@ -113,3 +113,22 @@ Planner-service больше не должен принимать business truth
 ### Consequences
 - Плюсы: финальная бизнес-истина остаётся только в `core-service`, approval payload минимален, а retry/manager UI можно делать безопасно.
 - Минусы: approval flow теперь зависит от доступности `planner-service`, а полная защита от конкурентных approvals остаётся на стороне транзакций и core-service проверок.
+
+## ADR-007: Frontend MVP Shell Uses Vue 3 + Vite as a Thin Client
+
+- Date: 2026-04-26
+- Status: accepted
+
+### Context
+Backend MVP уже стабилизирован достаточно, чтобы поверх него появился первый browser-facing слой. Нужен минимальный фронтенд, который не станет вторым источником истины и не будет перетаскивать planner logic в браузер.
+
+### Decision
+- Добавить `frontend-app` в корень монорепо как отдельный Vue 3 + Vite + TypeScript проект.
+- Использовать обязательный router и отдельные API-модули для `core-service` и `planner-service`.
+- Не вводить Pinia и общий client-side business state до тех пор, пока реальная shared state между экранами не станет необходимой.
+- В локальной разработке использовать Vite proxy для `/core-api` и `/planner-api`, чтобы не блокировать frontend shell на CORS-настройках backend.
+- До появления полноценного frontend auth flow считать допустимым только локальное MVP-допущение: `core-service` может вызываться через явно заданные Basic credentials в frontend env.
+
+### Consequences
+- Плюсы: появляется минимальная, понятная точка входа для manager UI; backend contracts переиспользуются без редизайна; dev-среда проста и обратима.
+- Минусы: auth flow пока остаётся временным и непригодным для production; frontend shell пока покрывает только каркас и навигацию, без полноценных CRUD/user flows.

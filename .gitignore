@@ -216,3 +216,7 @@ CODEX_CLI_COMMANDS.md
 .tools/
 .vscode/
 services/planner-service/data/
+node_modules/
+frontend-app/dist/
+frontend-app/.env.local
+frontend-app/*.tsbuildinfo
