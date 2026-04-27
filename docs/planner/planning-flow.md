@@ -15,6 +15,8 @@
 ## MVP implementation notes
 
 - The public planner-service boundary is `CreatePlanRunRequest`.
+- Planner run endpoints require `Authorization: Bearer <access_token>` and are allowed only for `admin` and `manager`.
+- Planner-service validates access tokens through `core-service /api/v1/auth/introspect`.
 - Planner-service fetches `PlanningSnapshot` from `core-service` truth before running eligibility, scoring, and optimization.
 - A full `PlanningSnapshot` payload remains acceptable only for internal planning tests and low-level pipeline checks.
 - The stable service boundary is `CreatePlanRunRequest` plus a snapshot built from `core-service` truth.

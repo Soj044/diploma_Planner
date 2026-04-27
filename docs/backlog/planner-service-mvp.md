@@ -41,6 +41,12 @@ Sequence planner-service work in small steps without turning it into a second so
 - Add contracts compatibility checks between `core-service`, `planner-service`, and `packages/contracts`.
 - Final MVP cut: planner tests now cover partial/insufficient availability, weighted scoring with cap, overlap conflicts, SQLite artifact roundtrip, and shared contracts validation for planning periods and proposal dates.
 
+## Phase 6: Planner Auth Gate (completed)
+- Protect `POST /api/v1/plan-runs` and `GET /api/v1/plan-runs/{id}` with Bearer token auth.
+- Validate incoming access token through `core-service /api/v1/auth/introspect`.
+- Allow planner runs only for `admin` and `manager`, deny `employee`.
+- Return controlled auth dependency errors (`401`, `403`, `503`) when token is missing/invalid or introspection is unavailable.
+
 ## Explicitly Out of Scope for MVP
 - RAG or LLM-based planning logic.
 - Advanced fairness tuning, preferences, or multi-objective optimization profiles.

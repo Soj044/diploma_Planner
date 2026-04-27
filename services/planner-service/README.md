@@ -21,8 +21,8 @@ FastAPI сервис планирования для MVP.
 ## API
 
 - `GET /health`
-- `POST /api/v1/plan-runs` with `CreatePlanRunRequest`
-- `GET /api/v1/plan-runs/{plan_run_id}`
+- `POST /api/v1/plan-runs` with `CreatePlanRunRequest` (requires Bearer token, `admin|manager`)
+- `GET /api/v1/plan-runs/{plan_run_id}` (requires Bearer token, `admin|manager`)
 
 ## Review and approval handoff
 
@@ -41,7 +41,7 @@ FastAPI сервис планирования для MVP.
 ## Конфигурация
 
 - `CORE_SERVICE_URL` — base URL для `core-service`
-- `INTERNAL_SERVICE_TOKEN` — shared token для вызова `/api/v1/planning-snapshot/`
+- `INTERNAL_SERVICE_TOKEN` — shared token для вызова `/api/v1/planning-snapshot/` и `/api/v1/auth/introspect`
 - `PLANNER_DB_PATH` — путь к SQLite-файлу planner artifacts
 
 ## Запуск

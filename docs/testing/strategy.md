@@ -18,6 +18,7 @@
 - core-service RBAC: role matrix checks for admin/manager/employee, employee self-scope checks for schedule/leaves, manager-only approval path, and admin-only users API
 - core-service approval flow: persisted planner proposal lookup, idempotent replay for the same `task + employee + source_plan_run_id`, rejection of missing or non-selected proposals, rejection of second final assignment for one task, upstream planner failure handling
 - planner-service: unit and integration tests for planning pipeline, `CreatePlanRunRequest` boundary, snapshot client failure handling, SQLite persistence of run/snapshot/proposals/unassigned/solver stats, persisted run retrieval for manager review, overlap conflict diagnostics, and weighted score stability
+- planner-service auth gate: Bearer header validation, deny employee role, allow manager/admin role, and controlled `503` when core introspection is unavailable
 - frontend-app: install dependencies, type-check the Vue shell, build production bundle, and manually verify routing/navigation plus env-driven backend configuration cards
 - contracts: schema compatibility between services
 
