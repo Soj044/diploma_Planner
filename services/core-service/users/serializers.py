@@ -2,6 +2,7 @@
 
 from rest_framework import serializers
 
+from .employee_profiles import ensure_employee_profile_for_user
 from .models import User
 
 
@@ -33,6 +34,7 @@ class UserSerializer(serializers.ModelSerializer):
         else:
             user.set_unusable_password()
         user.save()
+        ensure_employee_profile_for_user(user)
         return user
 
     def update(self, instance: User, validated_data: dict) -> User:
@@ -42,4 +44,5 @@ class UserSerializer(serializers.ModelSerializer):
         if password:
             instance.set_password(password)
         instance.save()
+        ensure_employee_profile_for_user(instance)
         return instance

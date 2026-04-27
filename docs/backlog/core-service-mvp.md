@@ -45,6 +45,12 @@ Keep `core-service` as the source of truth for users, employees, schedules, task
 - Keep access token in JSON response and refresh token in HttpOnly cookie.
 - Block login/refresh/introspection for inactive users.
 
+## Phase 8: User-Employee Profile Sync (completed)
+- Auto-create `Employee` profile when creating `manager` or `employee` users.
+- Auto-create `Employee` profile when role changes from `admin` to `manager/employee`.
+- Keep existing `Employee` profile when role changes from `manager/employee` to `admin`.
+- Use stable default profile values for auto-created employees (`Pending assignment`, `UTC`, capacity `40`).
+
 ## Explicitly Out of Scope For This Stage
 - Frontend flows.
 - Advanced permissions.

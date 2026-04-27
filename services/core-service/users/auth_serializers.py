@@ -4,6 +4,7 @@ from django.contrib.auth import authenticate, get_user_model
 from rest_framework import serializers
 from rest_framework.exceptions import APIException
 
+from .employee_profiles import ensure_employee_profile_for_user
 
 class InvalidCredentialsError(APIException):
     """Credential error with explicit 401 status for auth endpoints."""
@@ -97,6 +98,7 @@ class SignupSerializer(serializers.Serializer):
         )
         user.set_password(password)
         user.save()
+        ensure_employee_profile_for_user(user)
         return user
 
 

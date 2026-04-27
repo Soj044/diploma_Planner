@@ -36,6 +36,9 @@ class AuthFlowApiTests(APITestCase):
         self.assertIn("user", response.data)
         self.assertEqual(response.data["user"]["email"], "signup@example.com")
         self.assertEqual(response.data["user"]["role"], "employee")
+        self.assertIsNotNone(response.data["user"]["employee_id"])
+        self.assertEqual(response.data["user"]["employee_profile"]["full_name"], "Sign Up")
+        self.assertEqual(response.data["user"]["employee_profile"]["position_name"], "Pending assignment")
         self.assertIn("refresh_token", response.cookies)
 
     def test_login_returns_access_and_refresh_cookie(self) -> None:

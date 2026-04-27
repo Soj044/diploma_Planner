@@ -61,6 +61,12 @@ Flow:
 - Refresh token is stored in HttpOnly cookie.
 - Django session auth remains available for `/admin/`.
 
+## User-Employee sync
+
+- Users with role `manager` or `employee` receive an auto-created `Employee` profile if missing.
+- Role change from `admin` to `manager/employee` also auto-creates profile if needed.
+- Role change to `admin` does not delete an existing profile.
+
 ## Approval handoff
 
 `POST /api/v1/assignments/approve-proposal/` creates an approved core `Assignment`
