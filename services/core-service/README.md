@@ -10,6 +10,12 @@ Django + DRF сервис с бизнес-сущностями и хранени
 - `DJANGO_DEBUG`
 - `DJANGO_ALLOWED_HOSTS`
 - `INTERNAL_SERVICE_TOKEN`
+- `JWT_ACCESS_TOKEN_LIFETIME_MINUTES`
+- `JWT_REFRESH_TOKEN_LIFETIME_DAYS`
+- `JWT_REFRESH_COOKIE_NAME`
+- `JWT_REFRESH_COOKIE_SECURE`
+- `JWT_REFRESH_COOKIE_SAMESITE`
+- `JWT_REFRESH_COOKIE_PATH`
 - `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_HOST`, `POSTGRES_PORT`
 
 ## Запуск
@@ -39,6 +45,21 @@ DJANGO_TEST_SQLITE=true poetry run python manage.py test
 
 - `users` — кастомная модель пользователя и роли MVP.
 - `operations` — бизнес-сущности и простой DRF CRUD для MVP.
+
+## Auth endpoints
+
+Token auth for API:
+- `POST /api/v1/auth/signup`
+- `POST /api/v1/auth/login`
+- `POST /api/v1/auth/refresh`
+- `POST /api/v1/auth/logout`
+- `GET /api/v1/auth/me`
+- `POST /api/v1/auth/introspect` (internal service use)
+
+Flow:
+- Access token is returned in JSON.
+- Refresh token is stored in HttpOnly cookie.
+- Django session auth remains available for `/admin/`.
 
 ## Approval handoff
 

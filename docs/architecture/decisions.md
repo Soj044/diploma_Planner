@@ -132,3 +132,30 @@ Backend MVP уже стабилизирован достаточно, чтобы
 ### Consequences
 - Плюсы: появляется минимальная, понятная точка входа для manager UI; backend contracts переиспользуются без редизайна; dev-среда проста и обратима.
 - Минусы: auth flow пока остаётся временным и непригодным для production; frontend shell пока покрывает только каркас и навигацию, без полноценных CRUD/user flows.
+
+## ADR-008: Token-Based API Auth with Core-Service as Auth Authority
+
+- Date: 2026-04-27
+- Status: accepted
+
+### Context
+Frontend-app уже использует отдельный browser runtime и обращается сразу к двум backend-сервисам (`core-service` и `planner-service`). Session-only auth неудобен для такого SPA-потока и не дает стабильного механизма role-check в `planner-service`.
+
+### Decision
+- Использовать JWT-based auth для API в `core-service`:
+  - short-lived access token в JSON ответе;
+  - refresh token в HttpOnly cookie;
+  - refresh token rotation + blacklist.
+- Сохранить Django session auth как вспомогательный канал для `/admin/`.
+- Добавить auth endpoints:
+  - `POST /api/v1/auth/signup`
+  - `POST /api/v1/auth/login`
+  - `POST /api/v1/auth/refresh`
+  - `POST /api/v1/auth/logout`
+  - `GET /api/v1/auth/me`
+  - `POST /api/v1/auth/introspect` для внутренней проверки access tokens.
+- `core-service` считается единственным auth authority для остальных сервисов.
+
+### Consequences
+- Плюсы: стабильный API auth flow для frontend, единый источник role/user контекста, готовая база для planner role-gate через introspection.
+- Минусы: появляется дополнительная ответственность у `core-service` за token lifecycle и cookie-политику; требуется согласованная настройка internal token и cookie параметров в окружениях.

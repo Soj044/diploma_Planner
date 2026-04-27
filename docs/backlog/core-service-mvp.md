@@ -40,7 +40,7 @@ Keep `core-service` as the source of truth for users, employees, schedules, task
 - Keep Django sessions for `/admin/` and manual browsable API usage.
 - Configure access/refresh lifetimes, refresh rotation, and token blacklist support.
 
-## Phase 7: Auth API Flow
+## Phase 7: Auth API Flow (completed)
 - Add `signup`, `login`, `refresh`, `logout`, `me`, and internal `introspect` endpoints.
 - Keep access token in JSON response and refresh token in HttpOnly cookie.
 - Block login/refresh/introspection for inactive users.

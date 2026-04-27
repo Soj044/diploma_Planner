@@ -76,7 +76,19 @@ frontend-app:
   rules:
     no planner eligibility/scoring logic in browser
     no frontend-owned business truth
-    local-only Basic auth env until dedicated auth flow exists
+    token auth via core-service (access bearer + refresh cookie)
+```
+
+## Auth Flow (MVP)
+
+```text
+frontend-app -> core-service: POST /api/v1/auth/login
+core-service -> frontend-app: access token (JSON) + refresh token (HttpOnly cookie)
+frontend-app -> core-service: GET /api/v1/auth/me (Authorization: Bearer <access>)
+frontend-app -> core-service: POST /api/v1/auth/refresh (refresh cookie)
+core-service -> frontend-app: rotated refresh cookie + new access token
+planner-service -> core-service: POST /api/v1/auth/introspect + X-Internal-Service-Token
+core-service -> planner-service: user_id + role + is_active + employee_id
 ```
 
 ## Data Ownership
