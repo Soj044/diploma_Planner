@@ -6,6 +6,7 @@
 
 - `services/core-service` — Django + DRF, источник бизнес-истины.
 - `services/planner-service` — FastAPI + OR-Tools/CP-SAT, расчет предложений по назначениям.
+- `frontend-app` — Vue 3 + Vite thin client для manager-facing MVP flows.
 - `packages/contracts` — общий слой DTO/схем между сервисами.
 - `services/ai-layer` — future-only слой, без реализации в MVP.
 
@@ -38,6 +39,16 @@ docker compose up --build
 - core-service: `http://localhost:8000/api/v1/`
 - planner-service: `http://localhost:8001/health`
 
+4. Поднять frontend shell локально:
+```bash
+cd frontend-app
+cp .env.example .env.local
+npm install
+npm run dev
+```
+
+- frontend-app: `http://localhost:5173`
+
 ## Локальная разработка через Poetry
 
 ```bash
@@ -47,3 +58,14 @@ poetry install
 cd ../planner-service
 poetry install
 ```
+
+## Frontend локальная разработка
+
+```bash
+cd frontend-app
+npm install
+npm run dev
+```
+
+Первый frontend slice использует Vite proxy (`/core-api`, `/planner-api`) и не добавляет отдельный auth flow.
+Для локального MVP доступа к `core-service` можно передать Basic credentials через `frontend-app/.env.local`.
