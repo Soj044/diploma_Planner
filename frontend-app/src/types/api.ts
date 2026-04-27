@@ -12,6 +12,16 @@ export interface WorkflowStepDescriptor {
   details: string;
 }
 
+export interface UserInput {
+  email: string;
+  username: string;
+  password?: string;
+  first_name: string;
+  last_name: string;
+  role: string;
+  is_active: boolean;
+}
+
 export interface User {
   id: number;
   email: string;
@@ -25,6 +35,11 @@ export interface User {
   updated_at: string;
 }
 
+export interface DepartmentInput {
+  name: string;
+  description: string;
+}
+
 export interface Department {
   id: number;
   name: string;
@@ -33,12 +48,29 @@ export interface Department {
   updated_at: string;
 }
 
+export interface SkillInput {
+  name: string;
+  description: string;
+}
+
 export interface Skill {
   id: number;
   name: string;
   description: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface EmployeeInput {
+  user: number;
+  department: number | null;
+  full_name: string;
+  position_name: string;
+  employment_type: string;
+  weekly_capacity_hours: number;
+  timezone: string;
+  hire_date: string | null;
+  is_active: boolean;
 }
 
 export interface Employee {

@@ -7,7 +7,8 @@ Vue 3 + Vite + TypeScript shell for the Workestrator MVP frontend.
 - application scaffold and routing;
 - thin API layer for `core-service` and `planner-service`;
 - local Vite proxy for backend calls during development;
-- placeholder screens for reference data, tasks, planning runs, and assignments.
+- live CRUD for `users`, `departments`, `skills`, and `employees`;
+- placeholder screens for tasks, planning runs, and assignments.
 
 ## Local setup
 
@@ -31,3 +32,11 @@ npm run dev
 `core-service` requires authenticated access. This first frontend slice does not add a dedicated login flow yet.
 For local MVP use, the shell can send HTTP Basic credentials through `VITE_CORE_SERVICE_BASIC_AUTH`.
 This is acceptable only for local development and must be replaced by a proper auth flow later.
+
+## Current point 5 coverage
+
+- list, create, edit, delete users;
+- list, create, edit, delete departments;
+- list, create, edit, delete skills;
+- list, create, edit, delete employees;
+- explicitly defer employee skills, schedules, leaves, and availability overrides to a later slice.

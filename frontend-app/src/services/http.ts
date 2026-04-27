@@ -16,6 +16,29 @@ interface JsonClientOptions {
   authHeader?: string | null;
 }
 
+function stringifyPayload(payload: unknown): string {
+  if (payload === null || payload === undefined) {
+    return "";
+  }
+
+  if (typeof payload === "string") {
+    return payload.trim();
+  }
+
+  if (Array.isArray(payload)) {
+    return payload.map((item) => stringifyPayload(item)).filter(Boolean).join(", ");
+  }
+
+  if (typeof payload === "object") {
+    return Object.entries(payload as Record<string, unknown>)
+      .map(([key, value]) => `${key}: ${stringifyPayload(value)}`)
+      .filter((item) => item !== ": ")
+      .join("; ");
+  }
+
+  return String(payload);
+}
+
 function joinUrl(baseUrl: string, path: string): string {
   const normalizedBase = baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl;
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
@@ -46,9 +69,15 @@ function getErrorMessage(payload: unknown, fallback: string): string {
 
   if (payload && typeof payload === "object" && "detail" in payload) {
     const detail = (payload as { detail?: unknown }).detail;
-    if (typeof detail === "string" && detail.trim()) {
-      return detail;
+    const detailText = stringifyPayload(detail);
+    if (detailText) {
+      return detailText;
     }
+  }
+
+  const payloadText = stringifyPayload(payload);
+  if (payloadText) {
+    return payloadText;
   }
 
   return fallback;
@@ -124,4 +153,16 @@ export function createJsonClient(baseUrl: string, options: JsonClientOptions = {
       return request<T>("DELETE", path);
     },
   };
+}
+
+export function describeRequestError(error: unknown): string {
+  if (error instanceof ApiError) {
+    return error.message;
+  }
+
+  if (error instanceof Error && error.message.trim()) {
+    return error.message;
+  }
+
+  return "Unexpected request error.";
 }

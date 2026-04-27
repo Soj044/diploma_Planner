@@ -54,3 +54,5 @@ docker compose up --build
 - Verify sidebar navigation works for `Shell`, `Reference Data`, `Tasks`, `Planning`, and `Assignments`.
 - Verify the runtime configuration card shows the expected `core-service` and `planner-service` URLs from `.env.local`.
 - Verify the shell clearly shows the current auth assumption instead of pretending a login flow already exists.
+- On `Reference Data`, verify authenticated list/create/edit/delete for `users`, `departments`, `skills`, and `employees`.
+- Verify employee creation only offers free `users` or the user already linked to the employee being edited.

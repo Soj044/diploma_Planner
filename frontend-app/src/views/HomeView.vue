@@ -34,6 +34,10 @@ import { plannerResources } from "../services/planner-service";
             <p class="resource-copy">Sidebar navigation plus a content area for each MVP section.</p>
           </li>
           <li class="resource-item">
+            <p class="resource-label">Reference data CRUD</p>
+            <p class="resource-copy">Users, departments, skills, and employees now support list/create/edit/delete from the shell.</p>
+          </li>
+          <li class="resource-item">
             <p class="resource-label">Thin API layer</p>
             <p class="resource-copy">Dedicated modules for `core-service` and `planner-service` requests.</p>
           </li>
@@ -55,8 +59,8 @@ import { plannerResources } from "../services/planner-service";
             <p class="resource-copy">Local MVP currently assumes explicit Basic auth credentials in `.env.local`.</p>
           </li>
           <li class="resource-item">
-            <p class="resource-label">Actual CRUD forms</p>
-            <p class="resource-copy">Reference data, tasks, planning runs, and approvals are the next slices on top of this shell.</p>
+            <p class="resource-label">Task and planning flows</p>
+            <p class="resource-copy">Task CRUD, task requirements, plan runs, proposal review, and approvals are still ahead.</p>
           </li>
           <li class="resource-item">
             <p class="resource-label">Core API schema UI</p>

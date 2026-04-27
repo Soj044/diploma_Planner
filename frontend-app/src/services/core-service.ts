@@ -3,12 +3,16 @@ import type {
   Assignment,
   AssignmentApprovalPayload,
   Department,
+  DepartmentInput,
   Employee,
+  EmployeeInput,
   ResourceDescriptor,
   Skill,
+  SkillInput,
   Task,
   TaskRequirement,
   User,
+  UserInput,
 } from "../types/api";
 import { createJsonClient } from "./http";
 
@@ -22,7 +26,7 @@ export const referenceDataResources: ResourceDescriptor[] = [
     label: "Users",
     endpoint: "/users/",
     description: "Source accounts for managers and employees.",
-    nextStep: "Add authenticated list and create form.",
+    nextStep: "Implemented in point 5: list, create, edit, and delete.",
     requiresAuth: true,
   },
   {
@@ -30,7 +34,7 @@ export const referenceDataResources: ResourceDescriptor[] = [
     label: "Departments",
     endpoint: "/departments/",
     description: "Reference grouping for employees and tasks.",
-    nextStep: "Add list/create/edit CRUD with lightweight validation.",
+    nextStep: "Implemented in point 5: list, create, edit, and delete.",
     requiresAuth: true,
   },
   {
@@ -38,7 +42,7 @@ export const referenceDataResources: ResourceDescriptor[] = [
     label: "Skills",
     endpoint: "/skills/",
     description: "Shared vocabulary for task requirements and employee capabilities.",
-    nextStep: "Add list/create/edit CRUD before employee skill linking.",
+    nextStep: "Implemented in point 5: list, create, edit, and delete.",
     requiresAuth: true,
   },
   {
@@ -46,7 +50,7 @@ export const referenceDataResources: ResourceDescriptor[] = [
     label: "Employees",
     endpoint: "/employees/",
     description: "Business employee profiles linked to users and departments.",
-    nextStep: "Add create/edit form after reference dictionaries are ready.",
+    nextStep: "Implemented in point 5: list, create, edit, and delete.",
     requiresAuth: true,
   },
   {
@@ -131,15 +135,22 @@ export const assignmentResources: ResourceDescriptor[] = [
 
 export const coreService = {
   listUsers: () => client.get<User[]>("/users/"),
-  createUser: (payload: Partial<User> & { password?: string }) => client.post<User>("/users/", payload),
+  createUser: (payload: UserInput) => client.post<User>("/users/", payload),
+  updateUser: (id: number, payload: UserInput) => client.patch<User>(`/users/${id}/`, payload),
+  deleteUser: (id: number) => client.delete<null>(`/users/${id}/`).then(() => undefined),
   listDepartments: () => client.get<Department[]>("/departments/"),
-  createDepartment: (payload: Pick<Department, "name" | "description">) =>
-    client.post<Department>("/departments/", payload),
+  createDepartment: (payload: DepartmentInput) => client.post<Department>("/departments/", payload),
+  updateDepartment: (id: number, payload: DepartmentInput) =>
+    client.patch<Department>(`/departments/${id}/`, payload),
+  deleteDepartment: (id: number) => client.delete<null>(`/departments/${id}/`).then(() => undefined),
   listSkills: () => client.get<Skill[]>("/skills/"),
-  createSkill: (payload: Pick<Skill, "name" | "description">) => client.post<Skill>("/skills/", payload),
+  createSkill: (payload: SkillInput) => client.post<Skill>("/skills/", payload),
+  updateSkill: (id: number, payload: SkillInput) => client.patch<Skill>(`/skills/${id}/`, payload),
+  deleteSkill: (id: number) => client.delete<null>(`/skills/${id}/`).then(() => undefined),
   listEmployees: () => client.get<Employee[]>("/employees/"),
-  createEmployee: (payload: Omit<Employee, "id" | "created_at" | "updated_at">) =>
-    client.post<Employee>("/employees/", payload),
+  createEmployee: (payload: EmployeeInput) => client.post<Employee>("/employees/", payload),
+  updateEmployee: (id: number, payload: EmployeeInput) => client.patch<Employee>(`/employees/${id}/`, payload),
+  deleteEmployee: (id: number) => client.delete<null>(`/employees/${id}/`).then(() => undefined),
   listTasks: () => client.get<Task[]>("/tasks/"),
   createTask: (payload: Omit<Task, "id" | "created_at" | "updated_at">) => client.post<Task>("/tasks/", payload),
   listTaskRequirements: () => client.get<TaskRequirement[]>("/task-requirements/"),
