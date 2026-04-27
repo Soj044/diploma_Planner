@@ -144,6 +144,7 @@ class CoreApiSmokeTests(APITestCase):
             username="api-user",
             email="api-user@example.com",
             password="test-pass",
+            role=user_model.Role.ADMIN,
         )
         self.client.force_authenticate(user=user)
 
@@ -163,6 +164,7 @@ class CoreApiSmokeTests(APITestCase):
             username="manager-api",
             email="manager-api@example.com",
             password="test-pass",
+            role=user_model.Role.MANAGER,
         )
         employee_user = user_model.objects.create_user(
             username="employee-api",
@@ -230,6 +232,7 @@ class CoreApiSmokeTests(APITestCase):
             username="manager-missing",
             email="manager-missing@example.com",
             password="test-pass",
+            role=user_model.Role.MANAGER,
         )
         employee_user = user_model.objects.create_user(
             username="employee-missing",
@@ -287,6 +290,7 @@ class CoreApiSmokeTests(APITestCase):
             username="manager-idempotent",
             email="manager-idempotent@example.com",
             password="test-pass",
+            role=user_model.Role.MANAGER,
         )
         employee_user = user_model.objects.create_user(
             username="employee-idempotent",
@@ -352,6 +356,7 @@ class CoreApiSmokeTests(APITestCase):
             username="manager-upstream",
             email="manager-upstream@example.com",
             password="test-pass",
+            role=user_model.Role.MANAGER,
         )
         employee_user = user_model.objects.create_user(
             username="employee-upstream",
@@ -395,6 +400,7 @@ class CoreApiSmokeTests(APITestCase):
             username="manager-duplicate-final",
             email="manager-duplicate-final@example.com",
             password="test-pass",
+            role=user_model.Role.MANAGER,
         )
         employee_user = user_model.objects.create_user(
             username="employee-duplicate-final",
@@ -484,6 +490,7 @@ class CoreApiSmokeTests(APITestCase):
             username="manager-non-selected",
             email="manager-non-selected@example.com",
             password="test-pass",
+            role=user_model.Role.MANAGER,
         )
         employee_user = user_model.objects.create_user(
             username="employee-non-selected",
@@ -544,6 +551,7 @@ class CoreApiSmokeTests(APITestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("must be selected", str(response.data))
 
+    @override_settings(INTERNAL_SERVICE_TOKEN="planner-service-secret")
     def test_planning_snapshot_endpoint_exports_core_truth(self) -> None:
         user_model = get_user_model()
         manager = user_model.objects.create_user(
@@ -551,7 +559,6 @@ class CoreApiSmokeTests(APITestCase):
             email="snapshot-manager@example.com",
             password="test-pass",
         )
-        self.client.force_authenticate(user=manager)
         employee_user = user_model.objects.create_user(
             username="snapshot-employee",
             email="snapshot-employee@example.com",
@@ -594,6 +601,7 @@ class CoreApiSmokeTests(APITestCase):
                 "task_ids": [str(task.id)],
             },
             format="json",
+            HTTP_X_INTERNAL_SERVICE_TOKEN="planner-service-secret",
         )
 
         self.assertEqual(response.status_code, 200)
@@ -605,7 +613,7 @@ class CoreApiSmokeTests(APITestCase):
         override_slot = next(slot for slot in snapshot.employees[0].availability if slot.start_at.date() == date(2026, 5, 2))
         self.assertEqual(override_slot.available_hours, 4)
 
-    def test_planning_snapshot_endpoint_requires_authentication(self) -> None:
+    def test_planning_snapshot_endpoint_requires_internal_service_token(self) -> None:
         response = self.client.post(
             "/api/v1/planning-snapshot/",
             {
@@ -636,6 +644,7 @@ class CoreApiSmokeTests(APITestCase):
         self.assertEqual(snapshot.tasks, [])
         self.assertEqual(snapshot.employees, [])
 
+    @override_settings(INTERNAL_SERVICE_TOKEN="planner-service-secret")
     def test_planning_snapshot_endpoint_skips_tasks_starting_before_period(self) -> None:
         user_model = get_user_model()
         manager = user_model.objects.create_user(
@@ -643,7 +652,6 @@ class CoreApiSmokeTests(APITestCase):
             email="snapshot-period-manager@example.com",
             password="test-pass",
         )
-        self.client.force_authenticate(user=manager)
         department = Department.objects.create(name="Planning")
         Task.objects.create(
             department=department,
@@ -664,6 +672,7 @@ class CoreApiSmokeTests(APITestCase):
                 "department_id": str(department.id),
             },
             format="json",
+            HTTP_X_INTERNAL_SERVICE_TOKEN="planner-service-secret",
         )
 
         self.assertEqual(response.status_code, 200)

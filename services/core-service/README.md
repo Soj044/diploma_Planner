@@ -67,6 +67,13 @@ Flow:
 - Role change from `admin` to `manager/employee` also auto-creates profile if needed.
 - Role change to `admin` does not delete an existing profile.
 
+## RBAC policy
+
+- `admin`: full CRUD access including users and role management endpoints.
+- `manager`: operational access for tasks, schedules, overrides, approvals, and read access where required.
+- `employee`: read-only tasks plus self-scope CRUD for own schedules and leaves.
+- `planning-snapshot` is internal-only via `X-Internal-Service-Token`.
+
 ## Approval handoff
 
 `POST /api/v1/assignments/approve-proposal/` creates an approved core `Assignment`

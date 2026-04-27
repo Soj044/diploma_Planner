@@ -51,8 +51,14 @@ Keep `core-service` as the source of truth for users, employees, schedules, task
 - Keep existing `Employee` profile when role changes from `manager/employee` to `admin`.
 - Use stable default profile values for auto-created employees (`Pending assignment`, `UTC`, capacity `40`).
 
+## Phase 9: RBAC Policy Enforcement (completed)
+- Add role-aware permission matrix for `admin`, `manager`, and `employee`.
+- Restrict `users` API to admin only.
+- Enforce worker self-scope for `work-schedules`, `work-schedule-days`, and `employee-leaves`.
+- Restrict assignment approval endpoint to admin and manager only.
+- Restrict planning snapshot export to internal service token only.
+
 ## Explicitly Out of Scope For This Stage
 - Frontend flows.
-- Advanced permissions.
 - Notifications.
 - RAG/LLM or AI scoring.

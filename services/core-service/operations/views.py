@@ -9,6 +9,7 @@ from contracts.schemas import CreatePlanRunRequest
 from pydantic import ValidationError as PydanticValidationError
 from rest_framework.decorators import action
 from rest_framework import status, viewsets
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -26,7 +27,22 @@ from .models import (
     WorkSchedule,
     WorkScheduleDay,
 )
-from .permissions import HasPlannerServiceAccess
+from .permissions import (
+    AssignmentChangeLogPermission,
+    AssignmentPermission,
+    AvailabilityOverridePermission,
+    DepartmentPermission,
+    EmployeeLeavePermission,
+    EmployeePermission,
+    EmployeeSkillPermission,
+    InternalPlannerServiceTokenPermission,
+    PlannerApprovalPermission,
+    SkillPermission,
+    TaskPermission,
+    TaskRequirementPermission,
+    WorkScheduleDayPermission,
+    WorkSchedulePermission,
+)
 from .planner_client import PlannerServiceError
 from .snapshots import build_planning_snapshot
 from .serializers import (
@@ -47,7 +63,7 @@ from .serializers import (
 
 
 class PlanningSnapshotView(APIView):
-    permission_classes = [HasPlannerServiceAccess]
+    permission_classes = [InternalPlannerServiceTokenPermission]
 
     def post(self, request):
         try:
@@ -62,58 +78,133 @@ class PlanningSnapshotView(APIView):
 class DepartmentViewSet(viewsets.ModelViewSet):
     queryset = Department.objects.all().order_by("id")
     serializer_class = DepartmentSerializer
+    permission_classes = [DepartmentPermission]
 
 
 class SkillViewSet(viewsets.ModelViewSet):
     queryset = Skill.objects.all().order_by("id")
     serializer_class = SkillSerializer
+    permission_classes = [SkillPermission]
 
 
 class EmployeeViewSet(viewsets.ModelViewSet):
     queryset = Employee.objects.all().order_by("id")
     serializer_class = EmployeeSerializer
+    permission_classes = [EmployeePermission]
 
 
 class EmployeeSkillViewSet(viewsets.ModelViewSet):
     queryset = EmployeeSkill.objects.all().order_by("id")
     serializer_class = EmployeeSkillSerializer
+    permission_classes = [EmployeeSkillPermission]
 
 
 class WorkScheduleViewSet(viewsets.ModelViewSet):
     queryset = WorkSchedule.objects.all().order_by("id")
     serializer_class = WorkScheduleSerializer
+    permission_classes = [WorkSchedulePermission]
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        if getattr(self.request.user, "role", "") == "employee":
+            employee_profile = getattr(self.request.user, "employee_profile", None)
+            if employee_profile is None:
+                return WorkSchedule.objects.none()
+            return queryset.filter(employee_id=employee_profile.id)
+        return queryset
+
+    def perform_create(self, serializer):
+        if getattr(self.request.user, "role", "") != "employee":
+            serializer.save()
+            return
+
+        employee_profile = getattr(self.request.user, "employee_profile", None)
+        if employee_profile is None:
+            raise PermissionDenied("Employee profile is required.")
+        if serializer.validated_data["employee"].id != employee_profile.id:
+            raise PermissionDenied("You can only manage your own work schedule.")
+        serializer.save()
 
 
 class WorkScheduleDayViewSet(viewsets.ModelViewSet):
     queryset = WorkScheduleDay.objects.all().order_by("id")
     serializer_class = WorkScheduleDaySerializer
+    permission_classes = [WorkScheduleDayPermission]
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        if getattr(self.request.user, "role", "") == "employee":
+            employee_profile = getattr(self.request.user, "employee_profile", None)
+            if employee_profile is None:
+                return WorkScheduleDay.objects.none()
+            return queryset.filter(schedule__employee_id=employee_profile.id)
+        return queryset
+
+    def perform_create(self, serializer):
+        if getattr(self.request.user, "role", "") != "employee":
+            serializer.save()
+            return
+
+        employee_profile = getattr(self.request.user, "employee_profile", None)
+        if employee_profile is None:
+            raise PermissionDenied("Employee profile is required.")
+        schedule = serializer.validated_data["schedule"]
+        if schedule.employee_id != employee_profile.id:
+            raise PermissionDenied("You can only manage your own schedule days.")
+        serializer.save()
 
 
 class EmployeeLeaveViewSet(viewsets.ModelViewSet):
     queryset = EmployeeLeave.objects.all().order_by("id")
     serializer_class = EmployeeLeaveSerializer
+    permission_classes = [EmployeeLeavePermission]
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        if getattr(self.request.user, "role", "") == "employee":
+            employee_profile = getattr(self.request.user, "employee_profile", None)
+            if employee_profile is None:
+                return EmployeeLeave.objects.none()
+            return queryset.filter(employee_id=employee_profile.id)
+        return queryset
+
+    def perform_create(self, serializer):
+        if getattr(self.request.user, "role", "") != "employee":
+            serializer.save()
+            return
+
+        employee_profile = getattr(self.request.user, "employee_profile", None)
+        if employee_profile is None:
+            raise PermissionDenied("Employee profile is required.")
+        if serializer.validated_data["employee"].id != employee_profile.id:
+            raise PermissionDenied("You can only manage your own leaves.")
+        serializer.save()
 
 
 class EmployeeAvailabilityOverrideViewSet(viewsets.ModelViewSet):
     queryset = EmployeeAvailabilityOverride.objects.all().order_by("id")
     serializer_class = EmployeeAvailabilityOverrideSerializer
+    permission_classes = [AvailabilityOverridePermission]
 
 
 class TaskViewSet(viewsets.ModelViewSet):
     queryset = Task.objects.all().order_by("id")
     serializer_class = TaskSerializer
+    permission_classes = [TaskPermission]
 
 
 class TaskRequirementViewSet(viewsets.ModelViewSet):
     queryset = TaskRequirement.objects.all().order_by("id")
     serializer_class = TaskRequirementSerializer
+    permission_classes = [TaskRequirementPermission]
 
 
 class AssignmentViewSet(viewsets.ModelViewSet):
     queryset = Assignment.objects.all().order_by("id")
     serializer_class = AssignmentSerializer
+    permission_classes = [AssignmentPermission]
 
-    @action(detail=False, methods=["post"], url_path="approve-proposal")
+    @action(detail=False, methods=["post"], url_path="approve-proposal", permission_classes=[PlannerApprovalPermission])
     def approve_proposal(self, request):
         serializer = AssignmentApprovalSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -128,3 +219,4 @@ class AssignmentViewSet(viewsets.ModelViewSet):
 class AssignmentChangeLogViewSet(viewsets.ModelViewSet):
     queryset = AssignmentChangeLog.objects.all().order_by("id")
     serializer_class = AssignmentChangeLogSerializer
+    permission_classes = [AssignmentChangeLogPermission]

@@ -91,6 +91,22 @@ planner-service -> core-service: POST /api/v1/auth/introspect + X-Internal-Servi
 core-service -> planner-service: user_id + role + is_active + employee_id
 ```
 
+## RBAC Boundary (Core-Service)
+
+```text
+admin:
+  full access to users + operations CRUD + approval
+
+manager:
+  operational access (tasks/schedules/overrides/approval) with restricted destructive paths
+
+employee:
+  read-only tasks + self-scope CRUD (own schedules, own schedule days, own leaves)
+
+planning snapshot:
+  internal-only, requires X-Internal-Service-Token
+```
+
 ## Data Ownership
 
 ```text
