@@ -8,5 +8,17 @@
 6. Planner calculates candidate scores
 7. Planner runs optimization
 8. Planner returns assignment proposals
-9. Manager approves proposals
-10. Approved assignments are stored in core-service
+9. Manager reviews persisted proposals from `planner-service`
+10. Manager submits `task + employee + source_plan_run_id` to `core-service`
+11. `core-service` re-reads the persisted planner run, validates the selected proposal, and stores the approved assignment
+
+## MVP implementation notes
+
+- The public planner-service boundary is `CreatePlanRunRequest`.
+- Planner-service fetches `PlanningSnapshot` from `core-service` truth before running eligibility, scoring, and optimization.
+- A full `PlanningSnapshot` payload remains acceptable only for internal planning tests and low-level pipeline checks.
+- The stable service boundary is `CreatePlanRunRequest` plus a snapshot built from `core-service` truth.
+- Planner stores run artifacts and diagnostics, but final assignments remain in `core-service`.
+- Planner persistence starts with run, snapshot, proposals, unassigned diagnostics, and solver statistics only.
+- MVP approval handoff uses `GET /api/v1/plan-runs/{id}` for review and `POST /api/v1/assignments/approve-proposal/` in `core-service` for final approval.
+- `core-service` never trusts assignment timing from the client approval payload; it copies `planned_hours`, `start_date`, and `end_date` from the persisted planner proposal.

@@ -1,31 +1,18 @@
-"""FastAPI entrypoint for planner-service MVP."""
+"""Точка входа planner-service для расчета и чтения назначений.
 
-from fastapi import FastAPI, HTTPException
+Этот файл собирает FastAPI-приложение, подключает routes plan runs и публикует
+health endpoint. Через него planner-service отдает proposals для review и
+использует внутренние planning/application модули.
+"""
 
-from contracts.schemas import PlanRequest, PlanResponse
+from fastapi import FastAPI
 
-from .planning import run_planning
-from .repository import PlanRunRepository
+from app.api.plan_runs import router as plan_runs_router
 
 app = FastAPI(title="planner-service", version="0.1.0")
-repo = PlanRunRepository()
+app.include_router(plan_runs_router)
 
 
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
-
-
-@app.post("/api/v1/plan-runs", response_model=PlanResponse)
-def create_plan_run(payload: PlanRequest) -> PlanResponse:
-    response = run_planning(payload)
-    repo.save(response)
-    return response
-
-
-@app.get("/api/v1/plan-runs/{plan_run_id}", response_model=PlanResponse)
-def get_plan_run(plan_run_id: str) -> PlanResponse:
-    run = repo.get(plan_run_id)
-    if run is None:
-        raise HTTPException(status_code=404, detail="Plan run not found")
-    return run
