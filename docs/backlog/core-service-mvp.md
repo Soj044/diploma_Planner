@@ -35,6 +35,16 @@ Keep `core-service` as the source of truth for users, employees, schedules, task
 - Read the persisted planner run from `planner-service`, validate the selected proposal, and create approved `Assignment` records plus assignment change logs in `core-service`.
 - Keep planner proposal status as artifact metadata only; final business truth stays in `core-service`.
 
+## Phase 6: Auth Foundation (completed)
+- Add token-based API auth foundation with `djangorestframework-simplejwt`.
+- Keep Django sessions for `/admin/` and manual browsable API usage.
+- Configure access/refresh lifetimes, refresh rotation, and token blacklist support.
+
+## Phase 7: Auth API Flow
+- Add `signup`, `login`, `refresh`, `logout`, `me`, and internal `introspect` endpoints.
+- Keep access token in JSON response and refresh token in HttpOnly cookie.
+- Block login/refresh/introspection for inactive users.
+
 ## Explicitly Out of Scope For This Stage
 - Frontend flows.
 - Advanced permissions.

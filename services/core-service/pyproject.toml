@@ -9,6 +9,7 @@ readme = "README.md"
 python = "^3.12"
 django = ">=5.1,<6.0"
 djangorestframework = ">=3.15,<4.0"
+djangorestframework-simplejwt = { version = "^5.5.1", extras = ["crypto"] }
 psycopg = { extras = ["binary"], version = "^3.3.3" }
 python-dotenv = "^1.1.1"
 workestrator-contracts = { path = "../../packages/contracts", develop = true }
