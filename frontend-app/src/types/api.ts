@@ -88,6 +88,19 @@ export interface Employee {
   updated_at: string;
 }
 
+export interface TaskInput {
+  department: number | null;
+  title: string;
+  description: string;
+  status: string;
+  priority: string;
+  estimated_hours: number;
+  actual_hours: number | null;
+  start_date: string | null;
+  due_date: string;
+  created_by_user: number;
+}
+
 export interface Task {
   id: number;
   department: number | null;
@@ -102,6 +115,13 @@ export interface Task {
   created_by_user: number;
   created_at: string;
   updated_at: string;
+}
+
+export interface TaskRequirementInput {
+  task: number;
+  skill: number;
+  min_level: number;
+  weight: string;
 }
 
 export interface TaskRequirement {

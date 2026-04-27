@@ -38,6 +38,10 @@ import { plannerResources } from "../services/planner-service";
             <p class="resource-copy">Users, departments, skills, and employees now support list/create/edit/delete from the shell.</p>
           </li>
           <li class="resource-item">
+            <p class="resource-label">Task flow</p>
+            <p class="resource-copy">Tasks and task requirements now support a connected create/edit/delete flow.</p>
+          </li>
+          <li class="resource-item">
             <p class="resource-label">Thin API layer</p>
             <p class="resource-copy">Dedicated modules for `core-service` and `planner-service` requests.</p>
           </li>
@@ -60,7 +64,7 @@ import { plannerResources } from "../services/planner-service";
           </li>
           <li class="resource-item">
             <p class="resource-label">Task and planning flows</p>
-            <p class="resource-copy">Task CRUD, task requirements, plan runs, proposal review, and approvals are still ahead.</p>
+            <p class="resource-copy">Plan runs, proposal review, approvals, and assignments remain ahead after the task flow.</p>
           </li>
           <li class="resource-item">
             <p class="resource-label">Core API schema UI</p>

@@ -1,23 +1,53 @@
 <script setup lang="ts">
+import { ref } from "vue";
+
+import TaskEditorSection from "../components/tasks/TaskEditorSection.vue";
+import TaskRequirementsSection from "../components/tasks/TaskRequirementsSection.vue";
 import SectionPlaceholder from "../components/SectionPlaceholder.vue";
 import { taskResources } from "../services/core-service";
+
+const selectedTaskId = ref<number | null>(null);
+const taskReloadToken = ref(0);
+
+function handleSelectedTaskChange(taskId: number | null) {
+  selectedTaskId.value = taskId;
+}
+
+function handleTasksUpdated() {
+  taskReloadToken.value += 1;
+}
 </script>
 
 <template>
   <div class="page-stack">
     <section class="page-card">
       <p class="eyebrow">Task Flow</p>
-      <h3 class="page-title">Tasks stay anchored in core-service</h3>
+      <h3 class="page-title">Task creation and requirements are now connected</h3>
       <p class="page-description">
-        Task creation and task requirements belong to the core business truth. The frontend will stay thin here too:
-        collect manager input, submit DRF payloads, and surface validation from the backend.
+        Tasks and task requirements belong to the core business truth. The frontend now lets a manager create both parts
+        of that flow without re-implementing any planner logic in the browser.
       </p>
+      <div class="pill-row">
+        <span class="pill">/tasks/</span>
+        <span class="pill">/task-requirements/</span>
+        <span class="pill is-warm">{{ selectedTaskId === null ? "No task selected" : `Focused task #${selectedTaskId}` }}</span>
+      </div>
     </section>
+
+    <TaskEditorSection
+      @selected-task-change="handleSelectedTaskChange"
+      @tasks-updated="handleTasksUpdated"
+    />
+
+    <TaskRequirementsSection
+      :selected-task-id="selectedTaskId"
+      :reload-token="taskReloadToken"
+    />
 
     <SectionPlaceholder
       eyebrow="Contracts"
-      title="Task-related endpoints"
-      description="The next implementation slice can attach real forms to these endpoints without changing planner behavior."
+      title="Task-related endpoints in this slice"
+      description="These routes are now wired into the frontend flow and stay intentionally close to DRF contracts."
     >
       <ul class="resource-list">
         <li v-for="resource in taskResources" :key="resource.key" class="resource-item">
@@ -30,8 +60,8 @@ import { taskResources } from "../services/core-service";
     </SectionPlaceholder>
 
     <div class="notice">
-      Task creation will need authenticated core-service access and a manager user ID for `created_by_user`.
-      This is one reason the auth gap is kept explicit in the shell instead of hidden in a fake browser state.
+      `created_by_user` remains an explicit task field in the UI because the frontend still has no dedicated auth flow.
+      The browser does not invent a hidden current-manager identity on its own.
     </div>
   </div>
 </template>

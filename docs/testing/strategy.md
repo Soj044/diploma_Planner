@@ -56,3 +56,6 @@ docker compose up --build
 - Verify the shell clearly shows the current auth assumption instead of pretending a login flow already exists.
 - On `Reference Data`, verify authenticated list/create/edit/delete for `users`, `departments`, `skills`, and `employees`.
 - Verify employee creation only offers free `users` or the user already linked to the employee being edited.
+- On `Tasks`, verify authenticated list/create/edit/delete for `tasks` and `task-requirements`.
+- Verify selecting `Requirements` on a task focuses the requirement editor on that task.
+- Verify task validation errors from backend are surfaced unchanged, especially invalid `start_date > due_date`.

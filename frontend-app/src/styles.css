@@ -129,6 +129,11 @@ a {
   padding: 1rem;
 }
 
+.resource-item-active {
+  border-color: rgba(16, 125, 103, 0.35);
+  box-shadow: inset 0 0 0 1px rgba(16, 125, 103, 0.1);
+}
+
 .resource-heading {
   align-items: center;
   display: flex;

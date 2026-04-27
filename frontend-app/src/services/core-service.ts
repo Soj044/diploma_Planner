@@ -10,7 +10,9 @@ import type {
   Skill,
   SkillInput,
   Task,
+  TaskInput,
   TaskRequirement,
+  TaskRequirementInput,
   User,
   UserInput,
 } from "../types/api";
@@ -101,7 +103,7 @@ export const taskResources: ResourceDescriptor[] = [
     label: "Tasks",
     endpoint: "/tasks/",
     description: "Core operational tasks that feed planner snapshots.",
-    nextStep: "Add create/list flow with explicit due-date validation.",
+    nextStep: "Implemented in point 6: list, create, edit, delete, and requirements handoff.",
     requiresAuth: true,
   },
   {
@@ -109,7 +111,7 @@ export const taskResources: ResourceDescriptor[] = [
     label: "Task Requirements",
     endpoint: "/task-requirements/",
     description: "Skill requirements that planner scoring and eligibility use.",
-    nextStep: "Add task-linked requirements editor after task form exists.",
+    nextStep: "Implemented in point 6: task-linked list, create, edit, and delete.",
     requiresAuth: true,
   },
 ];
@@ -152,10 +154,16 @@ export const coreService = {
   updateEmployee: (id: number, payload: EmployeeInput) => client.patch<Employee>(`/employees/${id}/`, payload),
   deleteEmployee: (id: number) => client.delete<null>(`/employees/${id}/`).then(() => undefined),
   listTasks: () => client.get<Task[]>("/tasks/"),
-  createTask: (payload: Omit<Task, "id" | "created_at" | "updated_at">) => client.post<Task>("/tasks/", payload),
+  createTask: (payload: TaskInput) => client.post<Task>("/tasks/", payload),
+  updateTask: (id: number, payload: TaskInput) => client.patch<Task>(`/tasks/${id}/`, payload),
+  deleteTask: (id: number) => client.delete<null>(`/tasks/${id}/`).then(() => undefined),
   listTaskRequirements: () => client.get<TaskRequirement[]>("/task-requirements/"),
-  createTaskRequirement: (payload: Omit<TaskRequirement, "id">) =>
+  createTaskRequirement: (payload: TaskRequirementInput) =>
     client.post<TaskRequirement>("/task-requirements/", payload),
+  updateTaskRequirement: (id: number, payload: TaskRequirementInput) =>
+    client.patch<TaskRequirement>(`/task-requirements/${id}/`, payload),
+  deleteTaskRequirement: (id: number) =>
+    client.delete<null>(`/task-requirements/${id}/`).then(() => undefined),
   listAssignments: () => client.get<Assignment[]>("/assignments/"),
   approveProposal: (payload: AssignmentApprovalPayload) =>
     client.post<Assignment>("/assignments/approve-proposal/", payload),

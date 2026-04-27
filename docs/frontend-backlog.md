@@ -8,6 +8,7 @@ Track frontend delivery slices for `frontend-app` without losing scope boundarie
 
 - `2026-04-26`: app shell, router, env config, Vite proxy, and thin API layer completed in PR `#5`.
 - `2026-04-27`: point 5 completed for the first practical cut with reference-data CRUD for `users`, `departments`, `skills`, and `employees`.
+- `2026-04-27`: point 6 completed with task CRUD and task-requirement CRUD linked through the Tasks screen.
 
 ## Milestone 1 slices
 
@@ -15,7 +16,7 @@ Track frontend delivery slices for `frontend-app` without losing scope boundarie
 | --- | --- | --- | --- |
 | 1 | App shell and navigation | done | Vue 3 + Vite + TypeScript scaffold, layout, routes, API modules |
 | 2 | Reference data CRUD needed before task creation | done | Implemented for `users`, `departments`, `skills`, `employees` |
-| 3 | Task creation and task requirements | pending | Must reuse core-service contracts, no browser-side planner rules |
+| 3 | Task creation and task requirements | done | Implemented for `tasks` and `task-requirements` with linked selection flow |
 | 4 | Plan run launch | pending | Use `POST /api/v1/plan-runs` only |
 | 5 | Proposal and diagnostics review | pending | Read persisted planner artifacts via `GET /api/v1/plan-runs/{plan_run_id}` |
 | 6 | Final assignment approval | pending | Handoff only `task + employee + source_plan_run_id` to core-service |
@@ -52,6 +53,6 @@ Reason: they are needed before planning quality and availability logic, but not 
 - `cd frontend-app && npm run type-check`
 - `cd frontend-app && npm run build`
 
-## Next expected slice after point 5
+## Next expected slice after point 6
 
-- finish task creation and task requirement flow on top of the new reference-data screens.
+- implement plan run launch on top of the new task and task-requirement screens.

@@ -8,7 +8,8 @@ Vue 3 + Vite + TypeScript shell for the Workestrator MVP frontend.
 - thin API layer for `core-service` and `planner-service`;
 - local Vite proxy for backend calls during development;
 - live CRUD for `users`, `departments`, `skills`, and `employees`;
-- placeholder screens for tasks, planning runs, and assignments.
+- live task CRUD and task-requirement CRUD;
+- placeholder screens for planning runs and assignments.
 
 ## Local setup
 
@@ -40,3 +41,10 @@ This is acceptable only for local development and must be replaced by a proper a
 - list, create, edit, delete skills;
 - list, create, edit, delete employees;
 - explicitly defer employee skills, schedules, leaves, and availability overrides to a later slice.
+
+## Current point 6 coverage
+
+- list, create, edit, delete tasks;
+- list, create, edit, delete task requirements;
+- focus task requirements from a selected task in the same screen;
+- keep `created_by_user` explicit until a dedicated frontend auth flow exists.
