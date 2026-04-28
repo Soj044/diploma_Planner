@@ -1,20 +1,41 @@
 <script setup lang="ts">
+import { computed } from "vue";
+
 import SectionPlaceholder from "../components/SectionPlaceholder.vue";
+import { useAuth } from "../composables/useAuth";
 import { appConfig, frontendAssumptions } from "../config/env";
 import { assignmentResources, referenceDataResources, taskResources } from "../services/core-service";
 import { plannerResources } from "../services/planner-service";
+
+const auth = useAuth();
+
+const roleHeadline = computed(() => {
+  if (auth.role.value === "employee") {
+    return "Employee self-service shell";
+  }
+
+  if (auth.role.value === "manager") {
+    return "Manager workspace over persisted backend flows";
+  }
+
+  return "Admin workspace over persisted backend flows";
+});
+
+const roleDescription = computed(() => {
+  if (auth.role.value === "employee") {
+    return "Employee users can review tasks and work only inside self-service schedule and leave routes.";
+  }
+
+  return "`core-service` stays the source of truth for business entities and final assignments. `planner-service` keeps persisted plan runs, proposals, and diagnostics. Frontend runtime is aligned with the backend token-auth contract and cookie-compatible local proxy paths.";
+});
 </script>
 
 <template>
   <div class="page-stack">
     <section class="page-card">
       <p class="eyebrow">Architecture</p>
-      <h3 class="page-title">Thin client over persisted backend flows</h3>
-      <p class="page-description">
-        `core-service` stays the source of truth for business entities and final assignments.
-        `planner-service` keeps persisted plan runs, proposals, and diagnostics.
-        Frontend runtime is now aligned with the backend token-auth contract and cookie-compatible local proxy paths.
-      </p>
+      <h3 class="page-title">{{ roleHeadline }}</h3>
+      <p class="page-description">{{ roleDescription }}</p>
       <div class="pill-row">
         <span class="pill">Core endpoints: {{ referenceDataResources.length + taskResources.length + assignmentResources.length }}</span>
         <span class="pill">Planner endpoints: {{ plannerResources.length }}</span>
@@ -33,13 +54,17 @@ import { plannerResources } from "../services/planner-service";
             <p class="resource-label">Shared layout</p>
             <p class="resource-copy">Sidebar navigation plus a content area for each MVP section.</p>
           </li>
-          <li class="resource-item">
+          <li v-if="auth.role.value !== 'employee'" class="resource-item">
             <p class="resource-label">Reference data CRUD</p>
             <p class="resource-copy">Users, departments, skills, and employees now support list/create/edit/delete from the shell.</p>
           </li>
           <li class="resource-item">
             <p class="resource-label">Task flow</p>
             <p class="resource-copy">Tasks and task requirements now support a connected create/edit/delete flow.</p>
+          </li>
+          <li v-if="auth.role.value === 'employee'" class="resource-item">
+            <p class="resource-label">Self-service routes</p>
+            <p class="resource-copy">Employees now get dedicated navigation entries for own schedules and leaves.</p>
           </li>
           <li class="resource-item">
             <p class="resource-label">Thin API layer</p>
@@ -60,11 +85,15 @@ import { plannerResources } from "../services/planner-service";
         <ul class="resource-list">
           <li class="resource-item">
             <p class="resource-label">Role-aware access</p>
-            <p class="resource-copy">Token auth is now wired, but navigation still needs role-specific pruning for manager vs employee routes.</p>
+            <p class="resource-copy">Navigation and routes now respect backend roles at UX level, but screen-level action pruning still needs to be completed.</p>
           </li>
           <li class="resource-item">
             <p class="resource-label">Planning and approval flows</p>
-            <p class="resource-copy">Plan runs, proposal review, approvals, and assignments remain ahead after the task flow.</p>
+            <p class="resource-copy">
+              {{ auth.role.value === "employee"
+                ? "Employees remain intentionally excluded from planner launch and assignment approval routes."
+                : "Plan runs, proposal review, approvals, and assignments remain ahead after the task flow." }}
+            </p>
           </li>
           <li class="resource-item">
             <p class="resource-label">Core API schema UI</p>

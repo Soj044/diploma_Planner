@@ -11,6 +11,7 @@ Track frontend delivery slices for `frontend-app` without losing scope boundarie
 - `2026-04-27`: point 6 completed with task CRUD and task-requirement CRUD linked through the Tasks screen.
 - `2026-04-28`: Stage 6 / Stage 1 completed on branch `feature/TASK-06-01-frontend-token-auth`; runtime moved away from Basic auth and dev proxy was realigned for `/api/v1/auth/*` refresh-cookie compatibility.
 - `2026-04-28`: Stage 6 / Stage 2 completed on branch `feature/TASK-06-01-frontend-token-auth`; frontend now has token auth screens, in-memory access token state, silent refresh bootstrap, and guarded routes.
+- `2026-04-28`: Stage 6 / Stage 3 completed on branch `feature/TASK-06-02-frontend-rbac-self-service`; navigation and route access now react to backend roles, and employee-only self-service routes were reserved.
 
 ## Milestone 1 slices
 
@@ -57,13 +58,14 @@ Reason: they are needed before planning quality and availability logic, but not 
 
 ## Stage 6 progress
 
-- Active branch: `feature/TASK-06-01-frontend-token-auth`
-- Active PR: to be opened after Stage 2 verification
+- Active branch: `feature/TASK-06-02-frontend-rbac-self-service`
+- Active PR: PR `#9` covers stages 1-2; stacked PR for stages 3-5 is not opened yet
 - Completed:
   - Stage 1: runtime and dev proxy realignment
   - Stage 2: auth foundation and session lifecycle
-- Next expected stage:
   - Stage 3: role-aware navigation and route guards
+- Next expected stage:
+  - Stage 4: RBAC migration for existing screens
 
 ## Next expected slice after point 6
 
