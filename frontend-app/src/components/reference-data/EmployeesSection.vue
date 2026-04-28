@@ -6,6 +6,12 @@ import { coreService } from "../../services/core-service";
 import { describeRequestError } from "../../services/http";
 import type { Department, Employee, EmployeeInput, User } from "../../types/api";
 
+const props = withDefaults(defineProps<{
+  allowManage?: boolean;
+}>(), {
+  allowManage: true,
+});
+
 interface EmployeeFormState {
   user: string;
   department: string;
@@ -46,6 +52,8 @@ const form = reactive<EmployeeFormState>({
   is_active: true,
 });
 
+const canManage = computed(() => props.allowManage);
+
 const userNameById = computed(() => {
   return new Map(users.value.map((user) => [user.id, user.email]));
 });
@@ -78,6 +86,10 @@ function resetForm() {
 }
 
 function startEditing(employee: Employee) {
+  if (!canManage.value) {
+    return;
+  }
+
   editingId.value = employee.id;
   form.user = String(employee.user);
   form.department = employee.department === null ? "" : String(employee.department);
@@ -99,11 +111,11 @@ async function load() {
   try {
     const [employeeRows, userRows, departmentRows] = await Promise.all([
       coreService.listEmployees(),
-      coreService.listUsers(),
+      canManage.value ? coreService.listUsers() : Promise.resolve([]),
       coreService.listDepartments(),
     ]);
     employees.value = employeeRows;
-    users.value = userRows;
+    users.value = userRows as User[];
     departments.value = departmentRows;
   } catch (error: unknown) {
     errorMessage.value = describeRequestError(error);
@@ -127,6 +139,10 @@ function buildPayload(): EmployeeInput {
 }
 
 async function save() {
+  if (!canManage.value) {
+    return;
+  }
+
   isSaving.value = true;
   errorMessage.value = "";
   successMessage.value = "";
@@ -151,6 +167,10 @@ async function save() {
 }
 
 async function remove(id: number) {
+  if (!canManage.value) {
+    return;
+  }
+
   deletingId.value = id;
   errorMessage.value = "";
   successMessage.value = "";
@@ -178,8 +198,8 @@ onMounted(load);
     title="Employee profiles linked to users and departments"
     description="This is the last reference-data slice needed before tasks start to become meaningful and before later planner-specific entities are added."
   >
-    <div class="data-layout">
-      <form class="editor-card" @submit.prevent="save">
+    <div class="data-layout" :class="{ 'data-layout-single': !canManage }">
+      <form v-if="canManage" class="editor-card" @submit.prevent="save">
         <div class="editor-header">
           <div>
             <p class="section-caption">{{ editingId === null ? "Create employee" : "Edit employee" }}</p>
@@ -296,13 +316,17 @@ onMounted(load);
           <span class="pill">{{ employees.length }} rows</span>
         </div>
 
+        <div v-if="!canManage" class="notice">
+          Manager access is read-only here. Employee profile creation remains an admin-only action.
+        </div>
+
         <p v-if="isLoading" class="resource-copy">Loading...</p>
         <p v-else-if="employees.length === 0" class="empty-state">No employees yet.</p>
         <ul v-else class="resource-list">
           <li v-for="employee in employees" :key="employee.id" class="resource-item">
             <div class="resource-heading">
               <p class="resource-label">{{ employee.full_name }}</p>
-              <div class="inline-actions">
+              <div v-if="canManage" class="inline-actions">
                 <button class="button-secondary" type="button" @click="startEditing(employee)">Edit</button>
                 <button
                   class="button-danger"

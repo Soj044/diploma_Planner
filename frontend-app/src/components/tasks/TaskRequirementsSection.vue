@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref, watch } from "vue";
 
 import SectionPlaceholder from "../SectionPlaceholder.vue";
+import { useAuth } from "../../composables/useAuth";
 import { coreService } from "../../services/core-service";
 import { describeRequestError } from "../../services/http";
 import type { Skill, Task, TaskRequirement, TaskRequirementInput } from "../../types/api";
@@ -10,6 +11,8 @@ const props = defineProps<{
   selectedTaskId: number | null;
   reloadToken: number;
 }>();
+
+const auth = useAuth();
 
 interface RequirementFormState {
   task: string;
@@ -33,6 +36,10 @@ const form = reactive<RequirementFormState>({
   skill: "",
   min_level: 1,
   weight: "1.00",
+});
+
+const canManageRequirements = computed(() => {
+  return auth.role.value === "admin" || auth.role.value === "manager";
 });
 
 const activeTaskId = computed(() => {
@@ -104,6 +111,10 @@ function resetForm() {
 }
 
 function startEditing(requirement: TaskRequirement) {
+  if (!canManageRequirements.value) {
+    return;
+  }
+
   editingId.value = requirement.id;
   form.task = String(requirement.task);
   form.skill = String(requirement.skill);
@@ -148,6 +159,10 @@ function buildPayload(): TaskRequirementInput {
 }
 
 async function save() {
+  if (!canManageRequirements.value) {
+    return;
+  }
+
   isSaving.value = true;
   errorMessage.value = "";
   successMessage.value = "";
@@ -169,6 +184,10 @@ async function save() {
 }
 
 async function remove(id: number) {
+  if (!canManageRequirements.value) {
+    return;
+  }
+
   deletingId.value = id;
   errorMessage.value = "";
   successMessage.value = "";
@@ -211,10 +230,10 @@ onMounted(async () => {
   <SectionPlaceholder
     eyebrow="Task Requirements"
     title="Skill requirements attach directly to one task"
-    description="This editor stays explicit: a requirement is just one `task + skill + min_level + weight` record in core-service."
+    description="This editor stays explicit: a requirement is just one `task + skill + min_level + weight` record in core-service. Employees can review but not mutate these records."
   >
-    <div class="data-layout">
-      <form class="editor-card" @submit.prevent="save">
+    <div class="data-layout" :class="{ 'data-layout-single': !canManageRequirements }">
+      <form v-if="canManageRequirements" class="editor-card" @submit.prevent="save">
         <div class="editor-header">
           <div>
             <p class="section-caption">{{ editingId === null ? "Create task requirement" : "Edit task requirement" }}</p>
@@ -307,13 +326,17 @@ onMounted(async () => {
           <span class="pill">{{ requirementCountForActiveTask }} rows</span>
         </div>
 
+        <div v-if="!canManageRequirements" class="notice">
+          Employee access is read-only here. Requirement editing remains a manager/admin responsibility.
+        </div>
+
         <p v-if="isLoading" class="resource-copy">Loading...</p>
         <p v-else-if="filteredRequirements.length === 0" class="empty-state">No requirements yet.</p>
         <ul v-else class="resource-list">
           <li v-for="requirement in filteredRequirements" :key="requirement.id" class="resource-item">
             <div class="resource-heading">
               <p class="resource-label">{{ skillNameById.get(requirement.skill) || `Skill #${requirement.skill}` }}</p>
-              <div class="inline-actions">
+              <div v-if="canManageRequirements" class="inline-actions">
                 <button class="button-secondary" type="button" @click="startEditing(requirement)">Edit</button>
                 <button
                   class="button-danger"
