@@ -10,7 +10,9 @@
 
 ```text
 manager -> frontend-app: navigate CRUD, planning, review, approval screens
+employee -> frontend-app: navigate tasks and self-service schedule/leave screens
 frontend-app -> core-service: create/update employees, skills, schedules, tasks
+frontend-app -> core-service: login/signup/refresh/me + employee self-service CRUD
 frontend-app -> planner-service: POST /api/v1/plan-runs (CreatePlanRunRequest)
 planner-service -> core-service: POST /api/v1/planning-snapshot/ + X-Internal-Service-Token
 planner-service (CP-SAT): eligibility -> scoring -> optimization
@@ -44,7 +46,7 @@ browser
 |    vue + vite dev   |
 |       :5173         |
 +----------+----------+
-           | /core-api, /planner-api
+           | /api, /planner-api
            v
 +---------------------+      +-----------------------+
 |   core-service      |<---->|       postgres        |
@@ -66,12 +68,15 @@ browser
 ```text
 frontend-app:
   routes:
-    shell, reference-data, tasks, planning, assignments
+    login, signup, shell, reference-data, tasks, planning, assignments,
+    my-schedule, my-leaves
 
   client modules:
+    services/auth-service.ts
     services/core-service.ts
     services/planner-service.ts
     services/http.ts
+    composables/useAuth.ts
 
   rules:
     no planner eligibility/scoring logic in browser
@@ -84,9 +89,11 @@ frontend-app:
 ```text
 frontend-app -> core-service: POST /api/v1/auth/login
 core-service -> frontend-app: access token (JSON) + refresh token (HttpOnly cookie)
+frontend-app -> core-service: POST /api/v1/auth/refresh on app bootstrap
 frontend-app -> core-service: GET /api/v1/auth/me (Authorization: Bearer <access>)
 frontend-app -> core-service: POST /api/v1/auth/refresh (refresh cookie)
 core-service -> frontend-app: rotated refresh cookie + new access token
+frontend-app -> planner-service: Authorization: Bearer <access>
 planner-service -> core-service: POST /api/v1/auth/introspect + X-Internal-Service-Token
 core-service -> planner-service: user_id + role + is_active + employee_id
 ```

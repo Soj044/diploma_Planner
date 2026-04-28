@@ -124,6 +124,61 @@ export interface Employee {
   updated_at: string;
 }
 
+export interface WorkScheduleInput {
+  employee: number;
+  name: string;
+  is_default: boolean;
+}
+
+export interface WorkSchedule {
+  id: number;
+  employee: number;
+  name: string;
+  is_default: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WorkScheduleDayInput {
+  schedule: number;
+  weekday: number;
+  is_working_day: boolean;
+  capacity_hours: number;
+  start_time: string | null;
+  end_time: string | null;
+}
+
+export interface WorkScheduleDay {
+  id: number;
+  schedule: number;
+  weekday: number;
+  is_working_day: boolean;
+  capacity_hours: number;
+  start_time: string | null;
+  end_time: string | null;
+}
+
+export interface EmployeeLeaveInput {
+  employee: number;
+  leave_type: string;
+  status: string;
+  start_date: string;
+  end_date: string;
+  comment: string;
+}
+
+export interface EmployeeLeave {
+  id: number;
+  employee: number;
+  leave_type: string;
+  status: string;
+  start_date: string;
+  end_date: string;
+  comment: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface TaskInput {
   department: number | null;
   title: string;
