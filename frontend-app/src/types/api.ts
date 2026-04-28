@@ -12,6 +12,42 @@ export interface WorkflowStepDescriptor {
   details: string;
 }
 
+export type AuthRole = "admin" | "manager" | "employee";
+
+export interface AuthEmployeeProfile {
+  id: number;
+  full_name: string;
+  department_id: number | null;
+  position_name: string;
+}
+
+export interface AuthUser {
+  id: number;
+  email: string;
+  role: AuthRole;
+  is_active: boolean;
+  employee_id: number | null;
+  employee_profile: AuthEmployeeProfile | null;
+}
+
+export interface AuthResponse {
+  access: string;
+  user: AuthUser;
+}
+
+export interface LoginRequest {
+  email: string;
+  password: string;
+}
+
+export interface SignupRequest {
+  email: string;
+  password: string;
+  username?: string;
+  first_name?: string;
+  last_name?: string;
+}
+
 export interface UserInput {
   email: string;
   username: string;
@@ -84,6 +120,61 @@ export interface Employee {
   timezone: string;
   hire_date: string | null;
   is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WorkScheduleInput {
+  employee: number;
+  name: string;
+  is_default: boolean;
+}
+
+export interface WorkSchedule {
+  id: number;
+  employee: number;
+  name: string;
+  is_default: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WorkScheduleDayInput {
+  schedule: number;
+  weekday: number;
+  is_working_day: boolean;
+  capacity_hours: number;
+  start_time: string | null;
+  end_time: string | null;
+}
+
+export interface WorkScheduleDay {
+  id: number;
+  schedule: number;
+  weekday: number;
+  is_working_day: boolean;
+  capacity_hours: number;
+  start_time: string | null;
+  end_time: string | null;
+}
+
+export interface EmployeeLeaveInput {
+  employee: number;
+  leave_type: string;
+  status: string;
+  start_date: string;
+  end_date: string;
+  comment: string;
+}
+
+export interface EmployeeLeave {
+  id: number;
+  employee: number;
+  leave_type: string;
+  status: string;
+  start_date: string;
+  end_date: string;
+  comment: string;
   created_at: string;
   updated_at: string;
 }

@@ -5,6 +5,8 @@ import type {
   Department,
   DepartmentInput,
   Employee,
+  EmployeeLeave,
+  EmployeeLeaveInput,
   EmployeeInput,
   ResourceDescriptor,
   Skill,
@@ -15,11 +17,18 @@ import type {
   TaskRequirementInput,
   User,
   UserInput,
+  WorkSchedule,
+  WorkScheduleDay,
+  WorkScheduleDayInput,
+  WorkScheduleInput,
 } from "../types/api";
 import { createJsonClient } from "./http";
+import { getAccessToken, refreshAccessToken } from "./auth-service";
 
 const client = createJsonClient(appConfig.coreServiceUrl, {
-  authHeader: appConfig.coreServiceAuthHeader,
+  defaultCredentials: "include",
+  getAccessToken,
+  onUnauthorized: refreshAccessToken,
 });
 
 export const referenceDataResources: ResourceDescriptor[] = [
@@ -153,6 +162,24 @@ export const coreService = {
   createEmployee: (payload: EmployeeInput) => client.post<Employee>("/employees/", payload),
   updateEmployee: (id: number, payload: EmployeeInput) => client.patch<Employee>(`/employees/${id}/`, payload),
   deleteEmployee: (id: number) => client.delete<null>(`/employees/${id}/`).then(() => undefined),
+  listWorkSchedules: () => client.get<WorkSchedule[]>("/work-schedules/"),
+  createWorkSchedule: (payload: WorkScheduleInput) => client.post<WorkSchedule>("/work-schedules/", payload),
+  updateWorkSchedule: (id: number, payload: WorkScheduleInput) =>
+    client.patch<WorkSchedule>(`/work-schedules/${id}/`, payload),
+  deleteWorkSchedule: (id: number) => client.delete<null>(`/work-schedules/${id}/`).then(() => undefined),
+  listWorkScheduleDays: () => client.get<WorkScheduleDay[]>("/work-schedule-days/"),
+  createWorkScheduleDay: (payload: WorkScheduleDayInput) =>
+    client.post<WorkScheduleDay>("/work-schedule-days/", payload),
+  updateWorkScheduleDay: (id: number, payload: WorkScheduleDayInput) =>
+    client.patch<WorkScheduleDay>(`/work-schedule-days/${id}/`, payload),
+  deleteWorkScheduleDay: (id: number) =>
+    client.delete<null>(`/work-schedule-days/${id}/`).then(() => undefined),
+  listEmployeeLeaves: () => client.get<EmployeeLeave[]>("/employee-leaves/"),
+  createEmployeeLeave: (payload: EmployeeLeaveInput) =>
+    client.post<EmployeeLeave>("/employee-leaves/", payload),
+  updateEmployeeLeave: (id: number, payload: EmployeeLeaveInput) =>
+    client.patch<EmployeeLeave>(`/employee-leaves/${id}/`, payload),
+  deleteEmployeeLeave: (id: number) => client.delete<null>(`/employee-leaves/${id}/`).then(() => undefined),
   listTasks: () => client.get<Task[]>("/tasks/"),
   createTask: (payload: TaskInput) => client.post<Task>("/tasks/", payload),
   updateTask: (id: number, payload: TaskInput) => client.patch<Task>(`/tasks/${id}/`, payload),

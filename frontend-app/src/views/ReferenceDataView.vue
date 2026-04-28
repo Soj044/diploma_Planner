@@ -1,9 +1,17 @@
 <script setup lang="ts">
+import { computed } from "vue";
+
 import EmployeesSection from "../components/reference-data/EmployeesSection.vue";
 import SimpleCatalogSection from "../components/reference-data/SimpleCatalogSection.vue";
 import UserAccountsSection from "../components/reference-data/UserAccountsSection.vue";
 import SectionPlaceholder from "../components/SectionPlaceholder.vue";
+import { useAuth } from "../composables/useAuth";
 import { coreService, referenceDataResources } from "../services/core-service";
+
+const auth = useAuth();
+
+const isAdmin = computed(() => auth.role.value === "admin");
+const isManager = computed(() => auth.role.value === "manager");
 
 const deferredResources = referenceDataResources.filter((resource) => {
   return !["users", "departments", "skills", "employees"].includes(resource.key);
@@ -18,6 +26,7 @@ const deferredResources = referenceDataResources.filter((resource) => {
       <p class="page-description">
         This cycle covers the minimal reference entities needed before task creation: `users`, `departments`, `skills`,
         and `employees`. The browser still stays thin and surfaces backend validation instead of re-implementing rules.
+        Managers now see only the actions allowed by backend RBAC.
       </p>
       <div class="pill-row">
         <span class="pill">/users/</span>
@@ -27,33 +36,39 @@ const deferredResources = referenceDataResources.filter((resource) => {
       </div>
     </section>
 
-    <UserAccountsSection />
+    <UserAccountsSection v-if="isAdmin" />
 
     <SimpleCatalogSection
       eyebrow="Departments"
       title="Departments for employee and task grouping"
-      description="Managers can now maintain task-owning departments directly from the frontend shell."
+      description="Admins can maintain task-owning departments directly from the frontend shell, while managers stay read-only here."
       endpoint="/departments/"
       entity-label="department"
       :load-items="coreService.listDepartments"
       :create-item="coreService.createDepartment"
       :update-item="coreService.updateDepartment"
       :delete-item="coreService.deleteDepartment"
+      :allow-create="isAdmin"
+      :allow-edit="isAdmin"
+      :allow-delete="isAdmin"
     />
 
     <SimpleCatalogSection
       eyebrow="Skills"
       title="Skills used later by task requirements"
-      description="This CRUD slice gives task requirements a maintained skill vocabulary before task forms arrive."
+      description="This slice keeps task requirements backed by a maintained skill vocabulary, with manager create/update access and admin delete authority."
       endpoint="/skills/"
       entity-label="skill"
       :load-items="coreService.listSkills"
       :create-item="coreService.createSkill"
       :update-item="coreService.updateSkill"
       :delete-item="coreService.deleteSkill"
+      :allow-create="isAdmin || isManager"
+      :allow-edit="isAdmin || isManager"
+      :allow-delete="isAdmin"
     />
 
-    <EmployeesSection />
+    <EmployeesSection :allow-manage="isAdmin" />
 
     <SectionPlaceholder
       eyebrow="Deferred within reference data"

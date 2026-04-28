@@ -2,9 +2,10 @@
 import { computed, onMounted, reactive, ref } from "vue";
 
 import SectionPlaceholder from "../SectionPlaceholder.vue";
+import { useAuth } from "../../composables/useAuth";
 import { coreService } from "../../services/core-service";
 import { describeRequestError } from "../../services/http";
-import type { Department, Task, TaskInput, User } from "../../types/api";
+import type { Department, Task, TaskInput } from "../../types/api";
 
 const emit = defineEmits<{
   "selected-task-change": [taskId: number | null];
@@ -21,7 +22,6 @@ interface TaskFormState {
   actual_hours: string;
   start_date: string;
   due_date: string;
-  created_by_user: string;
 }
 
 const statusOptions = [
@@ -40,14 +40,15 @@ const priorityOptions = [
   { label: "Critical", value: "critical" },
 ] as const;
 
+const auth = useAuth();
 const tasks = ref<Task[]>([]);
 const departments = ref<Department[]>([]);
-const users = ref<User[]>([]);
 const selectedTaskId = ref<number | null>(null);
 const isLoading = ref(false);
 const isSaving = ref(false);
 const deletingId = ref<number | null>(null);
 const editingId = ref<number | null>(null);
+const creatorUserId = ref<number | null>(null);
 const errorMessage = ref("");
 const successMessage = ref("");
 
@@ -61,27 +62,27 @@ const form = reactive<TaskFormState>({
   actual_hours: "",
   start_date: "",
   due_date: "",
-  created_by_user: "",
-});
-
-const creatorOptions = computed(() => {
-  const privilegedUsers = users.value.filter((user) => ["admin", "manager"].includes(user.role));
-  return privilegedUsers.length > 0 ? privilegedUsers : users.value;
 });
 
 const departmentNameById = computed(() => {
   return new Map(departments.value.map((department) => [department.id, department.name]));
 });
 
-const userNameById = computed(() => {
-  return new Map(users.value.map((user) => [user.id, user.email]));
+const canManageTasks = computed(() => {
+  return auth.role.value === "admin" || auth.role.value === "manager";
 });
 
-function syncDefaultCreator() {
-  if (!form.created_by_user && creatorOptions.value.length > 0) {
-    form.created_by_user = String(creatorOptions.value[0].id);
+const creatorLabel = computed(() => {
+  if (creatorUserId.value === null) {
+    return "No creator selected";
   }
-}
+
+  if (creatorUserId.value === auth.user.value?.id) {
+    return `Current session user · ${auth.user.value.email}`;
+  }
+
+  return `Preserved creator #${creatorUserId.value}`;
+});
 
 function resetForm() {
   form.department = "";
@@ -93,9 +94,8 @@ function resetForm() {
   form.actual_hours = "";
   form.start_date = "";
   form.due_date = "";
-  form.created_by_user = "";
+  creatorUserId.value = auth.user.value?.id ?? null;
   editingId.value = null;
-  syncDefaultCreator();
 }
 
 function setSelectedTask(taskId: number | null) {
@@ -104,6 +104,10 @@ function setSelectedTask(taskId: number | null) {
 }
 
 function startEditing(task: Task) {
+  if (!canManageTasks.value) {
+    return;
+  }
+
   editingId.value = task.id;
   form.department = task.department === null ? "" : String(task.department);
   form.title = task.title;
@@ -114,7 +118,7 @@ function startEditing(task: Task) {
   form.actual_hours = task.actual_hours === null ? "" : String(task.actual_hours);
   form.start_date = task.start_date || "";
   form.due_date = task.due_date;
-  form.created_by_user = String(task.created_by_user);
+  creatorUserId.value = task.created_by_user;
   setSelectedTask(task.id);
   errorMessage.value = "";
   successMessage.value = "";
@@ -125,15 +129,12 @@ async function load() {
   errorMessage.value = "";
 
   try {
-    const [taskRows, departmentRows, userRows] = await Promise.all([
+    const [taskRows, departmentRows] = await Promise.all([
       coreService.listTasks(),
       coreService.listDepartments(),
-      coreService.listUsers(),
     ]);
     tasks.value = taskRows;
     departments.value = departmentRows;
-    users.value = userRows;
-    syncDefaultCreator();
 
     if (selectedTaskId.value !== null && !tasks.value.some((task) => task.id === selectedTaskId.value)) {
       setSelectedTask(null);
@@ -156,11 +157,20 @@ function buildPayload(): TaskInput {
     actual_hours: form.actual_hours ? Number(form.actual_hours) : null,
     start_date: form.start_date || null,
     due_date: form.due_date,
-    created_by_user: Number(form.created_by_user),
+    created_by_user: creatorUserId.value ?? auth.user.value?.id ?? 0,
   };
 }
 
 async function save() {
+  if (!canManageTasks.value) {
+    return;
+  }
+
+  if (auth.user.value?.id === undefined) {
+    errorMessage.value = "Current authenticated user context is missing.";
+    return;
+  }
+
   isSaving.value = true;
   errorMessage.value = "";
   successMessage.value = "";
@@ -185,6 +195,10 @@ async function save() {
 }
 
 async function remove(id: number) {
+  if (!canManageTasks.value) {
+    return;
+  }
+
   deletingId.value = id;
   errorMessage.value = "";
   successMessage.value = "";
@@ -207,17 +221,20 @@ async function remove(id: number) {
   }
 }
 
-onMounted(load);
+onMounted(async () => {
+  await load();
+  resetForm();
+});
 </script>
 
 <template>
   <SectionPlaceholder
     eyebrow="Tasks"
     title="Task creation stays inside core-service truth"
-    description="Managers can now create and maintain planner-visible tasks directly in the frontend shell."
+    description="Managers can create and maintain planner-visible tasks directly in the frontend shell, while employees stay in read-only mode."
   >
-    <div class="data-layout">
-      <form class="editor-card" @submit.prevent="save">
+    <div class="data-layout" :class="{ 'data-layout-single': !canManageTasks }">
+      <form v-if="canManageTasks" class="editor-card" @submit.prevent="save">
         <div class="editor-header">
           <div>
             <p class="section-caption">{{ editingId === null ? "Create task" : "Edit task" }}</p>
@@ -235,10 +252,6 @@ onMounted(load);
               Cancel edit
             </button>
           </div>
-        </div>
-
-        <div v-if="creatorOptions.length === 0" class="notice">
-          Create at least one manager or admin user in Reference Data before creating tasks.
         </div>
 
         <div class="form-grid">
@@ -304,19 +317,14 @@ onMounted(load);
             <input v-model="form.due_date" class="text-input" type="date" required />
           </label>
 
-          <label class="field-group field-group-span-2">
+          <div class="field-group field-group-span-2">
             <span class="field-label">Created by user</span>
-            <select v-model="form.created_by_user" class="select-input" required>
-              <option value="">Select creator</option>
-              <option v-for="user in creatorOptions" :key="user.id" :value="String(user.id)">
-                {{ user.email }} · {{ user.role }}
-              </option>
-            </select>
-          </label>
+            <div class="notice">{{ creatorLabel }}</div>
+          </div>
         </div>
 
         <div class="action-row">
-          <button class="button-primary" type="submit" :disabled="isSaving || creatorOptions.length === 0">
+          <button class="button-primary" type="submit" :disabled="isSaving">
             {{ isSaving ? "Saving..." : editingId === null ? "Create task" : "Save task" }}
           </button>
         </div>
@@ -334,6 +342,10 @@ onMounted(load);
           <span class="pill">{{ tasks.length }} rows</span>
         </div>
 
+        <div v-if="!canManageTasks" class="notice">
+          Employee access to tasks is intentionally read-only. Task creation and edits remain manager/admin actions.
+        </div>
+
         <p v-if="isLoading" class="resource-copy">Loading...</p>
         <p v-else-if="tasks.length === 0" class="empty-state">No tasks yet.</p>
         <ul v-else class="resource-list">
@@ -347,8 +359,9 @@ onMounted(load);
               <p class="resource-label">{{ task.title }}</p>
               <div class="inline-actions">
                 <button class="button-secondary" type="button" @click="setSelectedTask(task.id)">Requirements</button>
-                <button class="button-secondary" type="button" @click="startEditing(task)">Edit</button>
+                <button v-if="canManageTasks" class="button-secondary" type="button" @click="startEditing(task)">Edit</button>
                 <button
+                  v-if="canManageTasks"
                   class="button-danger"
                   type="button"
                   :disabled="deletingId === task.id"
@@ -366,7 +379,7 @@ onMounted(load);
               Department:
               {{ task.department === null ? "None" : departmentNameById.get(task.department) || `#${task.department}` }}
               · Created by:
-              {{ userNameById.get(task.created_by_user) || `#${task.created_by_user}` }}
+              {{ task.created_by_user === auth.user.value?.id ? "You" : `User #${task.created_by_user}` }}
             </p>
             <p class="resource-copy">
               Estimated: {{ task.estimated_hours }}h

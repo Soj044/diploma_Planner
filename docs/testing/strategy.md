@@ -19,7 +19,7 @@
 - core-service approval flow: persisted planner proposal lookup, idempotent replay for the same `task + employee + source_plan_run_id`, rejection of missing or non-selected proposals, rejection of second final assignment for one task, upstream planner failure handling
 - planner-service: unit and integration tests for planning pipeline, `CreatePlanRunRequest` boundary, snapshot client failure handling, SQLite persistence of run/snapshot/proposals/unassigned/solver stats, persisted run retrieval for manager review, overlap conflict diagnostics, and weighted score stability
 - planner-service auth gate: Bearer header validation, deny employee role, allow manager/admin role, and controlled `503` when core introspection is unavailable
-- frontend-app: install dependencies, type-check the Vue shell, build production bundle, and manually verify routing/navigation plus env-driven backend configuration cards
+- frontend-app: install dependencies, type-check the Vue shell, build production bundle, and manually verify token auth, guarded routing, RBAC gating, and employee self-service CRUD
 - contracts: schema compatibility between services
 
 ## Suggested MVP Commands
@@ -56,11 +56,15 @@ docker compose up --build
 
 - Start backend services and the frontend shell locally.
 - Open `http://localhost:5173`.
-- Verify sidebar navigation works for `Shell`, `Reference Data`, `Tasks`, `Planning`, and `Assignments`.
-- Verify the runtime configuration card shows the expected `core-service` and `planner-service` URLs from `.env.local`.
-- Verify the shell clearly shows the current auth assumption instead of pretending a login flow already exists.
-- On `Reference Data`, verify authenticated list/create/edit/delete for `users`, `departments`, `skills`, and `employees`.
-- Verify employee creation only offers free `users` or the user already linked to the employee being edited.
-- On `Tasks`, verify authenticated list/create/edit/delete for `tasks` and `task-requirements`.
-- Verify selecting `Requirements` on a task focuses the requirement editor on that task.
-- Verify task validation errors from backend are surfaced unchanged, especially invalid `start_date > due_date`.
+- As anonymous user, verify protected routes redirect to `/login` and `/signup` stays guest-only.
+- Verify login works for existing manager/admin accounts and the app bootstrap restores session after reload through refresh cookie.
+- Verify signup creates an employee account and lands inside the protected shell with employee role.
+- Verify logout clears session and returns the browser to `/login`.
+- As manager/admin, verify sidebar navigation exposes `Reference Data`, `Tasks`, `Planning`, and `Assignments`.
+- As employee, verify sidebar hides `Reference Data`, `Planning`, and `Assignments`, and instead shows `My Schedule` and `My Leaves`.
+- On `Reference Data`, verify manager does not see `users` CRUD and only gets the allowed action set for departments, skills, and employees.
+- On `Tasks`, verify task create uses the authenticated user from `/auth/me` and no longer requires reading `/users/`.
+- As employee, verify `Tasks` and `Task Requirements` are read-only.
+- On `My Schedule`, verify employee CRUD for own `work-schedules` and `work-schedule-days`.
+- On `My Leaves`, verify employee CRUD for own `employee-leaves`.
+- Verify task and leave validation errors from backend are surfaced unchanged.

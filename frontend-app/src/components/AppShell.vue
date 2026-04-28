@@ -1,37 +1,80 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { RouterLink, RouterView, useRoute } from "vue-router";
+import { RouterLink, RouterView, useRoute, useRouter } from "vue-router";
 
+import { useAuth } from "../composables/useAuth";
 import { appConfig, frontendAssumptions } from "../config/env";
+import type { AuthRole } from "../types/api";
 
 const route = useRoute();
+const router = useRouter();
+const auth = useAuth();
 
-const navigation = [
+interface NavigationItem {
+  label: string;
+  to: string;
+  roles: AuthRole[];
+}
+
+const navigation: NavigationItem[] = [
   {
     label: "Shell",
     to: "/",
+    roles: ["admin", "manager", "employee"],
   },
   {
     label: "Reference Data",
     to: "/reference-data",
+    roles: ["admin", "manager"],
   },
   {
     label: "Tasks",
     to: "/tasks",
+    roles: ["admin", "manager", "employee"],
   },
   {
     label: "Planning",
     to: "/planning",
+    roles: ["admin", "manager"],
   },
   {
     label: "Assignments",
     to: "/assignments",
+    roles: ["admin", "manager"],
   },
-] as const;
+  {
+    label: "My Schedule",
+    to: "/my-schedule",
+    roles: ["employee"],
+  },
+  {
+    label: "My Leaves",
+    to: "/my-leaves",
+    roles: ["employee"],
+  },
+];
 
 const pageTitle = computed(() => {
   return typeof route.meta.title === "string" ? route.meta.title : "Workestrator";
 });
+
+const visibleNavigation = computed(() => {
+  const role = auth.role.value;
+  return navigation.filter((item) => role !== null && item.roles.includes(role));
+});
+
+const sessionLabel = computed(() => {
+  if (!auth.user.value) {
+    return "No session";
+  }
+
+  return `${auth.user.value.email} · ${auth.user.value.role}`;
+});
+
+async function handleLogout() {
+  await auth.logout();
+  await router.push({ name: "login" });
+}
 </script>
 
 <template>
@@ -45,13 +88,14 @@ const pageTitle = computed(() => {
         </p>
         <div class="pill-row">
           <span class="pill">Vue 3 + TypeScript</span>
-          <span class="pill is-warm">Auth gap explicit</span>
+          <span class="pill is-warm">Token auth flow</span>
+          <span v-if="auth.role.value" class="pill">{{ auth.role.value }}</span>
         </div>
       </div>
 
       <nav class="nav-card" aria-label="Main navigation">
         <RouterLink
-          v-for="item in navigation"
+          v-for="item in visibleNavigation"
           :key="item.to"
           :to="item.to"
           class="nav-link"
@@ -65,6 +109,10 @@ const pageTitle = computed(() => {
         <p class="meta-title">Runtime config</p>
         <ul class="key-value-list">
           <li class="key-value-item">
+            <span class="key-label">Session</span>
+            <span class="key-value">{{ sessionLabel }}</span>
+          </li>
+          <li class="key-value-item">
             <span class="key-label">Core API</span>
             <span class="key-value">{{ appConfig.coreServiceUrl }}</span>
           </li>
@@ -73,12 +121,13 @@ const pageTitle = computed(() => {
             <span class="key-value">{{ appConfig.plannerServiceUrl }}</span>
           </li>
           <li class="key-value-item">
-            <span class="key-label">Core auth</span>
-            <span class="key-value">
-              {{ appConfig.hasCoreServiceAuth ? "Basic credentials configured" : "Not configured yet" }}
-            </span>
+            <span class="key-label">Auth path</span>
+            <span class="key-value">/api/v1/auth/*</span>
           </li>
         </ul>
+        <div class="action-row">
+          <button class="button-secondary" type="button" @click="handleLogout">Logout</button>
+        </div>
       </div>
     </aside>
 
