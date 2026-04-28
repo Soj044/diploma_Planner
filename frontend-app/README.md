@@ -35,6 +35,14 @@ npm run dev
 - `planner-service` is reached through `/planner-api/api/v1/*`
 - Vite rewrites `/planner-api/*` to backend root before forwarding to planner-service
 
+## Current auth flow
+
+- `signup`, `login`, `refresh`, `logout`, and `me` are called against `core-service`
+- refresh token stays in an HttpOnly cookie managed by backend
+- access token stays only in in-memory frontend state
+- app bootstrap tries `refresh -> me` before protected routes become available
+- protected API calls retry once after a `401` by attempting silent refresh
+
 ## Current point 5 coverage
 
 - list, create, edit, delete users;

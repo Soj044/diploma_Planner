@@ -6,8 +6,12 @@ import type {
   WorkflowStepDescriptor,
 } from "../types/api";
 import { createJsonClient } from "./http";
+import { getAccessToken, refreshAccessToken } from "./auth-service";
 
-const client = createJsonClient(appConfig.plannerServiceUrl);
+const client = createJsonClient(appConfig.plannerServiceUrl, {
+  getAccessToken,
+  onUnauthorized: refreshAccessToken,
+});
 
 export const plannerResources: ResourceDescriptor[] = [
   {

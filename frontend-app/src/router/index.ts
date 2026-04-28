@@ -1,52 +1,88 @@
 import { createRouter, createWebHistory } from "vue-router";
 
+import AppShell from "../components/AppShell.vue";
+import { bootstrapAuth, hasRole, isAuthenticated } from "../services/auth-service";
 import AssignmentsView from "../views/AssignmentsView.vue";
 import HomeView from "../views/HomeView.vue";
+import LoginView from "../views/LoginView.vue";
 import NotFoundView from "../views/NotFoundView.vue";
 import PlanningView from "../views/PlanningView.vue";
 import ReferenceDataView from "../views/ReferenceDataView.vue";
+import SignupView from "../views/SignupView.vue";
 import TasksView from "../views/TasksView.vue";
 
 const routes = [
   {
+    path: "/login",
+    name: "login",
+    component: LoginView,
+    meta: {
+      title: "Sign In",
+      guestOnly: true,
+    },
+  },
+  {
+    path: "/signup",
+    name: "signup",
+    component: SignupView,
+    meta: {
+      title: "Sign Up",
+      guestOnly: true,
+    },
+  },
+  {
     path: "/",
-    name: "home",
-    component: HomeView,
+    component: AppShell,
     meta: {
-      title: "Frontend Shell",
+      requiresAuth: true,
     },
-  },
-  {
-    path: "/reference-data",
-    name: "reference-data",
-    component: ReferenceDataView,
-    meta: {
-      title: "Reference Data",
-    },
-  },
-  {
-    path: "/tasks",
-    name: "tasks",
-    component: TasksView,
-    meta: {
-      title: "Tasks",
-    },
-  },
-  {
-    path: "/planning",
-    name: "planning",
-    component: PlanningView,
-    meta: {
-      title: "Planning Runs",
-    },
-  },
-  {
-    path: "/assignments",
-    name: "assignments",
-    component: AssignmentsView,
-    meta: {
-      title: "Assignments",
-    },
+    children: [
+      {
+        path: "",
+        name: "home",
+        component: HomeView,
+        meta: {
+          title: "Frontend Shell",
+          requiresAuth: true,
+        },
+      },
+      {
+        path: "reference-data",
+        name: "reference-data",
+        component: ReferenceDataView,
+        meta: {
+          title: "Reference Data",
+          requiresAuth: true,
+        },
+      },
+      {
+        path: "tasks",
+        name: "tasks",
+        component: TasksView,
+        meta: {
+          title: "Tasks",
+          requiresAuth: true,
+        },
+      },
+      {
+        path: "planning",
+        name: "planning",
+        component: PlanningView,
+        meta: {
+          title: "Planning Runs",
+          requiresAuth: true,
+        },
+      },
+      {
+        path: "assignments",
+        name: "assignments",
+        component: AssignmentsView,
+        meta: {
+          title: "Assignments",
+          requiresAuth: true,
+        },
+      },
+    ],
   },
   {
     path: "/:pathMatch(.*)*",
@@ -56,11 +92,35 @@ const routes = [
       title: "Not Found",
     },
   },
-] as const;
+];
 
 export const router = createRouter({
   history: createWebHistory(),
   routes,
+});
+
+router.beforeEach(async (to) => {
+  await bootstrapAuth();
+
+  if (to.meta.guestOnly && isAuthenticated()) {
+    return { name: "home" };
+  }
+
+  if (to.meta.requiresAuth && !isAuthenticated()) {
+    return {
+      name: "login",
+      query: {
+        redirect: to.fullPath,
+      },
+    };
+  }
+
+  const allowedRoles = Array.isArray(to.meta.allowedRoles) ? (to.meta.allowedRoles as string[]) : null;
+  if (allowedRoles && !hasRole(allowedRoles)) {
+    return { name: "home" };
+  }
+
+  return true;
 });
 
 router.afterEach((to) => {

@@ -10,6 +10,7 @@ Track frontend delivery slices for `frontend-app` without losing scope boundarie
 - `2026-04-27`: point 5 completed for the first practical cut with reference-data CRUD for `users`, `departments`, `skills`, and `employees`.
 - `2026-04-27`: point 6 completed with task CRUD and task-requirement CRUD linked through the Tasks screen.
 - `2026-04-28`: Stage 6 / Stage 1 completed on branch `feature/TASK-06-01-frontend-token-auth`; runtime moved away from Basic auth and dev proxy was realigned for `/api/v1/auth/*` refresh-cookie compatibility.
+- `2026-04-28`: Stage 6 / Stage 2 completed on branch `feature/TASK-06-01-frontend-token-auth`; frontend now has token auth screens, in-memory access token state, silent refresh bootstrap, and guarded routes.
 
 ## Milestone 1 slices
 
@@ -57,11 +58,12 @@ Reason: they are needed before planning quality and availability logic, but not 
 ## Stage 6 progress
 
 - Active branch: `feature/TASK-06-01-frontend-token-auth`
-- Active PR: not opened yet
+- Active PR: to be opened after Stage 2 verification
 - Completed:
   - Stage 1: runtime and dev proxy realignment
-- Next expected stage:
   - Stage 2: auth foundation and session lifecycle
+- Next expected stage:
+  - Stage 3: role-aware navigation and route guards
 
 ## Next expected slice after point 6
 

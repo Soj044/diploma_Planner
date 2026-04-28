@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { RouterLink, RouterView, useRoute } from "vue-router";
+import { RouterLink, RouterView, useRoute, useRouter } from "vue-router";
 
+import { useAuth } from "../composables/useAuth";
 import { appConfig, frontendAssumptions } from "../config/env";
 
 const route = useRoute();
+const router = useRouter();
+const auth = useAuth();
 
 const navigation = [
   {
@@ -32,6 +35,19 @@ const navigation = [
 const pageTitle = computed(() => {
   return typeof route.meta.title === "string" ? route.meta.title : "Workestrator";
 });
+
+const sessionLabel = computed(() => {
+  if (!auth.user.value) {
+    return "No session";
+  }
+
+  return `${auth.user.value.email} · ${auth.user.value.role}`;
+});
+
+async function handleLogout() {
+  await auth.logout();
+  await router.push({ name: "login" });
+}
 </script>
 
 <template>
@@ -65,6 +81,10 @@ const pageTitle = computed(() => {
         <p class="meta-title">Runtime config</p>
         <ul class="key-value-list">
           <li class="key-value-item">
+            <span class="key-label">Session</span>
+            <span class="key-value">{{ sessionLabel }}</span>
+          </li>
+          <li class="key-value-item">
             <span class="key-label">Core API</span>
             <span class="key-value">{{ appConfig.coreServiceUrl }}</span>
           </li>
@@ -77,6 +97,9 @@ const pageTitle = computed(() => {
             <span class="key-value">/api/v1/auth/*</span>
           </li>
         </ul>
+        <div class="action-row">
+          <button class="button-secondary" type="button" @click="handleLogout">Logout</button>
+        </div>
       </div>
     </aside>
 

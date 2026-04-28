@@ -12,6 +12,42 @@ export interface WorkflowStepDescriptor {
   details: string;
 }
 
+export type AuthRole = "admin" | "manager" | "employee";
+
+export interface AuthEmployeeProfile {
+  id: number;
+  full_name: string;
+  department_id: number | null;
+  position_name: string;
+}
+
+export interface AuthUser {
+  id: number;
+  email: string;
+  role: AuthRole;
+  is_active: boolean;
+  employee_id: number | null;
+  employee_profile: AuthEmployeeProfile | null;
+}
+
+export interface AuthResponse {
+  access: string;
+  user: AuthUser;
+}
+
+export interface LoginRequest {
+  email: string;
+  password: string;
+}
+
+export interface SignupRequest {
+  email: string;
+  password: string;
+  username?: string;
+  first_name?: string;
+  last_name?: string;
+}
+
 export interface UserInput {
   email: string;
   username: string;

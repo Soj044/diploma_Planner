@@ -59,8 +59,8 @@ import { plannerResources } from "../services/planner-service";
       >
         <ul class="resource-list">
           <li class="resource-item">
-            <p class="resource-label">Dedicated auth screens</p>
-            <p class="resource-copy">Login, signup, silent refresh, and role-aware guards still need to be wired into the shell.</p>
+            <p class="resource-label">Role-aware access</p>
+            <p class="resource-copy">Token auth is now wired, but navigation still needs role-specific pruning for manager vs employee routes.</p>
           </li>
           <li class="resource-item">
             <p class="resource-label">Planning and approval flows</p>

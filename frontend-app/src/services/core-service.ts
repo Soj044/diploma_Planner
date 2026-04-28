@@ -17,8 +17,13 @@ import type {
   UserInput,
 } from "../types/api";
 import { createJsonClient } from "./http";
+import { getAccessToken, refreshAccessToken } from "./auth-service";
 
-const client = createJsonClient(appConfig.coreServiceUrl);
+const client = createJsonClient(appConfig.coreServiceUrl, {
+  defaultCredentials: "include",
+  getAccessToken,
+  onUnauthorized: refreshAccessToken,
+});
 
 export const referenceDataResources: ResourceDescriptor[] = [
   {
