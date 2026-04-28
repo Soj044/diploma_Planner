@@ -4,36 +4,63 @@ import { RouterLink, RouterView, useRoute, useRouter } from "vue-router";
 
 import { useAuth } from "../composables/useAuth";
 import { appConfig, frontendAssumptions } from "../config/env";
+import type { AuthRole } from "../types/api";
 
 const route = useRoute();
 const router = useRouter();
 const auth = useAuth();
 
-const navigation = [
+interface NavigationItem {
+  label: string;
+  to: string;
+  roles: AuthRole[];
+}
+
+const navigation: NavigationItem[] = [
   {
     label: "Shell",
     to: "/",
+    roles: ["admin", "manager", "employee"],
   },
   {
     label: "Reference Data",
     to: "/reference-data",
+    roles: ["admin", "manager"],
   },
   {
     label: "Tasks",
     to: "/tasks",
+    roles: ["admin", "manager", "employee"],
   },
   {
     label: "Planning",
     to: "/planning",
+    roles: ["admin", "manager"],
   },
   {
     label: "Assignments",
     to: "/assignments",
+    roles: ["admin", "manager"],
   },
-] as const;
+  {
+    label: "My Schedule",
+    to: "/my-schedule",
+    roles: ["employee"],
+  },
+  {
+    label: "My Leaves",
+    to: "/my-leaves",
+    roles: ["employee"],
+  },
+];
 
 const pageTitle = computed(() => {
   return typeof route.meta.title === "string" ? route.meta.title : "Workestrator";
+});
+
+const visibleNavigation = computed(() => {
+  const role = auth.role.value;
+  return navigation.filter((item) => role !== null && item.roles.includes(role));
 });
 
 const sessionLabel = computed(() => {
@@ -62,12 +89,13 @@ async function handleLogout() {
         <div class="pill-row">
           <span class="pill">Vue 3 + TypeScript</span>
           <span class="pill is-warm">Token auth flow</span>
+          <span v-if="auth.role.value" class="pill">{{ auth.role.value }}</span>
         </div>
       </div>
 
       <nav class="nav-card" aria-label="Main navigation">
         <RouterLink
-          v-for="item in navigation"
+          v-for="item in visibleNavigation"
           :key="item.to"
           :to="item.to"
           class="nav-link"

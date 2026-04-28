@@ -1,13 +1,23 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, ref } from "vue";
 
 import TaskEditorSection from "../components/tasks/TaskEditorSection.vue";
 import TaskRequirementsSection from "../components/tasks/TaskRequirementsSection.vue";
 import SectionPlaceholder from "../components/SectionPlaceholder.vue";
+import { useAuth } from "../composables/useAuth";
 import { taskResources } from "../services/core-service";
 
+const auth = useAuth();
 const selectedTaskId = ref<number | null>(null);
 const taskReloadToken = ref(0);
+
+const taskIntro = computed(() => {
+  if (auth.role.value === "employee") {
+    return "Tasks remain visible to employee users, but editing stays disabled so browser UX does not promise actions that backend RBAC will reject.";
+  }
+
+  return "Tasks and task requirements belong to the core business truth. The frontend now lets a manager create both parts of that flow without re-implementing any planner logic in the browser.";
+});
 
 function handleSelectedTaskChange(taskId: number | null) {
   selectedTaskId.value = taskId;
@@ -23,10 +33,7 @@ function handleTasksUpdated() {
     <section class="page-card">
       <p class="eyebrow">Task Flow</p>
       <h3 class="page-title">Task creation and requirements are now connected</h3>
-      <p class="page-description">
-        Tasks and task requirements belong to the core business truth. The frontend now lets a manager create both parts
-        of that flow without re-implementing any planner logic in the browser.
-      </p>
+      <p class="page-description">{{ taskIntro }}</p>
       <div class="pill-row">
         <span class="pill">/tasks/</span>
         <span class="pill">/task-requirements/</span>
@@ -60,8 +67,7 @@ function handleTasksUpdated() {
     </SectionPlaceholder>
 
     <div class="notice">
-      The next auth migration stage will replace the explicit `created_by_user` picker with the authenticated user from
-      `/api/v1/auth/me`.
+      Task creation now uses the authenticated user from `/api/v1/auth/me` instead of a manual `created_by_user` picker.
     </div>
   </div>
 </template>

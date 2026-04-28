@@ -5,6 +5,8 @@ import { bootstrapAuth, hasRole, isAuthenticated } from "../services/auth-servic
 import AssignmentsView from "../views/AssignmentsView.vue";
 import HomeView from "../views/HomeView.vue";
 import LoginView from "../views/LoginView.vue";
+import MyLeavesView from "../views/MyLeavesView.vue";
+import MyScheduleView from "../views/MyScheduleView.vue";
 import NotFoundView from "../views/NotFoundView.vue";
 import PlanningView from "../views/PlanningView.vue";
 import ReferenceDataView from "../views/ReferenceDataView.vue";
@@ -53,6 +55,7 @@ const routes = [
         meta: {
           title: "Reference Data",
           requiresAuth: true,
+          allowedRoles: ["admin", "manager"],
         },
       },
       {
@@ -71,6 +74,7 @@ const routes = [
         meta: {
           title: "Planning Runs",
           requiresAuth: true,
+          allowedRoles: ["admin", "manager"],
         },
       },
       {
@@ -80,6 +84,27 @@ const routes = [
         meta: {
           title: "Assignments",
           requiresAuth: true,
+          allowedRoles: ["admin", "manager"],
+        },
+      },
+      {
+        path: "my-schedule",
+        name: "my-schedule",
+        component: MyScheduleView,
+        meta: {
+          title: "My Schedule",
+          requiresAuth: true,
+          allowedRoles: ["employee"],
+        },
+      },
+      {
+        path: "my-leaves",
+        name: "my-leaves",
+        component: MyLeavesView,
+        meta: {
+          title: "My Leaves",
+          requiresAuth: true,
+          allowedRoles: ["employee"],
         },
       },
     ],

@@ -7,8 +7,11 @@ Vue 3 + Vite + TypeScript shell for the Workestrator MVP frontend.
 - application scaffold and routing;
 - thin API layer for `core-service` and `planner-service`;
 - local Vite proxy for backend calls during development;
+- token-based auth flow with login, signup, refresh, logout, and me bootstrap;
+- role-aware navigation and guarded routes;
 - live CRUD for `users`, `departments`, `skills`, and `employees`;
 - live task CRUD and task-requirement CRUD;
+- employee self-service CRUD for own work schedules, schedule days, and leaves;
 - placeholder screens for planning runs and assignments.
 
 ## Local setup
@@ -49,11 +52,20 @@ npm run dev
 - list, create, edit, delete departments;
 - list, create, edit, delete skills;
 - list, create, edit, delete employees;
-- explicitly defer employee skills, schedules, leaves, and availability overrides to a later slice.
+- explicitly defer employee skills and availability overrides to a later slice.
 
 ## Current point 6 coverage
 
 - list, create, edit, delete tasks;
 - list, create, edit, delete task requirements;
 - focus task requirements from a selected task in the same screen;
-- keep `created_by_user` explicit until the token-auth migration stage wires task creation to `/auth/me`.
+- create tasks with `created_by_user = me.id`;
+- keep employee task visibility read-only.
+
+## Current Stage 6 coverage
+
+- guest-only `login` and `signup` routes;
+- protected app routes with silent refresh bootstrap;
+- role-aware navigation for `admin`, `manager`, and `employee`;
+- manager/admin-only access to `reference-data`, `planning`, and `assignments`;
+- employee-only `my-schedule` and `my-leaves` self-service routes.

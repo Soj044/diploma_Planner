@@ -201,6 +201,10 @@ a {
   grid-template-columns: minmax(18rem, 26rem) minmax(0, 1fr);
 }
 
+.data-layout-single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .editor-card,
 .records-card {
   border: 1px solid var(--app-line);
