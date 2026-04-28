@@ -18,9 +18,7 @@ import type {
 } from "../types/api";
 import { createJsonClient } from "./http";
 
-const client = createJsonClient(appConfig.coreServiceUrl, {
-  authHeader: appConfig.coreServiceAuthHeader,
-});
+const client = createJsonClient(appConfig.coreServiceUrl);
 
 export const referenceDataResources: ResourceDescriptor[] = [
   {

@@ -60,8 +60,8 @@ function handleTasksUpdated() {
     </SectionPlaceholder>
 
     <div class="notice">
-      `created_by_user` remains an explicit task field in the UI because the frontend still has no dedicated auth flow.
-      The browser does not invent a hidden current-manager identity on its own.
+      The next auth migration stage will replace the explicit `created_by_user` picker with the authenticated user from
+      `/api/v1/auth/me`.
     </div>
   </div>
 </template>

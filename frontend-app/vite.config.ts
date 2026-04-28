@@ -12,13 +12,14 @@ export default defineConfig(({ mode }) => {
       host: "0.0.0.0",
       port: 5173,
       proxy: {
-        "/core-api": {
+        "/api": {
           target: coreProxyTarget,
           changeOrigin: true,
         },
         "/planner-api": {
           target: plannerProxyTarget,
           changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/planner-api/, ""),
         },
       },
     },

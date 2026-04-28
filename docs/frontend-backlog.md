@@ -9,6 +9,7 @@ Track frontend delivery slices for `frontend-app` without losing scope boundarie
 - `2026-04-26`: app shell, router, env config, Vite proxy, and thin API layer completed in PR `#5`.
 - `2026-04-27`: point 5 completed for the first practical cut with reference-data CRUD for `users`, `departments`, `skills`, and `employees`.
 - `2026-04-27`: point 6 completed with task CRUD and task-requirement CRUD linked through the Tasks screen.
+- `2026-04-28`: Stage 6 / Stage 1 completed on branch `feature/TASK-06-01-frontend-token-auth`; runtime moved away from Basic auth and dev proxy was realigned for `/api/v1/auth/*` refresh-cookie compatibility.
 
 ## Milestone 1 slices
 
@@ -43,8 +44,8 @@ Reason: they are needed before planning quality and availability logic, but not 
 
 ## Known frontend gaps
 
-- `core-service` still requires authenticated access and there is no dedicated frontend auth flow yet.
-- Local MVP currently relies on `VITE_CORE_SERVICE_BASIC_AUTH` for browser access to core-service.
+- Frontend runtime is aligned to token auth, but login/signup/refresh/logout/me screens and state management are not wired yet.
+- Route guards, role-aware navigation, and employee self-service screens are still missing.
 - core-service still has no Swagger/OpenAPI UI, so frontend work relies on serializers/routes and manual contract reading.
 
 ## Verification baseline
@@ -52,6 +53,15 @@ Reason: they are needed before planning quality and availability logic, but not 
 - `cd frontend-app && npm install`
 - `cd frontend-app && npm run type-check`
 - `cd frontend-app && npm run build`
+
+## Stage 6 progress
+
+- Active branch: `feature/TASK-06-01-frontend-token-auth`
+- Active PR: not opened yet
+- Completed:
+  - Stage 1: runtime and dev proxy realignment
+- Next expected stage:
+  - Stage 2: auth foundation and session lifecycle
 
 ## Next expected slice after point 6
 

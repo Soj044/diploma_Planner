@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import SectionPlaceholder from "../components/SectionPlaceholder.vue";
-import { appConfig } from "../config/env";
+import { appConfig, frontendAssumptions } from "../config/env";
 import { assignmentResources, referenceDataResources, taskResources } from "../services/core-service";
 import { plannerResources } from "../services/planner-service";
 </script>
@@ -13,12 +13,12 @@ import { plannerResources } from "../services/planner-service";
       <p class="page-description">
         `core-service` stays the source of truth for business entities and final assignments.
         `planner-service` keeps persisted plan runs, proposals, and diagnostics.
-        This first frontend slice only adds the browser shell, routing, and API boundaries on top.
+        Frontend runtime is now aligned with the backend token-auth contract and cookie-compatible local proxy paths.
       </p>
       <div class="pill-row">
         <span class="pill">Core endpoints: {{ referenceDataResources.length + taskResources.length + assignmentResources.length }}</span>
         <span class="pill">Planner endpoints: {{ plannerResources.length }}</span>
-        <span class="pill is-warm">{{ appConfig.hasCoreServiceAuth ? "Basic auth configured" : "Auth still needs local credentials" }}</span>
+        <span class="pill is-warm">/api/v1/auth/*</span>
       </div>
     </section>
 
@@ -47,7 +47,7 @@ import { plannerResources } from "../services/planner-service";
           </li>
           <li class="resource-item">
             <p class="resource-label">Local proxy</p>
-            <p class="resource-copy">Vite proxies `/core-api` and `/planner-api` so the browser can reach both backends during dev.</p>
+            <p class="resource-copy">{{ frontendAssumptions.proxy }}</p>
           </li>
         </ul>
       </SectionPlaceholder>
@@ -59,11 +59,11 @@ import { plannerResources } from "../services/planner-service";
       >
         <ul class="resource-list">
           <li class="resource-item">
-            <p class="resource-label">Dedicated frontend auth flow</p>
-            <p class="resource-copy">Local MVP currently assumes explicit Basic auth credentials in `.env.local`.</p>
+            <p class="resource-label">Dedicated auth screens</p>
+            <p class="resource-copy">Login, signup, silent refresh, and role-aware guards still need to be wired into the shell.</p>
           </li>
           <li class="resource-item">
-            <p class="resource-label">Task and planning flows</p>
+            <p class="resource-label">Planning and approval flows</p>
             <p class="resource-copy">Plan runs, proposal review, approvals, and assignments remain ahead after the task flow.</p>
           </li>
           <li class="resource-item">
@@ -87,6 +87,10 @@ import { plannerResources } from "../services/planner-service";
         <li class="key-value-item">
           <span class="key-label">Core service URL</span>
           <span class="key-value">{{ appConfig.coreServiceUrl }}</span>
+        </li>
+        <li class="key-value-item">
+          <span class="key-label">Auth contract</span>
+          <span class="key-value">{{ frontendAssumptions.auth }}</span>
         </li>
         <li class="key-value-item">
           <span class="key-label">Planner service URL</span>

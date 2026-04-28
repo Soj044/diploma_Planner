@@ -45,7 +45,7 @@ const pageTitle = computed(() => {
         </p>
         <div class="pill-row">
           <span class="pill">Vue 3 + TypeScript</span>
-          <span class="pill is-warm">Auth gap explicit</span>
+          <span class="pill is-warm">Token auth flow</span>
         </div>
       </div>
 
@@ -73,10 +73,8 @@ const pageTitle = computed(() => {
             <span class="key-value">{{ appConfig.plannerServiceUrl }}</span>
           </li>
           <li class="key-value-item">
-            <span class="key-label">Core auth</span>
-            <span class="key-value">
-              {{ appConfig.hasCoreServiceAuth ? "Basic credentials configured" : "Not configured yet" }}
-            </span>
+            <span class="key-label">Auth path</span>
+            <span class="key-value">/api/v1/auth/*</span>
           </li>
         </ul>
       </div>
