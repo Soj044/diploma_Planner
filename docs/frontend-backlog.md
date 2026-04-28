@@ -58,7 +58,7 @@ Reason: `work-schedules`, `work-schedule-days`, and `employee-leaves` were inten
 ## Stage 6 progress
 
 - Active branch: `feature/TASK-06-02-frontend-rbac-self-service`
-- Active PR: PR `#9` covers stages 1-2; stacked PR for stages 3-5 will be opened after final verification
+- Active PR: PR `#10` stacks on PR `#9`
 - Completed:
   - Stage 1: runtime and dev proxy realignment
   - Stage 2: auth foundation and session lifecycle
