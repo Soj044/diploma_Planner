@@ -64,6 +64,8 @@ docker compose up --build
 - As employee, verify sidebar hides `Reference Data`, `Planning`, and `Assignments`, and instead shows `My Schedule` and `My Leaves`.
 - On `Reference Data`, verify manager does not see `users` CRUD and only gets the allowed action set for departments, skills, and employees.
 - On `Tasks`, verify task create uses the authenticated user from `/auth/me` and no longer requires reading `/users/`.
+- On `Planning`, verify manager/admin can launch a plan run with period-only scope, optional department filter, and optional selected task subset.
+- Verify the planning launch summary shows the returned `plan_run_id`, status, assigned count, and unassigned count after `POST /api/v1/plan-runs`.
 - As employee, verify `Tasks` and `Task Requirements` are read-only.
 - On `My Schedule`, verify employee CRUD for own `work-schedules` and `work-schedule-days`.
 - On `My Leaves`, verify employee CRUD for own `employee-leaves`.

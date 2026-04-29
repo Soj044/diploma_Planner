@@ -62,6 +62,14 @@ npm run dev
 - create tasks with `created_by_user = me.id`;
 - keep employee task visibility read-only.
 
+## Current point 7 coverage
+
+- launch persisted plan runs from the `Planning` screen;
+- collect `planning_period_start`, `planning_period_end`, optional `department_id`, and optional `task_ids`;
+- derive `initiated_by_user_id` from the authenticated manager/admin session;
+- show immediate run summary after `POST /api/v1/plan-runs`;
+- intentionally defer full proposal and diagnostics review to the next slice.
+
 ## Current Stage 6 coverage
 
 - guest-only `login` and `signup` routes;
