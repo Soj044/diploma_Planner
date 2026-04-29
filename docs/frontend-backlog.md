@@ -14,6 +14,9 @@ Track frontend delivery slices for `frontend-app` without losing scope boundarie
 - `2026-04-28`: Stage 6 / Stage 3 completed on branch `feature/TASK-06-02-frontend-rbac-self-service`; navigation and route access now react to backend roles, and employee-only self-service routes were reserved.
 - `2026-04-28`: Stage 6 / Stage 4 completed on branch `feature/TASK-06-02-frontend-rbac-self-service`; existing reference-data and task screens were pruned so frontend no longer advertises actions that backend RBAC will reject.
 - `2026-04-28`: Stage 6 / Stage 5 completed on branch `feature/TASK-06-02-frontend-rbac-self-service`; employee self-service CRUD for schedules, schedule days, and leaves is now live, and frontend docs were updated to the token-auth runtime.
+- `2026-04-29`: point 7 completed on branch `feature/TASK-00-07-plan-run-launch`; managers/admins can now launch persisted plan runs from the frontend with period, optional department scope, and optional task subset selection.
+- `2026-04-29`: point 8 completed on branch `feature/TASK-00-08-proposal-review`; managers/admins can now reload a persisted `plan_run_id` and review proposals, diagnostics, and solver statistics from planner-service.
+- `2026-04-29`: point 9 completed on branch `feature/TASK-00-09-manager-approval-flow`; managers/admins can now approve the selected persisted proposal and let `core-service` create the final `Assignment`.
 
 ## Milestone 1 slices
 
@@ -22,9 +25,9 @@ Track frontend delivery slices for `frontend-app` without losing scope boundarie
 | 1 | App shell and navigation | done | Vue 3 + Vite + TypeScript scaffold, layout, routes, API modules |
 | 2 | Reference data CRUD needed before task creation | done | Implemented for `users`, `departments`, `skills`, `employees` |
 | 3 | Task creation and task requirements | done | Implemented for `tasks` and `task-requirements` with linked selection flow |
-| 4 | Plan run launch | pending | Use `POST /api/v1/plan-runs` only |
-| 5 | Proposal and diagnostics review | pending | Read persisted planner artifacts via `GET /api/v1/plan-runs/{plan_run_id}` |
-| 6 | Final assignment approval | pending | Handoff only `task + employee + source_plan_run_id` to core-service |
+| 4 | Plan run launch | done | Manager/admin launch form uses `POST /api/v1/plan-runs` with auth-derived initiator |
+| 5 | Proposal and diagnostics review | done | Persisted review screen reads `GET /api/v1/plan-runs/{plan_run_id}` and renders proposals, diagnostics, and solver stats |
+| 6 | Final assignment approval | done | Approval now happens from the `Planning` persisted review screen via `/assignments/approve-proposal/` |
 | 7 | Assignments read-only view | pending | Final business truth comes from `/api/v1/assignments/` |
 
 ## Point 5 scope decision
@@ -45,8 +48,7 @@ Reason: `work-schedules`, `work-schedule-days`, and `employee-leaves` were inten
 
 ## Known frontend gaps
 
-- Planning run launch UI is still pending on top of the new auth and RBAC foundation.
-- Proposal review, assignment approval, and final assignments read-only screens are still pending.
+- Final assignments read-only screen is still pending.
 - core-service still has no Swagger/OpenAPI UI, so frontend work relies on serializers/routes and manual contract reading.
 
 ## Verification baseline
@@ -68,6 +70,6 @@ Reason: `work-schedules`, `work-schedule-days`, and `employee-leaves` were inten
 - Next expected stage:
   - Stage 6 auth migration complete
 
-## Next expected slice after point 6
+## Next expected slice after point 9
 
-- implement plan run launch and proposal review on top of the new token-auth and RBAC foundation.
+- implement read-only final assignments view backed by `/api/v1/assignments/`.

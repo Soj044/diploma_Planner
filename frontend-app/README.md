@@ -12,7 +12,8 @@ Vue 3 + Vite + TypeScript shell for the Workestrator MVP frontend.
 - live CRUD for `users`, `departments`, `skills`, and `employees`;
 - live task CRUD and task-requirement CRUD;
 - employee self-service CRUD for own work schedules, schedule days, and leaves;
-- placeholder screens for planning runs and assignments.
+- live planning run launch, persisted proposal review, and manager approval handoff;
+- placeholder assignments read-only screen.
 
 ## Local setup
 
@@ -61,6 +62,28 @@ npm run dev
 - focus task requirements from a selected task in the same screen;
 - create tasks with `created_by_user = me.id`;
 - keep employee task visibility read-only.
+
+## Current point 7 coverage
+
+- launch persisted plan runs from the `Planning` screen;
+- collect `planning_period_start`, `planning_period_end`, optional `department_id`, and optional `task_ids`;
+- derive `initiated_by_user_id` from the authenticated manager/admin session;
+- show immediate run summary after `POST /api/v1/plan-runs`;
+- intentionally defer full proposal and diagnostics review to the next slice.
+
+## Current point 8 coverage
+
+- reload persisted plan runs by `plan_run_id` from the same `Planning` screen;
+- render proposal list with task/employee labels, score, rank, selected marker, timing, and explanation text;
+- render unassigned task diagnostics and persisted solver statistics;
+- keep planner artifacts read-only even while enabling separate approval handoff.
+
+## Current point 9 coverage
+
+- approve the selected persisted proposal from the `Planning` screen;
+- send only `task`, `employee`, `source_plan_run_id`, and optional `notes` to `POST /api/v1/assignments/approve-proposal/`;
+- show the created final `Assignment` summary returned by `core-service`;
+- keep final assignments list as the next pending slice.
 
 ## Current Stage 6 coverage
 
