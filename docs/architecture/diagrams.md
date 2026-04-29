@@ -20,7 +20,7 @@ planner-service -> planner artifact store: save run + snapshot + proposals + dia
 planner-service -> frontend-app: assignment proposals + diagnostics
 frontend-app -> planner-service: GET /api/v1/plan-runs/{id}
 frontend-app -> core-service: POST /api/v1/assignments/approve-proposal/
-core-service -> planner-service: GET /api/v1/plan-runs/{id}
+core-service -> planner-service: GET /api/v1/plan-runs/{id} + X-Internal-Service-Token
 core-service -> core database: store final approved assignments
 ```
 
@@ -29,7 +29,7 @@ core-service -> core database: store final approved assignments
 ```text
 manager -> planner-service: review proposal
 manager -> core-service: POST /api/v1/assignments/approve-proposal/
-core-service -> planner-service: GET /api/v1/plan-runs/{id}
+core-service -> planner-service: GET /api/v1/plan-runs/{id} + X-Internal-Service-Token
 core-service: validate run status + proposal pair + idempotency
 core-service -> core database: create approved Assignment + AssignmentChangeLog
 planner-service: keeps proposal immutable as planning artifact only
@@ -96,6 +96,7 @@ core-service -> frontend-app: rotated refresh cookie + new access token
 frontend-app -> planner-service: Authorization: Bearer <access>
 planner-service -> core-service: POST /api/v1/auth/introspect + X-Internal-Service-Token
 core-service -> planner-service: user_id + role + is_active + employee_id
+core-service -> planner-service: persisted approval reread via X-Internal-Service-Token
 ```
 
 ## RBAC Boundary (Core-Service)

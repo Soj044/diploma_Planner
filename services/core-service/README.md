@@ -84,6 +84,7 @@ from a selected persisted planner proposal. The request accepts:
 - optional `notes`
 
 During approval, `core-service` reads the persisted planner run from `planner-service`,
+using the shared `INTERNAL_SERVICE_TOKEN`,
 re-validates the requested proposal, keeps the operation idempotent for the same
 `task + employee + source_plan_run_id`, and writes the final `Assignment` plus
 `AssignmentChangeLog` in the core database. Planner proposals remain artifacts only.

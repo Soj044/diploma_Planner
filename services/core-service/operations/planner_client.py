@@ -21,8 +21,9 @@ class PlannerServiceError(Exception):
 class PlannerServiceClient:
     """Fetch persisted plan runs from planner-service over HTTP."""
 
-    def __init__(self, base_url: str, timeout_seconds: float = 10.0) -> None:
+    def __init__(self, base_url: str, internal_service_token: str = "", timeout_seconds: float = 10.0) -> None:
         self._base_url = base_url.rstrip("/")
+        self._internal_service_token = internal_service_token
         self._timeout_seconds = timeout_seconds
 
     def fetch_plan_run(self, plan_run_id: str) -> PlanResponse:
@@ -31,7 +32,7 @@ class PlannerServiceClient:
         # Core validates manager approval against persisted planner output, not against client-supplied timing fields.
         http_request = Request(
             url=f"{self._base_url}/api/v1/plan-runs/{plan_run_id}",
-            headers={"Accept": "application/json"},
+            headers=self._build_headers(),
             method="GET",
         )
         try:
@@ -46,3 +47,9 @@ class PlannerServiceClient:
             return PlanResponse.model_validate(payload)
         except ValidationError as exc:
             raise PlannerServiceError("planner-service returned an invalid plan run payload") from exc
+
+    def _build_headers(self) -> dict[str, str]:
+        headers = {"Accept": "application/json"}
+        if self._internal_service_token:
+            headers["X-Internal-Service-Token"] = self._internal_service_token
+        return headers

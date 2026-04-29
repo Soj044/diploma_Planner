@@ -5,6 +5,8 @@
 snapshot client и planner artifact repository.
 """
 
+import secrets
+
 from fastapi import APIRouter, Depends, Header, HTTPException
 
 from contracts.schemas import CreatePlanRunRequest, PlanResponse
@@ -55,6 +57,25 @@ def require_planner_access(authorization: str | None = Header(default=None)) -> 
     return context
 
 
+def has_valid_internal_service_token(internal_service_token: str | None) -> bool:
+    """Allow trusted core-service rereads during approval handoff."""
+
+    if not INTERNAL_SERVICE_TOKEN or not internal_service_token:
+        return False
+    return secrets.compare_digest(internal_service_token, INTERNAL_SERVICE_TOKEN)
+
+
+def require_plan_run_read_access(
+    authorization: str | None = Header(default=None),
+    internal_service_token: str | None = Header(default=None, alias="X-Internal-Service-Token"),
+) -> AuthenticatedUserContext | None:
+    """Allow manager/admin reads and internal core-service rereads of persisted plan runs."""
+
+    if has_valid_internal_service_token(internal_service_token):
+        return None
+    return require_planner_access(authorization)
+
+
 @router.post("", response_model=PlanResponse)
 def create_plan_run(
     payload: CreatePlanRunRequest,
@@ -69,7 +90,7 @@ def create_plan_run(
 @router.get("/{plan_run_id}", response_model=PlanResponse)
 def get_plan_run(
     plan_run_id: str,
-    _: AuthenticatedUserContext = Depends(require_planner_access),
+    _: AuthenticatedUserContext | None = Depends(require_plan_run_read_access),
 ) -> PlanResponse:
     run = service.get(plan_run_id)
     if run is None:

@@ -41,7 +41,13 @@ def approve_planner_proposal(
         return existing_assignment
 
     # Core reads the persisted planner artifact instead of trusting assignment timing from client payloads.
-    plan_run = (planner_client or PlannerServiceClient(settings.PLANNER_SERVICE_URL)).fetch_plan_run(str(source_plan_run_id))
+    plan_run = (
+        planner_client
+        or PlannerServiceClient(
+            settings.PLANNER_SERVICE_URL,
+            internal_service_token=settings.INTERNAL_SERVICE_TOKEN,
+        )
+    ).fetch_plan_run(str(source_plan_run_id))
     proposal = _find_matching_proposal(plan_run, str(task.id), str(employee.id))
     _validate_planner_handoff(plan_run, proposal, task, employee)
 

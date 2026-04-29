@@ -16,7 +16,7 @@
 - core-service auth: public signup/login, refresh via HttpOnly cookie, logout cookie clear, `me` payload shape, inactive user login/refresh denial, introspection allowed only with internal token
 - core-service user profile sync: manager/employee user create and role-change auto-create `Employee` profile; employee->admin role change keeps existing profile
 - core-service RBAC: role matrix checks for admin/manager/employee, employee self-scope checks for schedule/leaves, manager-only approval path, and admin-only users API
-- core-service approval flow: persisted planner proposal lookup, idempotent replay for the same `task + employee + source_plan_run_id`, rejection of missing or non-selected proposals, rejection of second final assignment for one task, upstream planner failure handling
+- core-service approval flow: persisted planner proposal lookup, idempotent replay for the same `task + employee + source_plan_run_id`, rejection of missing or non-selected proposals, rejection of second final assignment for one task, upstream planner failure handling, and internal-token reread of planner-service after planner auth gate
 - planner-service: unit and integration tests for planning pipeline, `CreatePlanRunRequest` boundary, snapshot client failure handling, SQLite persistence of run/snapshot/proposals/unassigned/solver stats, persisted run retrieval for manager review, overlap conflict diagnostics, and weighted score stability
 - planner-service auth gate: Bearer header validation, deny employee role, allow manager/admin role, and controlled `503` when core introspection is unavailable
 - frontend-app: install dependencies, type-check the Vue shell, build production bundle, and manually verify token auth, guarded routing, RBAC gating, and employee self-service CRUD
@@ -72,6 +72,9 @@ docker compose up --build
 - Verify approval sends only `task`, `employee`, `source_plan_run_id`, and optional notes to `POST /api/v1/assignments/approve-proposal/`.
 - Verify the approval success state shows the returned final `Assignment` summary from `core-service`.
 - Verify the browser does not ask the manager to re-enter assignment dates or planned hours during approval.
+- On `Assignments`, verify the read-only list loads persisted records from `GET /api/v1/assignments/`.
+- Verify assignment filters stay local-only and do not mutate backend state.
+- If browser automation is unavailable in the environment, fall back to a live proxy smoke that still exercises `frontend -> /api|/planner-api -> core/planner` on real services.
 - As employee, verify `Tasks` and `Task Requirements` are read-only.
 - On `My Schedule`, verify employee CRUD for own `work-schedules` and `work-schedule-days`.
 - On `My Leaves`, verify employee CRUD for own `employee-leaves`.

@@ -131,7 +131,7 @@ export const assignmentResources: ResourceDescriptor[] = [
     label: "Assignments",
     endpoint: "/assignments/",
     description: "Final approved assignments stored only in core-service.",
-    nextStep: "Next slice: add read-only list first, then filtered detail cards.",
+    nextStep: "Implemented in point 10: read-only list with local filters and backend-owned business truth.",
     requiresAuth: true,
   },
   {

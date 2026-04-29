@@ -17,11 +17,11 @@
 - запуск planning run через `planner-service`
 - persisted review proposals и diagnostics
 - manager approval flow через `POST /api/v1/assignments/approve-proposal/`
+- read-only экран итоговых assignments во frontend
 - employee self-service для своих schedules и leaves
 
 ## Что еще не реализовано
 
-- read-only экран итоговых assignments во frontend
 - AI/RAG слой
 - сложные уведомления, realtime и внешние интеграции
 
@@ -126,6 +126,7 @@ Frontend будет доступен по адресу:
 6. Запустить `plan run`
 7. Перезагрузить persisted run по `plan_run_id`
 8. Выбрать selected proposal и выполнить approval
+9. Открыть `Assignments` и проверить, что final `Assignment` появился в read-only списке
 
 ### Employee flow
 

@@ -22,14 +22,14 @@ FastAPI сервис планирования для MVP.
 
 - `GET /health`
 - `POST /api/v1/plan-runs` with `CreatePlanRunRequest` (requires Bearer token, `admin|manager`)
-- `GET /api/v1/plan-runs/{plan_run_id}` (requires Bearer token, `admin|manager`)
+- `GET /api/v1/plan-runs/{plan_run_id}` (requires Bearer token, `admin|manager`, or trusted internal reread token from `core-service`)
 
 ## Review and approval handoff
 
 - Manager reviews persisted proposals via `GET /api/v1/plan-runs/{plan_run_id}`.
 - Final approval is not stored in planner-service.
 - `core-service` receives `task`, `employee`, `source_plan_run_id`, then re-reads the
-  persisted plan run from planner-service before creating the final `Assignment`.
+  persisted plan run from planner-service with `X-Internal-Service-Token` before creating the final `Assignment`.
 - Planner proposals stay immutable artifacts after run completion.
 
 ## Hardening status

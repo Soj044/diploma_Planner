@@ -17,6 +17,8 @@ Track frontend delivery slices for `frontend-app` without losing scope boundarie
 - `2026-04-29`: point 7 completed on branch `feature/TASK-00-07-plan-run-launch`; managers/admins can now launch persisted plan runs from the frontend with period, optional department scope, and optional task subset selection.
 - `2026-04-29`: point 8 completed on branch `feature/TASK-00-08-proposal-review`; managers/admins can now reload a persisted `plan_run_id` and review proposals, diagnostics, and solver statistics from planner-service.
 - `2026-04-29`: point 9 completed on branch `feature/TASK-00-09-manager-approval-flow`; managers/admins can now approve the selected persisted proposal and let `core-service` create the final `Assignment`.
+- `2026-04-29`: point 10 completed on branch `feature/TASK-00-06-task-creation-flow`; managers/admins can now inspect final assignments in a read-only screen backed by `GET /api/v1/assignments/`.
+- `2026-04-29`: live proxy smoke against real `core-service` and `planner-service` completed on branch `feature/TASK-00-06-task-creation-flow`; manager and employee runtime flows now pass through the frontend proxy boundary.
 
 ## Milestone 1 slices
 
@@ -28,7 +30,7 @@ Track frontend delivery slices for `frontend-app` without losing scope boundarie
 | 4 | Plan run launch | done | Manager/admin launch form uses `POST /api/v1/plan-runs` with auth-derived initiator |
 | 5 | Proposal and diagnostics review | done | Persisted review screen reads `GET /api/v1/plan-runs/{plan_run_id}` and renders proposals, diagnostics, and solver stats |
 | 6 | Final assignment approval | done | Approval now happens from the `Planning` persisted review screen via `/assignments/approve-proposal/` |
-| 7 | Assignments read-only view | pending | Final business truth comes from `/api/v1/assignments/` |
+| 7 | Assignments read-only view | done | Frontend now reads final assignments from `/api/v1/assignments/` with local-only filters |
 
 ## Point 5 scope decision
 
@@ -48,8 +50,8 @@ Reason: `work-schedules`, `work-schedule-days`, and `employee-leaves` were inten
 
 ## Known frontend gaps
 
-- Final assignments read-only screen is still pending.
 - core-service still has no Swagger/OpenAPI UI, so frontend work relies on serializers/routes and manual contract reading.
+- In the current agent environment, true headless browser access to `127.0.0.1:5173` timed out, so the final live smoke was executed through the real frontend proxy boundary from inside `frontend-smoke` rather than by DOM-level browser automation.
 
 ## Verification baseline
 
@@ -59,17 +61,15 @@ Reason: `work-schedules`, `work-schedule-days`, and `employee-leaves` were inten
 
 ## Stage 6 progress
 
-- Active branch: `feature/TASK-06-02-frontend-rbac-self-service`
-- Active PR: PR `#10` stacks on PR `#9`
+- Merge status: Stage 6 auth migration is already merged into `feature/TASK-00-06-task-creation-flow`
 - Completed:
   - Stage 1: runtime and dev proxy realignment
   - Stage 2: auth foundation and session lifecycle
   - Stage 3: role-aware navigation and route guards
   - Stage 4: RBAC migration for existing screens
   - Stage 5: employee self-service and final docs pass
-- Next expected stage:
   - Stage 6 auth migration complete
 
-## Next expected slice after point 9
+## Next expected slice after point 10
 
-- implement read-only final assignments view backed by `/api/v1/assignments/`.
+- Frontend Milestone 1 is complete; the next slice should be chosen explicitly from a new backlog decision.

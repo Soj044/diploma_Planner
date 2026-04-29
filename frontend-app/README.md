@@ -13,7 +13,7 @@ Vue 3 + Vite + TypeScript shell for the Workestrator MVP frontend.
 - live task CRUD and task-requirement CRUD;
 - employee self-service CRUD for own work schedules, schedule days, and leaves;
 - live planning run launch, persisted proposal review, and manager approval handoff;
-- placeholder assignments read-only screen.
+- live read-only assignments screen backed by `core-service`.
 
 ## Local setup
 
@@ -83,7 +83,19 @@ npm run dev
 - approve the selected persisted proposal from the `Planning` screen;
 - send only `task`, `employee`, `source_plan_run_id`, and optional `notes` to `POST /api/v1/assignments/approve-proposal/`;
 - show the created final `Assignment` summary returned by `core-service`;
-- keep final assignments list as the next pending slice.
+- keep final assignments creation authority in `core-service`.
+
+## Current point 10 coverage
+
+- read final assignments directly from `GET /api/v1/assignments/`;
+- show task and employee labels alongside persisted assignment timing and notes;
+- keep the screen read-only with only local UX filters, not frontend-owned business state.
+
+## Current milestone status
+
+- frontend milestone 1 is functionally complete;
+- manager flow now covers task creation, plan run launch, persisted proposal review, approval, and read-only assignments;
+- employee flow covers signup, guarded routing, own schedules, own schedule days, and own leaves.
 
 ## Current Stage 6 coverage
 
