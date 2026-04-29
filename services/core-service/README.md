@@ -16,14 +16,23 @@ Django + DRF сервис с бизнес-сущностями и хранени
 - `JWT_REFRESH_COOKIE_SECURE`
 - `JWT_REFRESH_COOKIE_SAMESITE`
 - `JWT_REFRESH_COOKIE_PATH`
+- `CORE_DB_AUTO_RESET_ON_INCONSISTENT_MIGRATIONS`
 - `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_HOST`, `POSTGRES_PORT`
 
 ## Запуск
 
 ```bash
 poetry install
-poetry run python manage.py migrate
+poetry run python manage.py safe_migrate
 poetry run python manage.py runserver 0.0.0.0:8000
+```
+
+`safe_migrate` runs normal migrations and, for local PostgreSQL only, can auto-recover from
+`InconsistentMigrationHistory` by resetting `public` schema and retrying migrations.
+Disable this behavior by setting:
+
+```bash
+CORE_DB_AUTO_RESET_ON_INCONSISTENT_MIGRATIONS=false
 ```
 
 Для быстрых unit-проверок без локального PostgreSQL контейнера:

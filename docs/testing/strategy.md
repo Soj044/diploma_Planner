@@ -30,7 +30,7 @@ cd services/core-service
 poetry install
 poetry run python manage.py makemigrations --check
 poetry run python manage.py check
-poetry run python manage.py migrate
+poetry run python manage.py safe_migrate
 poetry run python manage.py test
 
 # Core service quick unit checks without a local PostgreSQL container
@@ -55,7 +55,9 @@ docker compose up --build
 docker compose up --build frontend-app
 ```
 
-If `core-service` fails with `InconsistentMigrationHistory` because of an old local PostgreSQL volume, reset the local compose database before repeating the smoke:
+If `core-service` detects `InconsistentMigrationHistory` in local PostgreSQL, `safe_migrate` can auto-recover
+by resetting `public` schema when `CORE_DB_AUTO_RESET_ON_INCONSISTENT_MIGRATIONS=true` (default).
+If you prefer manual full reset before repeating the smoke:
 
 ```bash
 docker compose down -v

@@ -65,6 +65,15 @@ docker compose up --build
 
 Это удалит локальные контейнерные данные PostgreSQL и пересоздаст БД заново.
 
+По умолчанию `core-service` теперь запускается через `python manage.py safe_migrate`.
+Если при старом локальном volume обнаруживается `InconsistentMigrationHistory`, сервис автоматически
+сбрасывает `public` schema в локальном PostgreSQL контейнере и повторяет миграции.
+Отключить этот recovery можно переменной:
+
+```bash
+CORE_DB_AUTO_RESET_ON_INCONSISTENT_MIGRATIONS=false
+```
+
 ### 3. Создать пользователя для manager/admin flows
 
 Публичный `signup` во frontend создает только `employee` account.
