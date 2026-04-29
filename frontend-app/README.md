@@ -17,6 +17,23 @@ Vue 3 + Vite + TypeScript shell for the Workestrator MVP frontend.
 
 ## Local setup
 
+### Option 1: Docker Compose dev runtime
+
+From the repository root:
+
+```bash
+docker compose up --build frontend-app
+```
+
+This starts the Vite dev server inside the `frontend-app` container and proxies:
+
+- `/api/*` -> `core-service`
+- `/planner-api/*` -> `planner-service`
+
+Frontend becomes available at `http://localhost:5173`.
+
+### Option 2: Standalone Vite on the host
+
 ```bash
 cd frontend-app
 cp .env.example .env.local
@@ -30,6 +47,7 @@ npm run dev
 - `VITE_PLANNER_SERVICE_URL` defaults to `/planner-api/api/v1`
 - `VITE_CORE_SERVICE_PROXY_TARGET` defaults to `http://localhost:8000`
 - `VITE_PLANNER_SERVICE_PROXY_TARGET` defaults to `http://localhost:8001`
+- in `docker compose`, proxy targets are overridden to `http://core-service:8000` and `http://planner-service:8001`
 
 ## Runtime routing
 

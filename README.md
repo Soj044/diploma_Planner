@@ -28,8 +28,7 @@
 ## Требования
 
 - Docker + Docker Compose
-- Node.js 18+
-- npm
+- Node.js 18+ и npm только если ты хочешь запускать `frontend-app` вне Docker
 
 ## Быстрый запуск всего проекта
 
@@ -43,7 +42,7 @@ cp .env.example .env
 
 Текущий `.env.example` уже достаточен для локального MVP запуска.
 
-### 2. Поднять backend и базу
+### 2. Поднять весь dev runtime
 
 ```bash
 docker compose up --build
@@ -55,6 +54,16 @@ docker compose up --build
 - `Django admin`: `http://localhost:8000/admin/`
 - `planner-service health`: `http://localhost:8001/health`
 - `planner-service docs`: `http://localhost:8001/docs`
+- `frontend-app`: `http://localhost:5173`
+
+Если `core-service` падает с `InconsistentMigrationHistory`, значит локальный `postgres_data` volume остался от более старой схемы. Для чистого MVP-старта:
+
+```bash
+docker compose down -v
+docker compose up --build
+```
+
+Это удалит локальные контейнерные данные PostgreSQL и пересоздаст БД заново.
 
 ### 3. Создать пользователя для manager/admin flows
 
@@ -75,9 +84,14 @@ docker exec -it workestrator-core python manage.py createsuperuser
 
 Если нужен обычный employee-пользователь, его можно создать прямо из frontend через `signup`.
 
-### 4. Поднять frontend
+### 4. Открыть frontend
 
-В отдельном терминале:
+- `http://localhost:5173/login`
+- `http://localhost:5173/signup`
+
+## Альтернативный запуск frontend вне Docker
+
+Если удобнее работать с `frontend-app` напрямую на хосте:
 
 ```bash
 cd frontend-app
@@ -86,9 +100,10 @@ npm install
 npm run dev
 ```
 
-Frontend будет доступен по адресу:
+В этом режиме:
 
-- `http://localhost:5173`
+- backend всё равно должен быть поднят через `docker compose up --build`
+- frontend тоже будет доступен на `http://localhost:5173`
 
 ### 5. Открыть приложение
 
@@ -105,14 +120,15 @@ Frontend будет доступен по адресу:
 - `core-service` вызывается через `/api/v1/*`
 - auth endpoints вызываются через `/api/v1/auth/*`
 - `planner-service` вызывается через `/planner-api/api/v1/*`
-- Vite proxy нужен только для локальной разработки
+- Vite proxy используется и в standalone-режиме, и внутри `frontend-app` container
 - refresh token хранится в HttpOnly cookie
 - access token хранится только в памяти frontend
 
 Важно:
 
 - frontend больше не использует Basic auth workaround
-- для локальной разработки backend должен быть поднят до открытия UI
+- при запуске через `docker compose` frontend автоматически проксирует `core-service` и `planner-service` по именам compose-сервисов
+- при standalone-запуске frontend использует `localhost` proxy targets из `frontend-app/.env.example`
 
 ## Минимальный ручной сценарий проверки
 
@@ -170,6 +186,14 @@ poetry run uvicorn app.main:app --host 0.0.0.0 --port 8001
 ```
 
 ### frontend-app
+
+Через Docker Compose:
+
+```bash
+docker compose up --build frontend-app
+```
+
+Или напрямую на хосте:
 
 ```bash
 cd frontend-app

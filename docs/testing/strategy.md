@@ -19,7 +19,7 @@
 - core-service approval flow: persisted planner proposal lookup, idempotent replay for the same `task + employee + source_plan_run_id`, rejection of missing or non-selected proposals, rejection of second final assignment for one task, upstream planner failure handling, and internal-token reread of planner-service after planner auth gate
 - planner-service: unit and integration tests for planning pipeline, `CreatePlanRunRequest` boundary, snapshot client failure handling, SQLite persistence of run/snapshot/proposals/unassigned/solver stats, persisted run retrieval for manager review, overlap conflict diagnostics, and weighted score stability
 - planner-service auth gate: Bearer header validation, deny employee role, allow manager/admin role, and controlled `503` when core introspection is unavailable
-- frontend-app: install dependencies, type-check the Vue shell, build production bundle, and manually verify token auth, guarded routing, RBAC gating, and employee self-service CRUD
+- frontend-app: install dependencies, type-check the Vue shell, build production bundle, verify containerized Vite startup via `docker compose`, and manually verify token auth, guarded routing, RBAC gating, and employee self-service CRUD
 - contracts: schema compatibility between services
 
 ## Suggested MVP Commands
@@ -50,10 +50,22 @@ npm run build
 # Container smoke
 cd /path/to/repo
 docker compose up --build
+
+# Frontend container only
+docker compose up --build frontend-app
+```
+
+If `core-service` fails with `InconsistentMigrationHistory` because of an old local PostgreSQL volume, reset the local compose database before repeating the smoke:
+
+```bash
+docker compose down -v
+docker compose up --build
 ```
 
 ## Frontend Manual Smoke
 
+- Preferred runtime: `docker compose up --build` from the repository root.
+- Optional alternative: start backend in Docker and run `frontend-app` on the host with `npm run dev`.
 - Start backend services and the frontend shell locally.
 - Open `http://localhost:5173`.
 - As anonymous user, verify protected routes redirect to `/login` and `/signup` stays guest-only.

@@ -24,8 +24,9 @@
   - `postgres` as primary database for `core-service`
   - `core-service` API on port `8000`
   - `planner-service` API on port `8001`
-- `frontend-app` currently runs as a separate Vite dev server on port `5173`
-- local frontend development uses Vite proxies `/api` -> `core-service` and `/planner-api` -> `planner-service`
+  - `frontend-app` as a Vite dev container on port `5173`
+- `frontend-app` can still run standalone on the host when faster UI iteration is needed
+- frontend development uses Vite proxies `/api` -> `core-service` and `/planner-api` -> `planner-service`
 
 ## Main Principle
 - `core-service` is the source of truth for employees, schedules, leaves, tasks, and approved assignments.

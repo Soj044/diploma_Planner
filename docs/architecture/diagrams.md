@@ -43,7 +43,8 @@ browser
   v
 +---------------------+
 |    frontend-app     |
-|    vue + vite dev   |
+|  vue + vite dev     |
+| docker compose svc  |
 |       :5173         |
 +----------+----------+
            | /api, /planner-api
@@ -62,6 +63,8 @@ browser
 |  fastapi + or-tools |      |   planner.sqlite3     |
 +---------------------+      +-----------------------+
 ```
+
+`frontend-app` can also be run standalone on the host with `npm run dev`, but `docker compose up --build` is now the default full-stack dev runtime.
 
 ## Frontend Boundary
 

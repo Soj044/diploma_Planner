@@ -19,6 +19,7 @@ Track frontend delivery slices for `frontend-app` without losing scope boundarie
 - `2026-04-29`: point 9 completed on branch `feature/TASK-00-09-manager-approval-flow`; managers/admins can now approve the selected persisted proposal and let `core-service` create the final `Assignment`.
 - `2026-04-29`: point 10 completed on branch `feature/TASK-00-06-task-creation-flow`; managers/admins can now inspect final assignments in a read-only screen backed by `GET /api/v1/assignments/`.
 - `2026-04-29`: live proxy smoke against real `core-service` and `planner-service` completed on branch `feature/TASK-00-06-task-creation-flow`; manager and employee runtime flows now pass through the frontend proxy boundary.
+- `2026-04-29`: frontend dev runtime containerization completed on branch `feature/TASK-00-06-task-creation-flow`; `docker compose up --build` now includes `frontend-app` as a Vite dev container while preserving standalone `npm run dev` as an optional path.
 
 ## Milestone 1 slices
 
@@ -72,4 +73,4 @@ Reason: `work-schedules`, `work-schedule-days`, and `employee-leaves` were inten
 
 ## Next expected slice after point 10
 
-- Frontend Milestone 1 is complete; the next slice should be chosen explicitly from a new backlog decision.
+- Frontend Milestone 1 is complete and the default dev runtime is now full-stack via Docker Compose; the next slice should be chosen explicitly from a new backlog decision.
