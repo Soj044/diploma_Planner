@@ -66,6 +66,8 @@ docker compose up --build
 - On `Tasks`, verify task create uses the authenticated user from `/auth/me` and no longer requires reading `/users/`.
 - On `Planning`, verify manager/admin can launch a plan run with period-only scope, optional department filter, and optional selected task subset.
 - Verify the planning launch summary shows the returned `plan_run_id`, status, assigned count, and unassigned count after `POST /api/v1/plan-runs`.
+- Verify entering a persisted `plan_run_id` reloads the run through `GET /api/v1/plan-runs/{plan_run_id}`.
+- Verify the persisted review screen renders proposals, diagnostics, and solver statistics without exposing approval actions yet.
 - As employee, verify `Tasks` and `Task Requirements` are read-only.
 - On `My Schedule`, verify employee CRUD for own `work-schedules` and `work-schedule-days`.
 - On `My Leaves`, verify employee CRUD for own `employee-leaves`.

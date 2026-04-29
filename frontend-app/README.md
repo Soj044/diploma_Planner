@@ -70,6 +70,13 @@ npm run dev
 - show immediate run summary after `POST /api/v1/plan-runs`;
 - intentionally defer full proposal and diagnostics review to the next slice.
 
+## Current point 8 coverage
+
+- reload persisted plan runs by `plan_run_id` from the same `Planning` screen;
+- render proposal list with task/employee labels, score, rank, selected marker, timing, and explanation text;
+- render unassigned task diagnostics and persisted solver statistics;
+- keep the screen strictly read-only with no approval mutation yet.
+
 ## Current Stage 6 coverage
 
 - guest-only `login` and `signup` routes;

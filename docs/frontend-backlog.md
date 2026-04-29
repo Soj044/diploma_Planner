@@ -15,6 +15,7 @@ Track frontend delivery slices for `frontend-app` without losing scope boundarie
 - `2026-04-28`: Stage 6 / Stage 4 completed on branch `feature/TASK-06-02-frontend-rbac-self-service`; existing reference-data and task screens were pruned so frontend no longer advertises actions that backend RBAC will reject.
 - `2026-04-28`: Stage 6 / Stage 5 completed on branch `feature/TASK-06-02-frontend-rbac-self-service`; employee self-service CRUD for schedules, schedule days, and leaves is now live, and frontend docs were updated to the token-auth runtime.
 - `2026-04-29`: point 7 completed on branch `feature/TASK-00-07-plan-run-launch`; managers/admins can now launch persisted plan runs from the frontend with period, optional department scope, and optional task subset selection.
+- `2026-04-29`: point 8 completed on branch `feature/TASK-00-08-proposal-review`; managers/admins can now reload a persisted `plan_run_id` and review proposals, diagnostics, and solver statistics from planner-service.
 
 ## Milestone 1 slices
 
@@ -24,7 +25,7 @@ Track frontend delivery slices for `frontend-app` without losing scope boundarie
 | 2 | Reference data CRUD needed before task creation | done | Implemented for `users`, `departments`, `skills`, `employees` |
 | 3 | Task creation and task requirements | done | Implemented for `tasks` and `task-requirements` with linked selection flow |
 | 4 | Plan run launch | done | Manager/admin launch form uses `POST /api/v1/plan-runs` with auth-derived initiator |
-| 5 | Proposal and diagnostics review | pending | Read persisted planner artifacts via `GET /api/v1/plan-runs/{plan_run_id}` |
+| 5 | Proposal and diagnostics review | done | Persisted review screen reads `GET /api/v1/plan-runs/{plan_run_id}` and renders proposals, diagnostics, and solver stats |
 | 6 | Final assignment approval | pending | Handoff only `task + employee + source_plan_run_id` to core-service |
 | 7 | Assignments read-only view | pending | Final business truth comes from `/api/v1/assignments/` |
 
@@ -46,7 +47,7 @@ Reason: `work-schedules`, `work-schedule-days`, and `employee-leaves` were inten
 
 ## Known frontend gaps
 
-- Proposal review, assignment approval, and final assignments read-only screens are still pending.
+- Assignment approval and final assignments read-only screens are still pending.
 - core-service still has no Swagger/OpenAPI UI, so frontend work relies on serializers/routes and manual contract reading.
 
 ## Verification baseline
@@ -70,4 +71,4 @@ Reason: `work-schedules`, `work-schedule-days`, and `employee-leaves` were inten
 
 ## Next expected slice after point 6
 
-- implement proposal review on top of persisted planner artifacts returned by `GET /api/v1/plan-runs/{plan_run_id}`.
+- implement manager approval flow on top of the persisted proposal review screen.
