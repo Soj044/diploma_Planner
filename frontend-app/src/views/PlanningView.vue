@@ -6,7 +6,7 @@ import { useAuth } from "../composables/useAuth";
 import { coreService } from "../services/core-service";
 import { describeRequestError } from "../services/http";
 import { plannerService, planRunRequestFields, plannerResources, planningWorkflow } from "../services/planner-service";
-import type { Department, Employee, PlanResponse, Task } from "../types/api";
+import type { Assignment, AssignmentProposal, Department, Employee, PlanResponse, Task } from "../types/api";
 
 interface PlanningFormState {
   planning_period_start: string;
@@ -18,6 +18,10 @@ interface ReviewFormState {
   plan_run_id: string;
 }
 
+interface ApprovalFormState {
+  notes: string;
+}
+
 const auth = useAuth();
 const departments = ref<Department[]>([]);
 const employees = ref<Employee[]>([]);
@@ -25,13 +29,17 @@ const tasks = ref<Task[]>([]);
 const selectedTaskIds = ref<string[]>([]);
 const latestRun = ref<PlanResponse | null>(null);
 const reviewedRun = ref<PlanResponse | null>(null);
+const approvedAssignment = ref<Assignment | null>(null);
 const isLoading = ref(false);
 const isSubmitting = ref(false);
 const isReviewLoading = ref(false);
+const approvingProposalKey = ref("");
 const errorMessage = ref("");
 const successMessage = ref("");
 const reviewErrorMessage = ref("");
 const reviewSuccessMessage = ref("");
+const approvalErrorMessage = ref("");
+const approvalSuccessMessage = ref("");
 
 const form = reactive<PlanningFormState>({
   planning_period_start: "",
@@ -41,6 +49,10 @@ const form = reactive<PlanningFormState>({
 
 const reviewForm = reactive<ReviewFormState>({
   plan_run_id: "",
+});
+
+const approvalForm = reactive<ApprovalFormState>({
+  notes: "",
 });
 
 const scopedTasks = computed(() => {
@@ -68,6 +80,7 @@ const canSubmit = computed(() => {
 });
 
 const selectedTaskCount = computed(() => selectedTaskIds.value.length);
+const selectedProposalCount = computed(() => reviewedProposals.value.filter((proposal) => proposal.is_selected).length);
 
 const reviewedProposals = computed(() => {
   if (!reviewedRun.value) {
@@ -86,6 +99,21 @@ const reviewedProposals = computed(() => {
 const solverStatisticsEntries = computed(() => {
   return reviewedRun.value ? Object.entries(reviewedRun.value.artifacts.solver_statistics) : [];
 });
+
+function proposalKey(proposal: AssignmentProposal) {
+  return `${proposal.task_id}-${proposal.employee_id}-${proposal.proposal_rank}`;
+}
+
+function resetApprovalState() {
+  approvingProposalKey.value = "";
+  approvalErrorMessage.value = "";
+  approvalSuccessMessage.value = "";
+  approvedAssignment.value = null;
+}
+
+function canApproveProposal(proposal: AssignmentProposal) {
+  return proposal.is_selected && Boolean(reviewedRun.value) && Number.isFinite(Number(proposal.task_id)) && Number.isFinite(Number(proposal.employee_id));
+}
 
 watch(
   () => form.department_id,
@@ -124,6 +152,7 @@ async function reviewPlanRun(planRunId = reviewForm.plan_run_id.trim()) {
   isReviewLoading.value = true;
   reviewErrorMessage.value = "";
   reviewSuccessMessage.value = "";
+  resetApprovalState();
 
   try {
     reviewedRun.value = await plannerService.getPlanRun(planRunId);
@@ -147,6 +176,7 @@ async function launchPlanRun() {
   successMessage.value = "";
 
   try {
+    resetApprovalState();
     latestRun.value = await plannerService.createPlanRun({
       planning_period_start: form.planning_period_start,
       planning_period_end: form.planning_period_end,
@@ -165,6 +195,39 @@ async function launchPlanRun() {
   }
 }
 
+async function approveProposal(proposal: AssignmentProposal) {
+  if (!reviewedRun.value) {
+    approvalErrorMessage.value = "Load a persisted plan run before approving a proposal.";
+    return;
+  }
+
+  const taskId = Number(proposal.task_id);
+  const employeeId = Number(proposal.employee_id);
+
+  if (!Number.isFinite(taskId) || !Number.isFinite(employeeId)) {
+    approvalErrorMessage.value = "Planner artifacts returned a proposal with non-numeric task or employee identifiers.";
+    return;
+  }
+
+  approvingProposalKey.value = proposalKey(proposal);
+  approvalErrorMessage.value = "";
+  approvalSuccessMessage.value = "";
+
+  try {
+    approvedAssignment.value = await coreService.approveProposal({
+      task: taskId,
+      employee: employeeId,
+      source_plan_run_id: reviewedRun.value.summary.plan_run_id,
+      notes: approvalForm.notes.trim() || undefined,
+    });
+    approvalSuccessMessage.value = "Selected proposal was approved in core-service.";
+  } catch (error: unknown) {
+    approvalErrorMessage.value = describeRequestError(error);
+  } finally {
+    approvingProposalKey.value = "";
+  }
+}
+
 onMounted(loadPlanningScope);
 </script>
 
@@ -174,8 +237,9 @@ onMounted(loadPlanningScope);
       <p class="eyebrow">Planner-service</p>
       <h3 class="page-title">Launch a persisted planning run</h3>
       <p class="page-description">
-        This screen now covers both the launch command and persisted review of proposals and diagnostics. Browser code
-        still does not recalculate eligibility, scoring, or optimization, and approval remains a separate step.
+        This screen now covers plan run launch, persisted review, and the final approval handoff. Browser code still
+        does not recalculate eligibility, scoring, or optimization, and `core-service` remains the authority for final
+        `Assignment` creation.
       </p>
       <div class="pill-row">
         <span class="pill">/plan-runs</span>
@@ -370,7 +434,8 @@ onMounted(loadPlanningScope);
             <div>
               <p class="section-caption">Review guide</p>
               <p class="resource-copy">
-                Point 8 stops at read-only review. Final approval stays intentionally deferred to the next frontend slice.
+                Review stays persisted and approval remains a thin handoff. The browser sends only `task`, `employee`,
+                `source_plan_run_id`, and optional notes back to `core-service`.
               </p>
             </div>
             <span class="pill">{{ reviewedRun ? "Loaded" : "Waiting for run ID" }}</span>
@@ -383,7 +448,7 @@ onMounted(loadPlanningScope);
             </li>
             <li class="resource-item">
               <p class="resource-label">What does not happen here</p>
-              <p class="resource-copy">No assignment approval and no browser-owned mutation of planner artifacts.</p>
+              <p class="resource-copy">No browser-owned timing, no planner recalculation, and no mutation of persisted planner artifacts.</p>
             </li>
           </ul>
         </div>
@@ -394,8 +459,8 @@ onMounted(loadPlanningScope);
       <p class="eyebrow">Persisted review</p>
       <h3 class="page-title">Reviewing plan run {{ reviewedRun.summary.plan_run_id }}</h3>
       <p class="page-description">
-        This data is reloaded from persisted planner artifacts. Proposal approval remains intentionally out of scope for
-        point 8.
+        This data is reloaded from persisted planner artifacts. Manager approval below only hands back the selected
+        proposal identifiers so `core-service` can recreate the final assignment from persisted planner truth.
       </p>
 
       <div class="grid-two">
@@ -455,15 +520,57 @@ onMounted(loadPlanningScope);
           <div>
             <p class="section-caption">Assignment proposals</p>
             <p class="resource-copy">
-              Selected proposal appears first, but the browser does not invent solver logic or approval state.
+              Selected proposal appears first. Only the selected proposal can be approved from this screen, and the
+              browser never sends timing or scoring back as manager-owned state.
             </p>
           </div>
-          <span class="pill">{{ reviewedProposals.length }} proposals</span>
+          <div class="pill-row">
+            <span class="pill">{{ reviewedProposals.length }} proposals</span>
+            <span class="pill is-warm">{{ selectedProposalCount }} selected</span>
+          </div>
+        </div>
+
+        <div class="resource-item">
+          <p class="resource-label">Approval handoff</p>
+          <p class="resource-copy">
+            `core-service` re-reads the persisted proposal by `source_plan_run_id`, validates the selected
+            `task + employee` pair, and writes the final approved `Assignment`.
+          </p>
+          <label class="field-group">
+            <span class="field-label">Approval notes</span>
+            <textarea
+              v-model="approvalForm.notes"
+              class="text-area"
+              placeholder="Optional note that will be stored on the final assignment."
+            />
+          </label>
+        </div>
+
+        <p v-if="approvalErrorMessage" class="status-banner is-error">{{ approvalErrorMessage }}</p>
+        <p v-if="approvalSuccessMessage" class="status-banner is-success">{{ approvalSuccessMessage }}</p>
+
+        <div v-if="approvedAssignment" class="resource-item">
+          <div class="resource-heading">
+            <p class="resource-label">Latest approved assignment</p>
+            <span class="pill is-warm">assignment #{{ approvedAssignment.id }}</span>
+          </div>
+          <p class="resource-copy">
+            Task: {{ taskTitleById.get(String(approvedAssignment.task)) || `Task #${approvedAssignment.task}` }}
+            · Employee: {{ employeeNameById.get(String(approvedAssignment.employee)) || `Employee #${approvedAssignment.employee}` }}
+          </p>
+          <p class="resource-copy">
+            Dates: {{ approvedAssignment.start_date }} → {{ approvedAssignment.end_date }}
+            · Planned hours: {{ approvedAssignment.planned_hours }}
+          </p>
+          <p class="resource-copy">
+            Status: {{ approvedAssignment.status }}
+            · Approved at: {{ approvedAssignment.approved_at ? new Date(approvedAssignment.approved_at).toLocaleString() : "n/a" }}
+          </p>
         </div>
 
         <p v-if="reviewedProposals.length === 0" class="empty-state">No proposals were returned for this run.</p>
         <ul v-else class="resource-list">
-          <li v-for="proposal in reviewedProposals" :key="`${proposal.task_id}-${proposal.employee_id}-${proposal.proposal_rank}`" class="resource-item">
+          <li v-for="proposal in reviewedProposals" :key="proposalKey(proposal)" class="resource-item">
             <div class="resource-heading">
               <p class="resource-label">
                 {{ taskTitleById.get(proposal.task_id) || `Task #${proposal.task_id}` }}
@@ -485,6 +592,20 @@ onMounted(loadPlanningScope);
             </p>
             <p class="resource-copy">Status: {{ proposal.status }}</p>
             <p class="resource-copy">{{ proposal.explanation_text || "No explanation text." }}</p>
+            <div class="action-row">
+              <button
+                v-if="canApproveProposal(proposal)"
+                class="button-primary"
+                type="button"
+                :disabled="approvingProposalKey === proposalKey(proposal)"
+                @click="approveProposal(proposal)"
+              >
+                {{ approvingProposalKey === proposalKey(proposal) ? "Approving..." : "Approve selected proposal" }}
+              </button>
+              <div v-else class="notice">
+                Only the selected proposal can be approved. Candidate rows remain read-only review artifacts.
+              </div>
+            </div>
           </li>
         </ul>
       </section>
@@ -538,7 +659,7 @@ onMounted(loadPlanningScope);
       <SectionPlaceholder
         eyebrow="Endpoints"
         title="Planning APIs"
-        description="Points 7 and 8 now cover both launch and persisted review, while approval remains the next slice."
+        description="Points 7 to 9 now cover launch, persisted review, and manager approval handoff."
       >
         <ul class="resource-list">
           <li v-for="resource in plannerResources" :key="resource.key" class="resource-item">

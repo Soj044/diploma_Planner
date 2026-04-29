@@ -9,15 +9,15 @@ import { assignmentResources } from "../services/core-service";
       <p class="eyebrow">Approval Handoff</p>
       <h3 class="page-title">Final assignments remain in core-service</h3>
       <p class="page-description">
-        The browser will eventually let a manager choose one persisted proposal and send only the minimal handoff payload.
-        `core-service` keeps the authority to reread planner artifacts and create the final `Assignment`.
+        Manager approval now happens from the `Planning` review screen. This route is reserved for the next slice where
+        the frontend will render read-only final assignments directly from `core-service`.
       </p>
     </section>
 
     <SectionPlaceholder
       eyebrow="Core-service"
       title="Assignment endpoints"
-      description="The upcoming approval screen will be wired to these existing routes."
+      description="Approval is live from `Planning`; this screen still tracks the remaining read-only assignments work."
     >
       <ul class="resource-list">
         <li v-for="resource in assignmentResources" :key="resource.key" class="resource-item">
@@ -30,8 +30,8 @@ import { assignmentResources } from "../services/core-service";
     </SectionPlaceholder>
 
     <div class="notice">
-      The frontend will not send assignment timing as manager-owned state.
-      Planned hours and dates must continue to come from the persisted planner proposal during approval.
+      The frontend still does not own assignment timing.
+      Planned hours and dates continue to come from the persisted planner proposal during approval.
     </div>
   </div>
 </template>
