@@ -12,7 +12,8 @@ Vue 3 + Vite + TypeScript shell for the Workestrator MVP frontend.
 - live CRUD for `users`, `departments`, `skills`, and `employees`;
 - live task CRUD and task-requirement CRUD;
 - employee self-service CRUD for own work schedules, schedule days, and leaves;
-- placeholder screens for planning runs and assignments.
+- live planning run launch, persisted proposal review, and manager approval handoff;
+- placeholder assignments read-only screen.
 
 ## Local setup
 
@@ -75,7 +76,14 @@ npm run dev
 - reload persisted plan runs by `plan_run_id` from the same `Planning` screen;
 - render proposal list with task/employee labels, score, rank, selected marker, timing, and explanation text;
 - render unassigned task diagnostics and persisted solver statistics;
-- keep the screen strictly read-only with no approval mutation yet.
+- keep planner artifacts read-only even while enabling separate approval handoff.
+
+## Current point 9 coverage
+
+- approve the selected persisted proposal from the `Planning` screen;
+- send only `task`, `employee`, `source_plan_run_id`, and optional `notes` to `POST /api/v1/assignments/approve-proposal/`;
+- show the created final `Assignment` summary returned by `core-service`;
+- keep final assignments list as the next pending slice.
 
 ## Current Stage 6 coverage
 

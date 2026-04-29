@@ -131,7 +131,7 @@ export const assignmentResources: ResourceDescriptor[] = [
     label: "Assignments",
     endpoint: "/assignments/",
     description: "Final approved assignments stored only in core-service.",
-    nextStep: "Add read-only list first, then filtered detail cards.",
+    nextStep: "Next slice: add read-only list first, then filtered detail cards.",
     requiresAuth: true,
   },
   {
@@ -139,7 +139,7 @@ export const assignmentResources: ResourceDescriptor[] = [
     label: "Approve Proposal",
     endpoint: "/assignments/approve-proposal/",
     description: "Approval handoff that converts a selected planner proposal into a final assignment.",
-    nextStep: "Add explicit manager action from persisted proposal review.",
+    nextStep: "Implemented in point 9: manager action lives on the persisted planning review screen.",
     requiresAuth: true,
   },
 ];
