@@ -26,7 +26,7 @@ export const plannerResources: ResourceDescriptor[] = [
     label: "Get Persisted Plan Run",
     endpoint: "/plan-runs/{plan_run_id}",
     description: "Returns summary, proposals, diagnostics, and solver artifacts for manager review.",
-    nextStep: "Add run review screen and approval CTA in the next planning slices.",
+    nextStep: "Implemented in points 8 and 9: persisted review now includes manager approval handoff to core-service.",
   },
 ];
 
