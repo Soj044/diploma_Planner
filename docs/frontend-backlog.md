@@ -50,12 +50,30 @@ Deferred planning-facing reference entities for later slices:
 
 Reason: `work-schedules`, `work-schedule-days`, and `employee-leaves` were intentionally deferred from the first reference-data route and later delivered as employee self-service screens during Stage 6 auth migration.
 
+## Backend Stage 1 contract delta
+
+- Auth payloads (`signup`, `login`, `refresh`, `me`) now return `employee_profile` with `id`, `full_name`, `department_id`, `position_name`, `hire_date`, and `is_active`.
+- `GET /api/v1/departments/` now includes nested employee summaries with `id`, `full_name`, and `position_name`; this nested read model intentionally omits employee email.
+- Employee `work-schedules` and `work-schedule-days` are now self-scope read-only with `list/retrieve` only.
+- Employee leaves now follow a request/review contract:
+  - employee create always stores `requested`;
+  - employee can update/delete only own `requested` leaves;
+  - employee cannot change leave status directly;
+  - manager/admin process the queue through `POST /api/v1/employee-leaves/{id}/set-status/`.
+- Final assignment now has two backend paths:
+  - planner approval through `/assignments/approve-proposal/`;
+  - manual assignment through `/assignments/manual/`.
+- Manual assignment creates a final `approved` assignment with `start_date=task.start_date`, `end_date=task.due_date`, and `source_plan_run_id=null`.
+- Planner approval and manual assignment share the same invariant: no second non-rejected final assignment for one task.
+- `planner-service` and `packages/contracts` did not change in this slice; single-task planning still reuses `POST /api/v1/plan-runs` with `task_ids=[task.id]`.
+
 ## Known frontend gaps
 
 - core-service still has no Swagger/OpenAPI UI, so frontend work relies on serializers/routes and manual contract reading.
 - In the current agent environment, true headless browser access to `127.0.0.1:5173` timed out, so the final live smoke was executed through the real frontend proxy boundary from inside `frontend-smoke` rather than by DOM-level browser automation.
 - Current employee frontend screens still assume schedule CRUD and broader leave editing than the Stage 1 backend now allows.
 - Current manager/admin frontend screens do not yet expose `POST /api/v1/assignments/manual/`, `POST /api/v1/assignments/{id}/reject/`, or the requested-leave status queue action.
+- Current frontend bootstrap and department screens do not yet fully take advantage of `employee_profile` and the nested department employee summaries added by Stage 1.
 
 ## Verification baseline
 
@@ -78,8 +96,10 @@ Reason: `work-schedules`, `work-schedule-days`, and `employee-leaves` were inten
 
 - Frontend Milestone 1 is complete and the default dev runtime is now full-stack via Docker Compose; the next slice should be chosen explicitly from a new backlog decision.
 - Recommended Stage 2 follow-up after backend Stage 1:
+  - switch auth/bootstrap and manager helper reads to the new `employee_profile` and nested department employee summary payloads;
   - switch employee task screen from global `tasks` listing to employee-scoped `assignments` view enriched with task metadata;
   - convert employee schedule screens to read-only;
   - convert employee leaves flow to requested-only editing;
   - add manager/admin leave queue actions via `set-status`;
-  - add manager/admin manual assignment and reject flows on top of the new core-service endpoints.
+  - add manager/admin manual assignment and reject flows on top of the new core-service endpoints;
+  - keep single-task planning on the existing `POST /api/v1/plan-runs` contract with `task_ids=[task.id]`.
