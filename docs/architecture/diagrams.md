@@ -10,9 +10,9 @@
 
 ```text
 manager -> frontend-app: navigate CRUD, planning, review, approval screens
-employee -> frontend-app: navigate tasks and self-service schedule/leave screens
+employee -> frontend-app: navigate tasks, self assignments, and self-service schedule/leave screens
 frontend-app -> core-service: create/update employees, skills, schedules, tasks
-frontend-app -> core-service: login/signup/refresh/me + employee self-service CRUD
+frontend-app -> core-service: login/signup/refresh/me + employee schedule/leave/assignment reads
 frontend-app -> planner-service: POST /api/v1/plan-runs (CreatePlanRunRequest)
 planner-service -> core-service: POST /api/v1/planning-snapshot/ + X-Internal-Service-Token
 planner-service (CP-SAT): eligibility -> scoring -> optimization
@@ -20,8 +20,9 @@ planner-service -> planner artifact store: save run + snapshot + proposals + dia
 planner-service -> frontend-app: assignment proposals + diagnostics
 frontend-app -> planner-service: GET /api/v1/plan-runs/{id}
 frontend-app -> core-service: POST /api/v1/assignments/approve-proposal/
+frontend-app -> core-service: POST /api/v1/assignments/manual/ or POST /api/v1/assignments/{id}/reject/
 core-service -> planner-service: GET /api/v1/plan-runs/{id} + X-Internal-Service-Token
-core-service -> core database: store final approved assignments
+core-service -> core database: store final assignments and leave status changes
 ```
 
 ## Approval Handoff
@@ -33,6 +34,13 @@ core-service -> planner-service: GET /api/v1/plan-runs/{id} + X-Internal-Service
 core-service: validate run status + proposal pair + idempotency
 core-service -> core database: create approved Assignment + AssignmentChangeLog
 planner-service: keeps proposal immutable as planning artifact only
+
+manager/admin -> core-service: POST /api/v1/assignments/manual/
+core-service: validate task dates + final-assignment invariant
+core-service -> core database: create approved Assignment + AssignmentChangeLog
+
+manager/admin -> core-service: POST /api/v1/assignments/{id}/reject/
+core-service -> core database: mark Assignment rejected + write AssignmentChangeLog
 ```
 
 ## Runtime Diagram (Docker)
@@ -85,6 +93,7 @@ frontend-app:
     no planner eligibility/scoring logic in browser
     no frontend-owned business truth
     token auth via core-service (access bearer + refresh cookie)
+    frontend must follow backend-owned role and lifecycle rules for assignments, schedules, and leaves
 ```
 
 ## Auth Flow (MVP)
@@ -110,9 +119,13 @@ admin:
 
 manager:
   operational access (tasks/schedules/overrides/approval) with restricted destructive paths
+  leave approval queue via status-only action
+  manual final assignment creation and assignment rejection
 
 employee:
-  read-only tasks + self-scope CRUD (own schedules, own schedule days, own leaves)
+  read-only tasks + self-scope assignment reads
+  own schedules and schedule days read-only
+  own leaves create/update/delete only while status is requested
 
 planning snapshot:
   internal-only, requires X-Internal-Service-Token

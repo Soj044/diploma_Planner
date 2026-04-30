@@ -20,6 +20,7 @@ Track frontend delivery slices for `frontend-app` without losing scope boundarie
 - `2026-04-29`: point 10 completed on branch `feature/TASK-00-06-task-creation-flow`; managers/admins can now inspect final assignments in a read-only screen backed by `GET /api/v1/assignments/`.
 - `2026-04-29`: live proxy smoke against real `core-service` and `planner-service` completed on branch `feature/TASK-00-06-task-creation-flow`; manager and employee runtime flows now pass through the frontend proxy boundary.
 - `2026-04-29`: frontend dev runtime containerization completed on branch `feature/TASK-00-06-task-creation-flow`; `docker compose up --build` now includes `frontend-app` as a Vite dev container while preserving standalone `npm run dev` as an optional path.
+- `2026-04-30`: backend Stage 1 role-contract slice completed on branch `feature/TASK-01-stage1-role-contracts`; frontend now lags the latest backend truth for employee schedules/leaves and for the new manual assignment flow.
 
 ## Milestone 1 slices
 
@@ -53,6 +54,8 @@ Reason: `work-schedules`, `work-schedule-days`, and `employee-leaves` were inten
 
 - core-service still has no Swagger/OpenAPI UI, so frontend work relies on serializers/routes and manual contract reading.
 - In the current agent environment, true headless browser access to `127.0.0.1:5173` timed out, so the final live smoke was executed through the real frontend proxy boundary from inside `frontend-smoke` rather than by DOM-level browser automation.
+- Current employee frontend screens still assume schedule CRUD and broader leave editing than the Stage 1 backend now allows.
+- Current manager/admin frontend screens do not yet expose `POST /api/v1/assignments/manual/`, `POST /api/v1/assignments/{id}/reject/`, or the requested-leave status queue action.
 
 ## Verification baseline
 
@@ -74,3 +77,9 @@ Reason: `work-schedules`, `work-schedule-days`, and `employee-leaves` were inten
 ## Next expected slice after point 10
 
 - Frontend Milestone 1 is complete and the default dev runtime is now full-stack via Docker Compose; the next slice should be chosen explicitly from a new backlog decision.
+- Recommended Stage 2 follow-up after backend Stage 1:
+  - switch employee task screen from global `tasks` listing to employee-scoped `assignments` view enriched with task metadata;
+  - convert employee schedule screens to read-only;
+  - convert employee leaves flow to requested-only editing;
+  - add manager/admin leave queue actions via `set-status`;
+  - add manager/admin manual assignment and reject flows on top of the new core-service endpoints.
