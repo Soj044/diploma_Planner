@@ -9,11 +9,12 @@
 ## High-Level Service Flow (MVP)
 
 ```text
-manager -> frontend-app: navigate CRUD, planning, review, approval screens
+manager -> frontend-app: navigate CRUD, planning, review, approval, leave queue, and manual assignment screens
 employee -> frontend-app: navigate tasks, self assignments, and self-service schedule/leave screens
-frontend-app -> core-service: create/update employees, skills, schedules, tasks
-frontend-app -> core-service: login/signup/refresh/me + employee schedule/leave/assignment reads
-frontend-app -> planner-service: POST /api/v1/plan-runs (CreatePlanRunRequest)
+frontend-app -> core-service: create/update employees, skills, tasks, leave decisions, and assignment actions
+frontend-app -> core-service: login/signup/refresh/me (employee_profile included) + employee schedule/leave/assignment reads
+frontend-app -> core-service: GET /api/v1/departments/ (nested employee summaries)
+frontend-app -> planner-service: POST /api/v1/plan-runs (single-task flow still uses task_ids=[task.id])
 planner-service -> core-service: POST /api/v1/planning-snapshot/ + X-Internal-Service-Token
 planner-service (CP-SAT): eligibility -> scoring -> optimization
 planner-service -> planner artifact store: save run + snapshot + proposals + diagnostics
@@ -21,6 +22,7 @@ planner-service -> frontend-app: assignment proposals + diagnostics
 frontend-app -> planner-service: GET /api/v1/plan-runs/{id}
 frontend-app -> core-service: POST /api/v1/assignments/approve-proposal/
 frontend-app -> core-service: POST /api/v1/assignments/manual/ or POST /api/v1/assignments/{id}/reject/
+frontend-app -> core-service: POST /api/v1/employee-leaves/{id}/set-status/ (manager/admin)
 core-service -> planner-service: GET /api/v1/plan-runs/{id} + X-Internal-Service-Token
 core-service -> core database: store final assignments and leave status changes
 ```
@@ -36,7 +38,10 @@ core-service -> core database: create approved Assignment + AssignmentChangeLog
 planner-service: keeps proposal immutable as planning artifact only
 
 manager/admin -> core-service: POST /api/v1/assignments/manual/
-core-service: validate task dates + final-assignment invariant
+core-service: copy start_date from task.start_date
+core-service: copy end_date from task.due_date
+core-service: set source_plan_run_id = null
+core-service: validate final-assignment invariant
 core-service -> core database: create approved Assignment + AssignmentChangeLog
 
 manager/admin -> core-service: POST /api/v1/assignments/{id}/reject/
@@ -74,6 +79,27 @@ browser
 
 `frontend-app` can also be run standalone on the host with `npm run dev`, but `docker compose up --build` is now the default full-stack dev runtime.
 
+## Frontend-Useful Read Models (Stage 1)
+
+```text
+auth payloads:
+  POST /api/v1/auth/login
+  POST /api/v1/auth/signup
+  POST /api/v1/auth/refresh
+  GET  /api/v1/auth/me
+
+  include employee_profile:
+    id, full_name, department_id, position_name, hire_date, is_active
+
+departments list:
+  GET /api/v1/departments/
+
+  includes nested employees:
+    id, full_name, position_name
+
+  does not include nested employee email
+```
+
 ## Frontend Boundary
 
 ```text
@@ -100,15 +126,26 @@ frontend-app:
 
 ```text
 frontend-app -> core-service: POST /api/v1/auth/login
-core-service -> frontend-app: access token (JSON) + refresh token (HttpOnly cookie)
+core-service -> frontend-app: access token (JSON) + refresh token (HttpOnly cookie) + employee_profile
 frontend-app -> core-service: POST /api/v1/auth/refresh on app bootstrap
 frontend-app -> core-service: GET /api/v1/auth/me (Authorization: Bearer <access>)
+core-service -> frontend-app: me payload with role + employee_profile
 frontend-app -> core-service: POST /api/v1/auth/refresh (refresh cookie)
-core-service -> frontend-app: rotated refresh cookie + new access token
+core-service -> frontend-app: rotated refresh cookie + new access token + employee_profile
 frontend-app -> planner-service: Authorization: Bearer <access>
 planner-service -> core-service: POST /api/v1/auth/introspect + X-Internal-Service-Token
 core-service -> planner-service: user_id + role + is_active + employee_id
 core-service -> planner-service: persisted approval reread via X-Internal-Service-Token
+```
+
+## Leave Review Boundary
+
+```text
+employee -> core-service: POST /api/v1/employee-leaves/ (status forced to requested)
+employee -> core-service: PATCH/DELETE own requested leave only
+employee -> core-service: cannot set leave status directly
+manager/admin -> core-service: GET /api/v1/employee-leaves/ (requested queue visible)
+manager/admin -> core-service: POST /api/v1/employee-leaves/{id}/set-status/ approved|rejected
 ```
 
 ## RBAC Boundary (Core-Service)
@@ -126,6 +163,7 @@ employee:
   read-only tasks + self-scope assignment reads
   own schedules and schedule days read-only
   own leaves create/update/delete only while status is requested
+  no direct leave status mutation
 
 planning snapshot:
   internal-only, requires X-Internal-Service-Token
