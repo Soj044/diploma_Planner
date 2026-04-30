@@ -6,12 +6,24 @@ from rest_framework.exceptions import APIException
 
 from .employee_profiles import ensure_employee_profile_for_user
 
+
 class InvalidCredentialsError(APIException):
     """Credential error with explicit 401 status for auth endpoints."""
 
     status_code = 401
     default_detail = "Invalid email or password."
     default_code = "invalid_credentials"
+
+
+class AuthEmployeeProfileSerializer(serializers.Serializer):
+    """Compact employee profile embedded into auth payloads."""
+
+    id = serializers.IntegerField(read_only=True)
+    full_name = serializers.CharField(read_only=True)
+    department_id = serializers.IntegerField(allow_null=True, read_only=True)
+    position_name = serializers.CharField(read_only=True)
+    hire_date = serializers.DateField(allow_null=True, read_only=True)
+    is_active = serializers.BooleanField(read_only=True)
 
 
 class AuthMeSerializer(serializers.Serializer):
@@ -22,7 +34,7 @@ class AuthMeSerializer(serializers.Serializer):
     role = serializers.CharField(read_only=True)
     is_active = serializers.BooleanField(read_only=True)
     employee_id = serializers.IntegerField(allow_null=True, read_only=True)
-    employee_profile = serializers.DictField(allow_null=True, read_only=True)
+    employee_profile = AuthEmployeeProfileSerializer(allow_null=True, read_only=True)
 
 
 def build_auth_user_payload(user) -> dict:
@@ -38,6 +50,8 @@ def build_auth_user_payload(user) -> dict:
             "full_name": employee.full_name,
             "department_id": employee.department_id,
             "position_name": employee.position_name,
+            "hire_date": employee.hire_date,
+            "is_active": employee.is_active,
         }
     return {
         "id": user.id,

@@ -88,20 +88,33 @@ class EmployeeSkillPermission(RoleActionPermission):
 
 class WorkSchedulePermission(EmployeeOwnedObjectPermission):
     manager_actions = {"list", "retrieve", "create", "update", "partial_update", "destroy"}
-    employee_actions = {"list", "retrieve", "create", "update", "partial_update", "destroy"}
+    employee_actions = {"list", "retrieve"}
     owner_attr_path = "employee_id"
 
 
 class WorkScheduleDayPermission(EmployeeOwnedObjectPermission):
     manager_actions = {"list", "retrieve", "create", "update", "partial_update", "destroy"}
-    employee_actions = {"list", "retrieve", "create", "update", "partial_update", "destroy"}
+    employee_actions = {"list", "retrieve"}
     owner_attr_path = "schedule.employee_id"
 
 
 class EmployeeLeavePermission(EmployeeOwnedObjectPermission):
-    manager_actions = {"list", "retrieve"}
+    admin_actions = {"list", "retrieve", "set_status"}
+    manager_actions = {"list", "retrieve", "set_status"}
     employee_actions = {"list", "retrieve", "create", "update", "partial_update", "destroy"}
     owner_attr_path = "employee_id"
+
+    def has_object_permission(self, request, view, obj) -> bool:
+        if not super().has_object_permission(request, view, obj):
+            return False
+
+        if getattr(request.user, "role", "") != "employee":
+            return True
+
+        action = getattr(view, "action", None)
+        if action in {"update", "partial_update", "destroy"} and obj.status != "requested":
+            return False
+        return True
 
 
 class AvailabilityOverridePermission(RoleActionPermission):
@@ -118,8 +131,11 @@ class TaskRequirementPermission(RoleActionPermission):
     employee_actions = {"list", "retrieve"}
 
 
-class AssignmentPermission(RoleActionPermission):
-    manager_actions = {"list", "retrieve", "approve_proposal"}
+class AssignmentPermission(EmployeeOwnedObjectPermission):
+    admin_actions = {"list", "retrieve", "approve_proposal", "manual", "reject"}
+    manager_actions = {"list", "retrieve", "approve_proposal", "manual", "reject"}
+    employee_actions = {"list", "retrieve"}
+    owner_attr_path = "employee_id"
 
 
 class AssignmentChangeLogPermission(RoleActionPermission):
@@ -129,6 +145,7 @@ class AssignmentChangeLogPermission(RoleActionPermission):
 class PlannerApprovalPermission(RoleActionPermission):
     """Explicit allow-list for assignment approval handoff endpoint."""
 
+    admin_actions = {"approve_proposal"}
     manager_actions = {"approve_proposal"}
 
 

@@ -5,19 +5,23 @@ from django.test import override_settings
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from users.employee_profiles import ensure_employee_profile_for_user
+
 
 class AuthFlowApiTests(APITestCase):
     def setUp(self) -> None:
         self.user_model = get_user_model()
 
     def _create_user(self, *, email: str, username: str, role: str = "employee", is_active: bool = True):
-        return self.user_model.objects.create_user(
+        user = self.user_model.objects.create_user(
             username=username,
             email=email,
             password="test-pass-123",
             role=role,
             is_active=is_active,
         )
+        ensure_employee_profile_for_user(user)
+        return user
 
     def test_signup_creates_employee_role_user_and_returns_tokens(self) -> None:
         response = self.client.post(
@@ -39,6 +43,8 @@ class AuthFlowApiTests(APITestCase):
         self.assertIsNotNone(response.data["user"]["employee_id"])
         self.assertEqual(response.data["user"]["employee_profile"]["full_name"], "Sign Up")
         self.assertEqual(response.data["user"]["employee_profile"]["position_name"], "Pending assignment")
+        self.assertIsNone(response.data["user"]["employee_profile"]["hire_date"])
+        self.assertTrue(response.data["user"]["employee_profile"]["is_active"])
         self.assertIn("refresh_token", response.cookies)
 
     def test_login_returns_access_and_refresh_cookie(self) -> None:
@@ -53,6 +59,9 @@ class AuthFlowApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn("access", response.data)
         self.assertEqual(response.data["user"]["role"], "manager")
+        self.assertIn("employee_profile", response.data["user"])
+        self.assertIn("hire_date", response.data["user"]["employee_profile"])
+        self.assertTrue(response.data["user"]["employee_profile"]["is_active"])
         self.assertIn("refresh_token", response.cookies)
 
     def test_me_returns_authenticated_user_profile(self) -> None:
@@ -71,6 +80,9 @@ class AuthFlowApiTests(APITestCase):
         self.assertEqual(response.data["email"], "me@example.com")
         self.assertEqual(response.data["role"], "employee")
         self.assertIn("employee_id", response.data)
+        self.assertIn("employee_profile", response.data)
+        self.assertIsNone(response.data["employee_profile"]["hire_date"])
+        self.assertTrue(response.data["employee_profile"]["is_active"])
 
     def test_refresh_issues_new_access_token_from_cookie(self) -> None:
         self._create_user(email="refresh@example.com", username="refresh-user")
@@ -84,6 +96,9 @@ class AuthFlowApiTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn("access", response.data)
+        self.assertIn("employee_profile", response.data["user"])
+        self.assertIn("hire_date", response.data["user"]["employee_profile"])
+        self.assertTrue(response.data["user"]["employee_profile"]["is_active"])
         self.assertIn("refresh_token", response.cookies)
 
     def test_logout_clears_refresh_cookie(self) -> None:

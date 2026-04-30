@@ -157,6 +157,306 @@ class CoreApiSmokeTests(APITestCase):
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.data["name"], "Dispatch")
 
+    def test_department_list_includes_employee_summaries_without_email(self) -> None:
+        user_model = get_user_model()
+        manager = user_model.objects.create_user(
+            username="department-manager",
+            email="department-manager@example.com",
+            password="test-pass",
+            role=user_model.Role.MANAGER,
+        )
+        employee_user = user_model.objects.create_user(
+            username="department-employee",
+            email="department-employee@example.com",
+            password="test-pass",
+        )
+        self.client.force_authenticate(user=manager)
+        department = Department.objects.create(name="Directory")
+        Employee.objects.create(
+            user=employee_user,
+            department=department,
+            full_name="Directory Employee",
+            position_name="Operator",
+        )
+
+        response = self.client.get("/api/v1/departments/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data[0]["employees"][0]["full_name"], "Directory Employee")
+        self.assertEqual(response.data[0]["employees"][0]["position_name"], "Operator")
+        self.assertNotIn("email", response.data[0]["employees"][0])
+
+    def test_manual_assignment_endpoint_creates_approved_assignment(self) -> None:
+        user_model = get_user_model()
+        manager = user_model.objects.create_user(
+            username="manual-manager",
+            email="manual-manager@example.com",
+            password="test-pass",
+            role=user_model.Role.MANAGER,
+        )
+        employee_user = user_model.objects.create_user(
+            username="manual-employee",
+            email="manual-employee@example.com",
+            password="test-pass",
+        )
+        self.client.force_authenticate(user=manager)
+        department = Department.objects.create(name="Manual assignment")
+        employee = Employee.objects.create(
+            user=employee_user,
+            department=department,
+            full_name="Manual Employee",
+            position_name="Operator",
+        )
+        task = Task.objects.create(
+            department=department,
+            title="Manual task",
+            estimated_hours=3,
+            start_date=date(2026, 5, 10),
+            due_date=date(2026, 5, 12),
+            created_by_user=manager,
+        )
+
+        response = self.client.post(
+            "/api/v1/assignments/manual/",
+            {
+                "task": task.id,
+                "employee": employee.id,
+                "planned_hours": 3,
+                "notes": "Manual fallback",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["status"], Assignment.Status.APPROVED)
+        self.assertEqual(response.data["start_date"], "2026-05-10")
+        self.assertEqual(response.data["end_date"], "2026-05-12")
+        self.assertEqual(response.data["assigned_by_type"], Assignment.SourceType.MANAGER)
+        self.assertIsNone(response.data["source_plan_run_id"])
+        self.assertEqual(response.data["approved_by_user"], manager.id)
+
+    def test_manual_assignment_endpoint_rejects_task_without_dates(self) -> None:
+        user_model = get_user_model()
+        manager = user_model.objects.create_user(
+            username="manual-missing-dates-manager",
+            email="manual-missing-dates-manager@example.com",
+            password="test-pass",
+            role=user_model.Role.MANAGER,
+        )
+        employee_user = user_model.objects.create_user(
+            username="manual-missing-dates-employee",
+            email="manual-missing-dates-employee@example.com",
+            password="test-pass",
+        )
+        self.client.force_authenticate(user=manager)
+        department = Department.objects.create(name="Missing dates")
+        employee = Employee.objects.create(
+            user=employee_user,
+            department=department,
+            full_name="No Dates Employee",
+            position_name="Operator",
+        )
+        task = Task.objects.create(
+            department=department,
+            title="Manual task missing dates",
+            estimated_hours=2,
+            due_date=date(2026, 5, 13),
+            created_by_user=manager,
+        )
+
+        response = self.client.post(
+            "/api/v1/assignments/manual/",
+            {
+                "task": task.id,
+                "employee": employee.id,
+                "planned_hours": 2,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("start_date and due_date", str(response.data))
+
+    def test_reject_assignment_endpoint_marks_assignment_rejected(self) -> None:
+        user_model = get_user_model()
+        manager = user_model.objects.create_user(
+            username="reject-manager",
+            email="reject-manager@example.com",
+            password="test-pass",
+            role=user_model.Role.MANAGER,
+        )
+        employee_user = user_model.objects.create_user(
+            username="reject-employee",
+            email="reject-employee@example.com",
+            password="test-pass",
+        )
+        self.client.force_authenticate(user=manager)
+        department = Department.objects.create(name="Reject flow")
+        employee = Employee.objects.create(
+            user=employee_user,
+            department=department,
+            full_name="Reject Employee",
+            position_name="Operator",
+        )
+        task = Task.objects.create(
+            department=department,
+            title="Rejectable assignment",
+            estimated_hours=2,
+            start_date=date(2026, 5, 14),
+            due_date=date(2026, 5, 14),
+            created_by_user=manager,
+        )
+        assignment = Assignment.objects.create(
+            task=task,
+            employee=employee,
+            planned_hours=2,
+            start_date=date(2026, 5, 14),
+            end_date=date(2026, 5, 14),
+            status=Assignment.Status.APPROVED,
+            assigned_by_type=Assignment.SourceType.MANAGER,
+            assigned_by_user=manager,
+            approved_by_user=manager,
+            approved_at=timezone.now(),
+        )
+
+        response = self.client.post(f"/api/v1/assignments/{assignment.id}/reject/", {}, format="json")
+
+        assignment.refresh_from_db()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(assignment.status, Assignment.Status.REJECTED)
+
+    def test_manual_assignment_endpoint_rejects_second_final_assignment_for_task(self) -> None:
+        user_model = get_user_model()
+        manager = user_model.objects.create_user(
+            username="manual-duplicate-manager",
+            email="manual-duplicate-manager@example.com",
+            password="test-pass",
+            role=user_model.Role.MANAGER,
+        )
+        employee_user = user_model.objects.create_user(
+            username="manual-duplicate-employee",
+            email="manual-duplicate-employee@example.com",
+            password="test-pass",
+        )
+        other_employee_user = user_model.objects.create_user(
+            username="manual-duplicate-existing",
+            email="manual-duplicate-existing@example.com",
+            password="test-pass",
+        )
+        self.client.force_authenticate(user=manager)
+        department = Department.objects.create(name="Duplicate manual")
+        employee = Employee.objects.create(
+            user=employee_user,
+            department=department,
+            full_name="Duplicate Candidate",
+            position_name="Operator",
+        )
+        other_employee = Employee.objects.create(
+            user=other_employee_user,
+            department=department,
+            full_name="Existing Final Candidate",
+            position_name="Operator",
+        )
+        task = Task.objects.create(
+            department=department,
+            title="Manual duplicate task",
+            estimated_hours=2,
+            start_date=date(2026, 5, 15),
+            due_date=date(2026, 5, 15),
+            created_by_user=manager,
+        )
+        Assignment.objects.create(
+            task=task,
+            employee=other_employee,
+            planned_hours=2,
+            start_date=date(2026, 5, 15),
+            end_date=date(2026, 5, 15),
+            status=Assignment.Status.APPROVED,
+            assigned_by_type=Assignment.SourceType.MANAGER,
+            assigned_by_user=manager,
+            approved_by_user=manager,
+            approved_at=timezone.now(),
+        )
+
+        response = self.client.post(
+            "/api/v1/assignments/manual/",
+            {
+                "task": task.id,
+                "employee": employee.id,
+                "planned_hours": 2,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Task already has a final assignment", str(response.data))
+
+    def test_rejected_assignment_allows_new_manual_assignment(self) -> None:
+        user_model = get_user_model()
+        manager = user_model.objects.create_user(
+            username="manual-retry-manager",
+            email="manual-retry-manager@example.com",
+            password="test-pass",
+            role=user_model.Role.MANAGER,
+        )
+        employee_user = user_model.objects.create_user(
+            username="manual-retry-employee",
+            email="manual-retry-employee@example.com",
+            password="test-pass",
+        )
+        other_employee_user = user_model.objects.create_user(
+            username="manual-retry-other",
+            email="manual-retry-other@example.com",
+            password="test-pass",
+        )
+        self.client.force_authenticate(user=manager)
+        department = Department.objects.create(name="Retry manual")
+        employee = Employee.objects.create(
+            user=employee_user,
+            department=department,
+            full_name="Retry Candidate",
+            position_name="Operator",
+        )
+        other_employee = Employee.objects.create(
+            user=other_employee_user,
+            department=department,
+            full_name="Rejected Candidate",
+            position_name="Operator",
+        )
+        task = Task.objects.create(
+            department=department,
+            title="Retry task",
+            estimated_hours=2,
+            start_date=date(2026, 5, 16),
+            due_date=date(2026, 5, 16),
+            created_by_user=manager,
+        )
+        Assignment.objects.create(
+            task=task,
+            employee=other_employee,
+            planned_hours=2,
+            start_date=date(2026, 5, 16),
+            end_date=date(2026, 5, 16),
+            status=Assignment.Status.REJECTED,
+            assigned_by_type=Assignment.SourceType.MANAGER,
+            assigned_by_user=manager,
+            approved_by_user=manager,
+            approved_at=timezone.now(),
+        )
+
+        response = self.client.post(
+            "/api/v1/assignments/manual/",
+            {
+                "task": task.id,
+                "employee": employee.id,
+                "planned_hours": 2,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["status"], Assignment.Status.APPROVED)
+
     @patch("operations.approvals.PlannerServiceClient.fetch_plan_run")
     def test_approve_proposal_endpoint_creates_approved_assignment(self, fetch_plan_run_mock) -> None:
         user_model = get_user_model()
