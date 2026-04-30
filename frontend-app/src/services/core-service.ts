@@ -2,10 +2,12 @@ import { appConfig } from "../config/env";
 import type {
   Assignment,
   AssignmentApprovalPayload,
+  AssignmentManualCreatePayload,
   Department,
   DepartmentInput,
   Employee,
   EmployeeLeave,
+  EmployeeLeaveStatusUpdatePayload,
   EmployeeLeaveInput,
   EmployeeInput,
   ResourceDescriptor,
@@ -76,24 +78,24 @@ export const referenceDataResources: ResourceDescriptor[] = [
     key: "work-schedules",
     label: "Work Schedules",
     endpoint: "/work-schedules/",
-    description: "Reusable schedule templates per employee.",
-    nextStep: "Add list/create form before daily schedule editing.",
+    description: "Reusable schedule templates per employee, now read-only for employee-facing flows.",
+    nextStep: "Stage 3 should expose employee read-only schedule views and a separate manager/admin management flow.",
     requiresAuth: true,
   },
   {
     key: "work-schedule-days",
     label: "Work Schedule Days",
     endpoint: "/work-schedule-days/",
-    description: "Weekday-level schedule details for planning availability.",
-    nextStep: "Add inline editing against an existing schedule.",
+    description: "Weekday-level schedule details for planning availability, now read-only for employee-facing flows.",
+    nextStep: "Stage 3 should expose read-only employee visibility and keep edits in a later manager/admin screen.",
     requiresAuth: true,
   },
   {
     key: "employee-leaves",
     label: "Employee Leaves",
     endpoint: "/employee-leaves/",
-    description: "Approved leave periods that become hard planner constraints.",
-    nextStep: "Add CRUD with date-range validation feedback.",
+    description: "Employee leave requests with requested-only self-service mutations and manager/admin review queue.",
+    nextStep: "Stage 3 should split employee leave editing from manager/admin status decisions.",
     requiresAuth: true,
   },
   {
@@ -142,6 +144,22 @@ export const assignmentResources: ResourceDescriptor[] = [
     nextStep: "Implemented in point 9: manager action lives on the persisted planning review screen.",
     requiresAuth: true,
   },
+  {
+    key: "manual-assignment",
+    label: "Manual Assignment",
+    endpoint: "/assignments/manual/",
+    description: "Direct final assignment creation in core-service without planner proposal approval.",
+    nextStep: "Stage 4 should attach this to the manager/admin task flow.",
+    requiresAuth: true,
+  },
+  {
+    key: "reject-assignment",
+    label: "Reject Assignment",
+    endpoint: "/assignments/{id}/reject/",
+    description: "Marks a final assignment as rejected while preserving backend-owned history.",
+    nextStep: "Stage 4 should expose this as a manager/admin action on assignment flows.",
+    requiresAuth: true,
+  },
 ];
 
 export const coreService = {
@@ -180,6 +198,8 @@ export const coreService = {
   updateEmployeeLeave: (id: number, payload: EmployeeLeaveInput) =>
     client.patch<EmployeeLeave>(`/employee-leaves/${id}/`, payload),
   deleteEmployeeLeave: (id: number) => client.delete<null>(`/employee-leaves/${id}/`).then(() => undefined),
+  setEmployeeLeaveStatus: (id: number, payload: EmployeeLeaveStatusUpdatePayload) =>
+    client.post<EmployeeLeave>(`/employee-leaves/${id}/set-status/`, payload),
   listTasks: () => client.get<Task[]>("/tasks/"),
   createTask: (payload: TaskInput) => client.post<Task>("/tasks/", payload),
   updateTask: (id: number, payload: TaskInput) => client.patch<Task>(`/tasks/${id}/`, payload),
@@ -194,4 +214,7 @@ export const coreService = {
   listAssignments: () => client.get<Assignment[]>("/assignments/"),
   approveProposal: (payload: AssignmentApprovalPayload) =>
     client.post<Assignment>("/assignments/approve-proposal/", payload),
+  createManualAssignment: (payload: AssignmentManualCreatePayload) =>
+    client.post<Assignment>("/assignments/manual/", payload),
+  rejectAssignment: (id: number) => client.post<Assignment>(`/assignments/${id}/reject/`, undefined),
 };

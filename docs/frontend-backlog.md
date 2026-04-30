@@ -21,6 +21,7 @@ Track frontend delivery slices for `frontend-app` without losing scope boundarie
 - `2026-04-29`: live proxy smoke against real `core-service` and `planner-service` completed on branch `feature/TASK-00-06-task-creation-flow`; manager and employee runtime flows now pass through the frontend proxy boundary.
 - `2026-04-29`: frontend dev runtime containerization completed on branch `feature/TASK-00-06-task-creation-flow`; `docker compose up --build` now includes `frontend-app` as a Vite dev container while preserving standalone `npm run dev` as an optional path.
 - `2026-04-30`: backend Stage 1 role-contract slice completed on branch `feature/TASK-01-stage1-role-contracts`; frontend now lags the latest backend truth for employee schedules/leaves and for the new manual assignment flow.
+- `2026-04-30`: frontend Stage 2 shared shell slice completed on branch `feature/TASK-02-stage2-frontend-shell`; primary navigation moved to a top bar, canonical routes were stabilized, `Profile` became a real thin screen, and frontend service/types caught up with Stage 1 backend contracts.
 
 ## Milestone 1 slices
 
@@ -73,7 +74,7 @@ Reason: `work-schedules`, `work-schedule-days`, and `employee-leaves` were inten
 - In the current agent environment, true headless browser access to `127.0.0.1:5173` timed out, so the final live smoke was executed through the real frontend proxy boundary from inside `frontend-smoke` rather than by DOM-level browser automation.
 - Current employee frontend screens still assume schedule CRUD and broader leave editing than the Stage 1 backend now allows.
 - Current manager/admin frontend screens do not yet expose `POST /api/v1/assignments/manual/`, `POST /api/v1/assignments/{id}/reject/`, or the requested-leave status queue action.
-- Current frontend bootstrap and department screens do not yet fully take advantage of `employee_profile` and the nested department employee summaries added by Stage 1.
+- Stage 2 shell now uses the richer `employee_profile` for session and `/profile`, but the canonical `departments`, `schedule`, and `leaves` routes are still scaffold screens waiting for domain UI in the next slice.
 
 ## Verification baseline
 
@@ -92,14 +93,14 @@ Reason: `work-schedules`, `work-schedule-days`, and `employee-leaves` were inten
   - Stage 5: employee self-service and final docs pass
   - Stage 6 auth migration complete
 
-## Next expected slice after point 10
+## Next expected slice after point 10 and Stage 2 shell
 
-- Frontend Milestone 1 is complete and the default dev runtime is now full-stack via Docker Compose; the next slice should be chosen explicitly from a new backlog decision.
-- Recommended Stage 2 follow-up after backend Stage 1:
-  - switch auth/bootstrap and manager helper reads to the new `employee_profile` and nested department employee summary payloads;
+- Frontend Milestone 1 is complete, Stage 1 backend contracts are in place, and the Stage 2 shell now exposes the final route skeleton; the next slice should build the real role-specific screens behind those URLs.
+- Recommended Stage 3 follow-up:
   - switch employee task screen from global `tasks` listing to employee-scoped `assignments` view enriched with task metadata;
   - convert employee schedule screens to read-only;
   - convert employee leaves flow to requested-only editing;
   - add manager/admin leave queue actions via `set-status`;
+  - render the departments directory from nested employee summaries;
   - add manager/admin manual assignment and reject flows on top of the new core-service endpoints;
   - keep single-task planning on the existing `POST /api/v1/plan-runs` contract with `task_ids=[task.id]`.

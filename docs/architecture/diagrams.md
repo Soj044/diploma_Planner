@@ -9,8 +9,8 @@
 ## High-Level Service Flow (MVP)
 
 ```text
-manager -> frontend-app: navigate CRUD, planning, review, approval, leave queue, and manual assignment screens
-employee -> frontend-app: navigate tasks, self assignments, and self-service schedule/leave screens
+manager -> frontend-app: navigate top-nav tasks/schedule/leaves/departments/profile + hidden planning/assignments advanced routes
+employee -> frontend-app: navigate top-nav tasks/schedule/leaves/departments/profile routes
 frontend-app -> core-service: create/update employees, skills, tasks, leave decisions, and assignment actions
 frontend-app -> core-service: login/signup/refresh/me (employee_profile included) + employee schedule/leave/assignment reads
 frontend-app -> core-service: GET /api/v1/departments/ (nested employee summaries)
@@ -105,8 +105,9 @@ departments list:
 ```text
 frontend-app:
   routes:
-    login, signup, shell, reference-data, tasks, planning, assignments,
-    my-schedule, my-leaves
+    login, signup, shell, tasks, schedule, leaves, departments, profile, admin
+    hidden advanced routes: planning, assignments
+    compatibility redirects: reference-data -> admin, my-schedule -> schedule, my-leaves -> leaves
 
   client modules:
     services/auth-service.ts

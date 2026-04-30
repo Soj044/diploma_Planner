@@ -22,7 +22,7 @@
 - core-service approval flow: persisted planner proposal lookup, manual final assignment creation, assignment rejection, idempotent replay for the same `task + employee + source_plan_run_id`, rejection of missing or non-selected proposals, rejection of second non-rejected final assignment for one task, manual assignment defaults (`start_date=task.start_date`, `end_date=task.due_date`, `source_plan_run_id=null`), upstream planner failure handling, and internal-token reread of planner-service after planner auth gate
 - planner-service: unit and integration tests for planning pipeline, `CreatePlanRunRequest` boundary, snapshot client failure handling, SQLite persistence of run/snapshot/proposals/unassigned/solver stats, persisted run retrieval for manager review, overlap conflict diagnostics, and weighted score stability
 - planner-service auth gate: Bearer header validation, deny employee role, allow manager/admin role, and controlled `503` when core introspection is unavailable
-- frontend-app: install dependencies, type-check the Vue shell, build production bundle, verify containerized Vite startup via `docker compose`, and manually verify token auth, guarded routing, RBAC gating, and the current pre-Stage-1 employee UX limitations
+- frontend-app: install dependencies, type-check the Vue shell, build production bundle, verify containerized Vite startup via `docker compose`, and manually verify token auth, guarded routing, top-nav shell behavior, canonical route redirects, hidden advanced routes, and current Stage 2 scaffold limitations
 - contracts: schema compatibility between services
 
 ## Suggested MVP Commands
@@ -91,13 +91,17 @@ Until the follow-up frontend slice lands, treat employee schedule/leave CRUD mis
 - Start backend services and the frontend shell locally.
 - Open `http://localhost:5173`.
 - As anonymous user, verify protected routes redirect to `/login` and `/signup` stays guest-only.
+- After authentication, verify `/` redirects to `/tasks`.
 - Verify login works for existing manager/admin accounts and the app bootstrap restores session after reload through refresh cookie.
 - Verify auth bootstrap can consume `employee_profile` without needing a second request for basic employee identity.
 - Verify signup creates an employee account and lands inside the protected shell with employee role.
 - Verify logout clears session and returns the browser to `/login`.
-- As manager/admin, verify sidebar navigation exposes `Reference Data`, `Tasks`, `Planning`, and `Assignments`.
-- As employee, verify sidebar hides `Reference Data`, `Planning`, and `Assignments`, and instead shows `My Schedule` and `My Leaves`.
-- On `Reference Data`, verify manager does not see `users` CRUD and only gets the allowed action set for departments, skills, and employees.
+- As `employee`, verify the top navigation shows exactly `Tasks`, `Schedule`, `Leaves`, `Departments`, and `Profile`.
+- As `manager`, verify the top navigation shows exactly `Tasks`, `Schedule`, `Leaves`, `Departments`, and `Profile`.
+- As `admin`, verify the top navigation additionally shows `Admin`.
+- Verify `/reference-data` redirects to `/admin`, `/my-schedule` redirects to `/schedule`, and `/my-leaves` redirects to `/leaves`.
+- Verify `/planning` and `/assignments` remain reachable by direct URL for `manager` and `admin`, even though they are hidden from the primary navigation.
+- On `/admin`, verify the reference-data workspace still loads and preserves role-aware CRUD gating.
 - On departments screens, verify UI assumptions match the new nested employee summary shape and do not require employee email from `GET /api/v1/departments/`.
 - On `Tasks`, verify task create uses the authenticated user from `/auth/me` and no longer requires reading `/users/`.
 - On `Planning`, verify manager/admin can launch a plan run with period-only scope, optional department filter, and optional selected task subset.
@@ -112,6 +116,8 @@ Until the follow-up frontend slice lands, treat employee schedule/leave CRUD mis
 - On `Assignments`, verify the read-only list loads persisted records from `GET /api/v1/assignments/`.
 - As employee, verify `GET /api/v1/assignments/` only surfaces own assignments.
 - Verify assignment filters stay local-only and do not mutate backend state.
+- On `/profile`, verify the screen renders `email`, `role`, `full_name`, `department_id`, `position_name`, `hire_date`, and `is_active` directly from the auth session payload.
+- On `/schedule`, `/leaves`, and `/departments`, verify the new canonical routes render stable Stage 2 scaffold copy instead of exposing stale CRUD UI that no longer matches backend rules.
 - Backend follow-up for the next frontend slice:
   confirm `GET /api/v1/assignments/` now returns employee self-scope data for employee-facing task screens.
 - Backend follow-up for the next frontend slice:
@@ -119,9 +125,9 @@ Until the follow-up frontend slice lands, treat employee schedule/leave CRUD mis
 - If browser automation is unavailable in the environment, fall back to a live proxy smoke that still exercises `frontend -> /api|/planner-api -> core/planner` on real services.
 - As employee, verify `Tasks` and `Task Requirements` are read-only.
 - Backend truth after Stage 1:
-  employee `work-schedules` and `work-schedule-days` are read-only through the API.
+  employee `work-schedules` and `work-schedule-days` are read-only through the API, so Stage 2 intentionally does not surface the old employee schedule CRUD components.
 - Backend truth after Stage 1:
-  employee `employee-leaves` can be created freely, but update/delete work only while status is `requested`; manager/admin approval now uses `POST /api/v1/employee-leaves/{id}/set-status/`.
+  employee `employee-leaves` can be created freely, but update/delete work only while status is `requested`; manager/admin approval now uses `POST /api/v1/employee-leaves/{id}/set-status/`, so Stage 2 intentionally keeps the canonical leaves route as a scaffold until the role-specific UI catches up.
 - Backend truth after Stage 1:
   manual final assignment uses `POST /api/v1/assignments/manual/`, and final assignment rejection uses `POST /api/v1/assignments/{id}/reject/`.
 - Verify task and leave validation errors from backend are surfaced unchanged.

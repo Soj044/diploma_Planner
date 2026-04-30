@@ -19,6 +19,8 @@ export interface AuthEmployeeProfile {
   full_name: string;
   department_id: number | null;
   position_name: string;
+  hire_date: string | null;
+  is_active: boolean;
 }
 
 export interface AuthUser {
@@ -76,10 +78,17 @@ export interface DepartmentInput {
   description: string;
 }
 
+export interface DepartmentEmployeeSummary {
+  id: number;
+  full_name: string;
+  position_name: string;
+}
+
 export interface Department {
   id: number;
   name: string;
   description: string;
+  employees: DepartmentEmployeeSummary[];
   created_at: string;
   updated_at: string;
 }
@@ -245,6 +254,17 @@ export interface AssignmentApprovalPayload {
   employee: number;
   source_plan_run_id: string;
   notes?: string;
+}
+
+export interface AssignmentManualCreatePayload {
+  task: number;
+  employee: number;
+  planned_hours: number;
+  notes?: string;
+}
+
+export interface EmployeeLeaveStatusUpdatePayload {
+  status: "approved" | "rejected";
 }
 
 export interface CreatePlanRunRequest {

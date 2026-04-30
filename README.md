@@ -18,7 +18,7 @@
 - persisted review proposals и diagnostics
 - manager approval flow через `POST /api/v1/assignments/approve-proposal/`
 - read-only экран итоговых assignments во frontend
-- employee self-service для своих schedules и leaves
+- Stage 2 shared frontend shell: top navigation, canonical routes, thin profile screen, admin workspace wrapper
 
 ## Что еще не реализовано
 
@@ -145,20 +145,23 @@ npm run dev
 
 1. Зайти в `http://localhost:5173/login`
 2. Войти пользователем с ролью `manager` или `admin`
-3. Открыть `Reference Data` и создать нужные справочники
+3. Открыть `Admin` и создать нужные справочники
 4. Открыть `Tasks` и создать задачу с requirements
-5. Открыть `Planning`
+5. Открыть `http://localhost:5173/planning`
 6. Запустить `plan run`
 7. Перезагрузить persisted run по `plan_run_id`
 8. Выбрать selected proposal и выполнить approval
-9. Открыть `Assignments` и проверить, что final `Assignment` появился в read-only списке
+9. Открыть `http://localhost:5173/assignments` и проверить, что final `Assignment` появился в read-only списке
+
+`Planning` и `Assignments` сохранены как совместимые advanced routes, но после Stage 2 больше не показываются в основном верхнем меню.
 
 ### Employee flow
 
 1. Открыть `http://localhost:5173/signup`
 2. Создать employee account
-3. Убедиться, что доступны только `Tasks`, `My Schedule`, `My Leaves`
-4. Проверить CRUD только для собственных schedules и leaves
+3. Убедиться, что в верхнем меню доступны `Tasks`, `Schedule`, `Leaves`, `Departments`, `Profile`
+4. Убедиться, что `Profile` рендерится из auth session payload
+5. Учесть, что `Schedule`, `Leaves` и `Departments` после Stage 2 пока закреплены как canonical routes и scaffold screens до следующего frontend slice
 
 ## Полезные URLs
 

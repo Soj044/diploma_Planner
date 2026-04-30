@@ -18,39 +18,34 @@ interface NavigationItem {
 
 const navigation: NavigationItem[] = [
   {
-    label: "Shell",
-    to: "/",
-    roles: ["admin", "manager", "employee"],
-  },
-  {
-    label: "Reference Data",
-    to: "/reference-data",
-    roles: ["admin", "manager"],
-  },
-  {
     label: "Tasks",
     to: "/tasks",
     roles: ["admin", "manager", "employee"],
   },
   {
-    label: "Planning",
-    to: "/planning",
-    roles: ["admin", "manager"],
+    label: "Schedule",
+    to: "/schedule",
+    roles: ["admin", "manager", "employee"],
   },
   {
-    label: "Assignments",
-    to: "/assignments",
-    roles: ["admin", "manager"],
+    label: "Leaves",
+    to: "/leaves",
+    roles: ["admin", "manager", "employee"],
   },
   {
-    label: "My Schedule",
-    to: "/my-schedule",
-    roles: ["employee"],
+    label: "Departments",
+    to: "/departments",
+    roles: ["admin", "manager", "employee"],
   },
   {
-    label: "My Leaves",
-    to: "/my-leaves",
-    roles: ["employee"],
+    label: "Profile",
+    to: "/profile",
+    roles: ["admin", "manager", "employee"],
+  },
+  {
+    label: "Admin",
+    to: "/admin",
+    roles: ["admin"],
   },
 ];
 
@@ -68,6 +63,14 @@ const sessionLabel = computed(() => {
     return "No session";
   }
 
+  return auth.user.value.employee_profile?.full_name || auth.user.value.email;
+});
+
+const sessionDetails = computed(() => {
+  if (!auth.user.value) {
+    return "Guest";
+  }
+
   return `${auth.user.value.email} · ${auth.user.value.role}`;
 });
 
@@ -79,21 +82,13 @@ async function handleLogout() {
 
 <template>
   <div class="shell">
-    <aside class="shell-sidebar">
-      <div class="brand-card">
-        <p class="brand-kicker">Workestrator</p>
-        <h1 class="brand-title">Frontend MVP Shell</h1>
-        <p class="brand-copy">
-          Thin Vue client over existing `core-service` and `planner-service` contracts.
-        </p>
-        <div class="pill-row">
-          <span class="pill">Vue 3 + TypeScript</span>
-          <span class="pill is-warm">Token auth flow</span>
-          <span v-if="auth.role.value" class="pill">{{ auth.role.value }}</span>
-        </div>
-      </div>
+    <header class="shell-topbar">
+      <RouterLink class="brand-link" to="/tasks">
+        <span class="brand-mark">Workestrator</span>
+        <span class="brand-copy">Operational planning frontend</span>
+      </RouterLink>
 
-      <nav class="nav-card" aria-label="Main navigation">
+      <nav class="top-nav" aria-label="Main navigation">
         <RouterLink
           v-for="item in visibleNavigation"
           :key="item.to"
@@ -105,44 +100,28 @@ async function handleLogout() {
         </RouterLink>
       </nav>
 
-      <div class="meta-card">
-        <p class="meta-title">Runtime config</p>
-        <ul class="key-value-list">
-          <li class="key-value-item">
-            <span class="key-label">Session</span>
-            <span class="key-value">{{ sessionLabel }}</span>
-          </li>
-          <li class="key-value-item">
-            <span class="key-label">Core API</span>
-            <span class="key-value">{{ appConfig.coreServiceUrl }}</span>
-          </li>
-          <li class="key-value-item">
-            <span class="key-label">Planner API</span>
-            <span class="key-value">{{ appConfig.plannerServiceUrl }}</span>
-          </li>
-          <li class="key-value-item">
-            <span class="key-label">Auth path</span>
-            <span class="key-value">/api/v1/auth/*</span>
-          </li>
-        </ul>
-        <div class="action-row">
-          <button class="button-secondary" type="button" @click="handleLogout">Logout</button>
+      <div class="session-actions">
+        <div class="session-card">
+          <span class="session-primary">{{ sessionLabel }}</span>
+          <span class="session-secondary">{{ sessionDetails }}</span>
         </div>
+        <button class="button-secondary logout-button" type="button" @click="handleLogout">Logout</button>
       </div>
-    </aside>
+    </header>
+
+    <section class="shell-subbar">
+      <div>
+        <p class="eyebrow">Current Section</p>
+        <h2 class="shell-title">{{ pageTitle }}</h2>
+      </div>
+      <div class="pill-row shell-pills">
+        <span class="pill">Core {{ appConfig.coreServiceUrl }}</span>
+        <span class="pill">Planner {{ appConfig.plannerServiceUrl }}</span>
+        <span class="pill is-warm">{{ frontendAssumptions.auth }}</span>
+      </div>
+    </section>
 
     <main class="shell-main">
-      <header class="topbar">
-        <div>
-          <p class="eyebrow">Current Slice</p>
-          <h2 class="page-title">{{ pageTitle }}</h2>
-        </div>
-        <div class="topbar-notes">
-          <p>{{ frontendAssumptions.proxy }}</p>
-          <p>{{ frontendAssumptions.auth }}</p>
-        </div>
-      </header>
-
       <RouterView />
     </main>
   </div>
@@ -152,65 +131,64 @@ async function handleLogout() {
 .shell {
   display: grid;
   gap: 1.5rem;
-  grid-template-columns: minmax(18rem, 21rem) minmax(0, 1fr);
   min-height: 100vh;
   padding: 1.5rem;
 }
 
-.shell-sidebar {
-  display: grid;
-  gap: 1rem;
-  align-content: start;
-}
-
-.brand-card,
-.nav-card,
-.meta-card,
-.topbar {
+.shell-topbar,
+.shell-subbar {
+  align-items: center;
   backdrop-filter: blur(12px);
   background: var(--app-surface);
   border: 1px solid var(--app-line);
   border-radius: 1.35rem;
   box-shadow: var(--app-shadow);
+  display: flex;
+  gap: 1rem;
 }
 
-.brand-card,
-.meta-card,
-.topbar {
-  padding: 1.25rem;
+.shell-topbar {
+  justify-content: space-between;
+  padding: 1rem 1.25rem;
 }
 
-.brand-kicker {
+.shell-subbar {
+  justify-content: space-between;
+  padding: 1rem 1.25rem;
+}
+
+.brand-link {
+  display: grid;
+  gap: 0.18rem;
+  min-width: 14rem;
+}
+
+.brand-mark {
   color: var(--app-accent);
-  font-size: 0.75rem;
-  font-weight: 800;
-  letter-spacing: 0.12em;
-  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-}
-
-.brand-title {
-  font-size: 1.8rem;
-  line-height: 1.1;
-  margin: 0.6rem 0 0;
 }
 
 .brand-copy {
   color: var(--app-muted);
-  margin: 0.75rem 0 1rem;
+  font-size: 0.88rem;
 }
 
-.nav-card {
-  display: grid;
-  gap: 0.4rem;
-  padding: 0.7rem;
+.top-nav {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: center;
 }
 
 .nav-link {
-  border-radius: 0.95rem;
+  border-radius: 999px;
   color: var(--app-muted);
-  font-weight: 700;
-  padding: 0.85rem 1rem;
+  font-weight: 800;
+  padding: 0.65rem 1rem;
   transition: background-color 150ms ease, color 150ms ease, transform 150ms ease;
 }
 
@@ -219,18 +197,49 @@ async function handleLogout() {
   background: rgba(16, 125, 103, 0.08);
   color: var(--app-accent);
   outline: none;
-  transform: translateX(2px);
+  transform: translateY(-1px);
 }
 
 .nav-link.is-active {
-  background: linear-gradient(135deg, rgba(16, 125, 103, 0.16), rgba(16, 125, 103, 0.06));
+  background: linear-gradient(135deg, rgba(16, 125, 103, 0.16), rgba(16, 125, 103, 0.05));
   color: var(--app-ink);
 }
 
-.meta-title {
-  font-size: 0.9rem;
+.session-actions {
+  align-items: center;
+  display: flex;
+  gap: 0.8rem;
+}
+
+.session-card {
+  align-items: end;
+  display: grid;
+  gap: 0.2rem;
+  justify-items: end;
+}
+
+.session-primary {
+  font-size: 0.95rem;
   font-weight: 800;
-  margin: 0 0 1rem;
+}
+
+.session-secondary {
+  color: var(--app-muted);
+  font-size: 0.8rem;
+}
+
+.logout-button {
+  white-space: nowrap;
+}
+
+.shell-title {
+  font-size: clamp(1.4rem, 2vw, 2rem);
+  line-height: 1.1;
+  margin: 0;
+}
+
+.shell-pills {
+  justify-content: end;
 }
 
 .shell-main {
@@ -239,40 +248,21 @@ async function handleLogout() {
   align-content: start;
 }
 
-.topbar {
-  align-items: start;
-  display: grid;
-  gap: 1rem;
-  grid-template-columns: minmax(0, 1fr) minmax(18rem, 26rem);
-}
-
-.topbar-notes {
-  display: grid;
-  gap: 0.7rem;
-}
-
-.topbar-notes p {
-  background: rgba(255, 255, 255, 0.68);
-  border: 1px solid var(--app-line);
-  border-radius: 1rem;
-  color: var(--app-muted);
-  margin: 0;
-  padding: 0.8rem 0.9rem;
-}
-
 @media (max-width: 1100px) {
-  .shell {
-    grid-template-columns: 1fr;
+  .shell-topbar,
+  .shell-subbar {
+    align-items: start;
+    flex-direction: column;
   }
 
-  .topbar {
-    grid-template-columns: 1fr;
+  .top-nav {
+    justify-content: start;
   }
-}
 
-@media (max-width: 720px) {
-  .shell {
-    padding: 1rem;
+  .session-actions,
+  .session-card,
+  .shell-pills {
+    justify-items: start;
   }
 }
 </style>

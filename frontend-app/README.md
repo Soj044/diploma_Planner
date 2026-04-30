@@ -2,18 +2,19 @@
 
 Vue 3 + Vite + TypeScript shell for the Workestrator MVP frontend.
 
-## Scope of the first slice
+## Current frontend slice
 
 - application scaffold and routing;
 - thin API layer for `core-service` and `planner-service`;
 - local Vite proxy for backend calls during development;
 - token-based auth flow with login, signup, refresh, logout, and me bootstrap;
-- role-aware navigation and guarded routes;
+- top navigation shell with role-aware primary routes and guarded access;
 - live CRUD for `users`, `departments`, `skills`, and `employees`;
 - live task CRUD and task-requirement CRUD;
-- employee self-service CRUD for own work schedules, schedule days, and leaves;
 - live planning run launch, persisted proposal review, and manager approval handoff;
 - live read-only assignments screen backed by `core-service`.
+- canonical Stage 2 routes for `schedule`, `leaves`, `departments`, `profile`, and `admin`;
+- hidden compatibility routes for `planning`, `assignments`, `reference-data`, `my-schedule`, and `my-leaves`.
 
 ## Local setup
 
@@ -65,6 +66,27 @@ npm run dev
 - app bootstrap tries `refresh -> me` before protected routes become available
 - protected API calls retry once after a `401` by attempting silent refresh
 
+## Current route map
+
+- guest-only routes:
+  - `/login`
+  - `/signup`
+- protected canonical routes:
+  - `/tasks`
+  - `/schedule`
+  - `/leaves`
+  - `/departments`
+  - `/profile`
+  - `/admin` for `admin` only
+- protected advanced routes kept for compatibility:
+  - `/planning` for `manager` and `admin`
+  - `/assignments` for `manager` and `admin`
+- redirects:
+  - `/` -> `/tasks`
+  - `/reference-data` -> `/admin`
+  - `/my-schedule` -> `/schedule`
+  - `/my-leaves` -> `/leaves`
+
 ## Current point 5 coverage
 
 - list, create, edit, delete users;
@@ -112,13 +134,15 @@ npm run dev
 ## Current milestone status
 
 - frontend milestone 1 is functionally complete;
-- manager flow now covers task creation, plan run launch, persisted proposal review, approval, and read-only assignments;
-- employee flow covers signup, guarded routing, own schedules, own schedule days, and own leaves.
+- manager/admin flow still covers task creation, plan run launch, persisted proposal review, approval, and read-only assignments through advanced routes;
+- Stage 2 now installs the shared top navigation, canonical browser routes, a thin profile screen, and an admin wrapper over the reference-data workspace;
+- `schedule`, `leaves`, and `departments` routes are now canonical placeholders while the next frontend stage builds the role-specific domain UI on top of Stage 1 backend contracts.
 
-## Current Stage 6 coverage
+## Current shell coverage
 
 - guest-only `login` and `signup` routes;
 - protected app routes with silent refresh bootstrap;
-- role-aware navigation for `admin`, `manager`, and `employee`;
-- manager/admin-only access to `reference-data`, `planning`, and `assignments`;
-- employee-only `my-schedule` and `my-leaves` self-service routes.
+- top navigation for `admin`, `manager`, and `employee`;
+- canonical protected routes for `tasks`, `schedule`, `leaves`, `departments`, `profile`, and `admin`;
+- hidden advanced routes for `planning` and `assignments`;
+- compatibility redirects from `reference-data`, `my-schedule`, and `my-leaves`.

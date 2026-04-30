@@ -21,7 +21,7 @@ Use this note before any `frontend-app` task so the agent starts from current ba
 ## Current frontend milestone status
 
 - Manager/admin runtime already supports:
-  - reference-data CRUD
+  - reference-data CRUD through the `/admin` wrapper
   - task CRUD
   - task-requirement CRUD
   - persisted plan-run launch
@@ -32,8 +32,30 @@ Use this note before any `frontend-app` task so the agent starts from current ba
   - signup
   - guarded routing
   - read-only tasks
-  - own schedule UI
-  - own leaves UI
+  - top-nav shell and canonical routes
+  - profile screen powered by auth session payload
+
+## Current Stage 2 shell
+
+- Primary navigation is now a horizontal top bar:
+  - `employee`: `Tasks`, `Schedule`, `Leaves`, `Departments`, `Profile`
+  - `manager`: `Tasks`, `Schedule`, `Leaves`, `Departments`, `Profile`
+  - `admin`: `Tasks`, `Schedule`, `Leaves`, `Departments`, `Profile`, `Admin`
+- Canonical browser routes:
+  - `/tasks`
+  - `/schedule`
+  - `/leaves`
+  - `/departments`
+  - `/profile`
+  - `/admin`
+- Hidden advanced routes kept for compatibility:
+  - `/planning`
+  - `/assignments`
+- Redirect compatibility:
+  - `/` -> `/tasks`
+  - `/reference-data` -> `/admin`
+  - `/my-schedule` -> `/schedule`
+  - `/my-leaves` -> `/leaves`
 
 ## Important Stage 1 backend changes
 
@@ -83,10 +105,10 @@ These backend changes are already implemented in `core-service`, even if the cur
 - Final `Assignment` records are still created only by `core-service`.
 - Planner approval must still go through `POST /api/v1/assignments/approve-proposal/`.
 
-## Current frontend debt after Stage 1
+## Current frontend debt after Stage 2
 
-- Existing employee schedule screens still assume CRUD, but backend is now read-only.
-- Existing employee leave screens still assume broader edit/delete semantics than backend now allows.
+- The canonical `schedule`, `leaves`, and `departments` routes are still scaffold screens and do not yet implement the real role-specific UI.
+- The current `Tasks` route still follows the old task-centric screen; employee-facing assignment-first tasks remain a follow-up slice.
 - Existing manager/admin screens do not yet expose manual assignment, assignment reject, or leave status queue actions.
-- Stage 1 backend is ahead of the current employee frontend UX.
-- Any new frontend slice must align the UI to current backend rules before adding extra polish.
+- Stage 1 backend is still ahead of the current employee and manager/admin frontend business UX.
+- Any new frontend slice must keep using the Stage 2 route map and align the actual screens to backend-owned lifecycle rules before adding extra polish.
