@@ -24,6 +24,7 @@ Track frontend delivery slices for `frontend-app` without losing scope boundarie
 - `2026-04-30`: frontend Stage 2 shared shell slice completed on branch `feature/TASK-02-stage2-frontend-shell`; primary navigation moved to a top bar, canonical routes were stabilized, `Profile` became a real thin screen, and frontend service/types caught up with Stage 1 backend contracts.
 - `2026-05-01`: Stage 3 employee UX and Stage 4 manager/admin task flow completed on branch `feature/TASK-03-stage3-stage4-ux`; employee canonical routes now render real assignment/schedule/leave/directory screens, and manager/admin task creation moved to `/tasks/new` with single-task planner/manual assignment handoff.
 - `2026-05-01`: remaining Stage 4 manager/admin operational UX completed on branch `feature/TASK-04-stage4-remaining`; canonical `/schedule` now hosts cross-employee schedule CRUD, canonical `/leaves` now hosts the requested review queue, and Stage 4 frontend scope is operationally complete.
+- `2026-05-01`: Stage 5 tests/docs/acceptance closure completed on branch `feature/TASK-05-stage5-acceptance`; backend symmetry tests, frontend static checks, and docs/diagram sync now reflect the canonical `/tasks/new` planner/manual assignment flow.
 
 ## Milestone 1 slices
 
@@ -34,7 +35,7 @@ Track frontend delivery slices for `frontend-app` without losing scope boundarie
 | 3 | Task creation and task requirements | done | Implemented for `tasks` and `task-requirements` with linked selection flow |
 | 4 | Plan run launch | done | Manager/admin launch form uses `POST /api/v1/plan-runs` with auth-derived initiator |
 | 5 | Proposal and diagnostics review | done | Persisted review screen reads `GET /api/v1/plan-runs/{plan_run_id}` and renders proposals, diagnostics, and solver stats |
-| 6 | Final assignment approval | done | Approval now happens from the `Planning` persisted review screen via `/assignments/approve-proposal/` |
+| 6 | Final assignment approval | done | Primary approval now happens from `/tasks/new` through single-task planner/manual modal flow, while `Planning` remains an advanced compatibility review screen |
 | 7 | Assignments read-only view | done | Frontend now reads final assignments from `/api/v1/assignments/` with local-only filters |
 
 ## Point 5 scope decision

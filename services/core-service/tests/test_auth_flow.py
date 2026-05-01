@@ -5,6 +5,7 @@ from django.test import override_settings
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from operations.models import Department
 from users.employee_profiles import ensure_employee_profile_for_user
 
 
@@ -65,7 +66,12 @@ class AuthFlowApiTests(APITestCase):
         self.assertIn("refresh_token", response.cookies)
 
     def test_me_returns_authenticated_user_profile(self) -> None:
-        self._create_user(email="me@example.com", username="me-user")
+        user = self._create_user(email="me@example.com", username="me-user")
+        department = Department.objects.create(name="Me Department")
+        user.employee_profile.full_name = "Me Example"
+        user.employee_profile.department = department
+        user.employee_profile.position_name = "Operator"
+        user.employee_profile.save(update_fields=["full_name", "department", "position_name", "updated_at"])
         login_response = self.client.post(
             "/api/v1/auth/login",
             {"email": "me@example.com", "password": "test-pass-123"},
@@ -81,6 +87,9 @@ class AuthFlowApiTests(APITestCase):
         self.assertEqual(response.data["role"], "employee")
         self.assertIn("employee_id", response.data)
         self.assertIn("employee_profile", response.data)
+        self.assertEqual(response.data["employee_profile"]["full_name"], "Me Example")
+        self.assertEqual(response.data["employee_profile"]["department_id"], department.id)
+        self.assertEqual(response.data["employee_profile"]["position_name"], "Operator")
         self.assertIsNone(response.data["employee_profile"]["hire_date"])
         self.assertTrue(response.data["employee_profile"]["is_active"])
 

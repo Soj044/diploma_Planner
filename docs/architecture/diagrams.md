@@ -9,7 +9,7 @@
 ## High-Level Service Flow (MVP)
 
 ```text
-manager -> frontend-app: navigate top-nav tasks/schedule/leaves/departments/profile, plus /tasks/new and hidden planning/assignments advanced routes
+manager -> frontend-app: navigate top-nav tasks/schedule/leaves/departments/profile, use /tasks/new as primary create-and-assign path, plus hidden planning/assignments advanced routes
 employee -> frontend-app: navigate top-nav tasks/schedule/leaves/departments/profile routes backed by assignment-first tasks and read-only self-service screens
 frontend-app -> core-service: create/update employees, skills, tasks, work schedules, weekday rules, leave decisions, and assignment actions
 frontend-app -> core-service: login/signup/refresh/me (employee_profile included) + employee schedule/leave/assignment reads

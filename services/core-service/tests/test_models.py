@@ -462,6 +462,98 @@ class CoreApiSmokeTests(APITestCase):
         self.assertEqual(response.data["status"], Assignment.Status.APPROVED)
 
     @patch("operations.approvals.PlannerServiceClient.fetch_plan_run")
+    def test_rejected_assignment_allows_approve_proposal_again(self, fetch_plan_run_mock) -> None:
+        user_model = get_user_model()
+        manager = user_model.objects.create_user(
+            username="approve-retry-manager",
+            email="approve-retry-manager@example.com",
+            password="test-pass",
+            role=user_model.Role.MANAGER,
+        )
+        employee_user = user_model.objects.create_user(
+            username="approve-retry-employee",
+            email="approve-retry-employee@example.com",
+            password="test-pass",
+        )
+        other_employee_user = user_model.objects.create_user(
+            username="approve-retry-other",
+            email="approve-retry-other@example.com",
+            password="test-pass",
+        )
+        self.client.force_authenticate(user=manager)
+        department = Department.objects.create(name="Retry planner approval")
+        employee = Employee.objects.create(
+            user=employee_user,
+            department=department,
+            full_name="Retry Planner Candidate",
+            position_name="Operator",
+        )
+        other_employee = Employee.objects.create(
+            user=other_employee_user,
+            department=department,
+            full_name="Rejected Planner Candidate",
+            position_name="Operator",
+        )
+        task = Task.objects.create(
+            department=department,
+            title="Retry planner approval task",
+            estimated_hours=2,
+            due_date=date(2026, 5, 17),
+            created_by_user=manager,
+        )
+        Assignment.objects.create(
+            task=task,
+            employee=other_employee,
+            planned_hours=2,
+            start_date=date(2026, 5, 17),
+            end_date=date(2026, 5, 17),
+            status=Assignment.Status.REJECTED,
+            assigned_by_type=Assignment.SourceType.MANAGER,
+            assigned_by_user=manager,
+            approved_by_user=manager,
+            approved_at=timezone.now(),
+        )
+        source_plan_run_id = uuid4()
+        fetch_plan_run_mock.return_value = PlanResponse(
+            summary=PlanRunSummary(
+                plan_run_id=str(source_plan_run_id),
+                status="completed",
+                created_at=timezone.now(),
+                planning_period_start=timezone.now(),
+                planning_period_end=timezone.now(),
+                assigned_count=1,
+                unassigned_count=0,
+            ),
+            proposals=[
+                AssignmentProposal(
+                    task_id=str(task.id),
+                    employee_id=str(employee.id),
+                    score=1.25,
+                    planned_hours=2,
+                    start_date=date(2026, 5, 17),
+                    end_date=date(2026, 5, 17),
+                )
+            ],
+            unassigned=[],
+            artifacts=PlanRunArtifacts(),
+        )
+
+        response = self.client.post(
+            "/api/v1/assignments/approve-proposal/",
+            {
+                "task": task.id,
+                "employee": employee.id,
+                "source_plan_run_id": str(source_plan_run_id),
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["status"], Assignment.Status.APPROVED)
+        task.refresh_from_db()
+        self.assertEqual(task.status, Task.Status.ASSIGNED)
+
+    @patch("operations.approvals.PlannerServiceClient.fetch_plan_run")
     def test_approve_proposal_endpoint_creates_approved_assignment(self, fetch_plan_run_mock) -> None:
         user_model = get_user_model()
         manager = user_model.objects.create_user(

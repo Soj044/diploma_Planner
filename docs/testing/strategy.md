@@ -89,6 +89,11 @@ docker compose up --build
 - Preferred runtime: `docker compose up --build` from the repository root.
 - Optional alternative: start backend in Docker and run `frontend-app` on the host with `npm run dev`.
 - Start backend services and the frontend shell locally.
+- Before planner-dependent checks, prepare two task datasets:
+  - a positive planner case with eligible employee skills and an availability slot that covers the whole date-based task window so `/tasks/new` can surface a selected proposal;
+  - a manual fallback case with no eligible employee so `/tasks/new` opens manual assignment mode directly.
+- Before manager/admin leave checks, ensure at least one employee has a `requested` leave record.
+- Before manager/admin schedule checks, ensure at least one employee exists for the `/schedule` workspace.
 - Open `http://localhost:5173`.
 - As anonymous user, verify protected routes redirect to `/login` and `/signup` stays guest-only.
 - After authentication, verify `/` redirects to `/tasks`.
@@ -102,7 +107,7 @@ docker compose up --build
 - Verify `/reference-data` redirects to `/admin`, `/my-schedule` redirects to `/schedule`, and `/my-leaves` redirects to `/leaves`.
 - Verify `/planning` and `/assignments` remain reachable by direct URL for `manager` and `admin`, even though they are hidden from the primary navigation.
 - Verify `/tasks/new` is reachable only for `manager` and `admin`.
-- On `/admin`, verify the reference-data workspace still loads and preserves role-aware CRUD gating.
+- On `/admin`, verify the reference-data workspace still loads, preserves role-aware CRUD gating, and exposes the admin-only users/roles workspace.
 - On `/departments`, verify the directory renders nested employee summaries and does not require employee email from `GET /api/v1/departments/`.
 - As employee, verify `/tasks` is assignment-first and shows deadline from `assignment.end_date`, plus title/description/department/status from joined task data.
 - As employee, verify `/schedule` is read-only and exposes no create/edit/delete controls.

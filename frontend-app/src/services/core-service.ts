@@ -79,7 +79,7 @@ export const referenceDataResources: ResourceDescriptor[] = [
     label: "Work Schedules",
     endpoint: "/work-schedules/",
     description: "Reusable schedule templates per employee, now read-only for employee-facing flows.",
-    nextStep: "Stage 3 should expose employee read-only schedule views and a separate manager/admin management flow.",
+    nextStep: "Implemented on canonical /schedule with employee read-only visibility and manager/admin workspace CRUD.",
     requiresAuth: true,
   },
   {
@@ -87,7 +87,7 @@ export const referenceDataResources: ResourceDescriptor[] = [
     label: "Work Schedule Days",
     endpoint: "/work-schedule-days/",
     description: "Weekday-level schedule details for planning availability, now read-only for employee-facing flows.",
-    nextStep: "Stage 3 should expose read-only employee visibility and keep edits in a later manager/admin screen.",
+    nextStep: "Implemented on canonical /schedule with manager/admin day-rule CRUD and employee read-only visibility.",
     requiresAuth: true,
   },
   {
@@ -95,7 +95,7 @@ export const referenceDataResources: ResourceDescriptor[] = [
     label: "Employee Leaves",
     endpoint: "/employee-leaves/",
     description: "Employee leave requests with requested-only self-service mutations and manager/admin review queue.",
-    nextStep: "Stage 3 should split employee leave editing from manager/admin status decisions.",
+    nextStep: "Implemented on canonical /leaves with employee self-service and manager/admin requested queue decisions.",
     requiresAuth: true,
   },
   {
@@ -149,7 +149,7 @@ export const assignmentResources: ResourceDescriptor[] = [
     label: "Manual Assignment",
     endpoint: "/assignments/manual/",
     description: "Direct final assignment creation in core-service without planner proposal approval.",
-    nextStep: "Stage 4 should attach this to the manager/admin task flow.",
+    nextStep: "Implemented in the /tasks/new assignment modal as the manual fallback path.",
     requiresAuth: true,
   },
   {

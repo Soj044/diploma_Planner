@@ -279,6 +279,42 @@ class CoreRbacApiTests(APITestCase):
         self.assertEqual(requested_leave.status, EmployeeLeave.Status.APPROVED)
         self.assertEqual(update_response.status_code, status.HTTP_403_FORBIDDEN)
 
+    def test_admin_can_set_leave_status_but_cannot_edit_dates_and_only_lists_requested(self) -> None:
+        requested_leave = EmployeeLeave.objects.create(
+            employee=self.employee,
+            leave_type=EmployeeLeave.LeaveType.VACATION,
+            status=EmployeeLeave.Status.REQUESTED,
+            start_date=date(2026, 6, 7),
+            end_date=date(2026, 6, 7),
+        )
+        EmployeeLeave.objects.create(
+            employee=self.employee,
+            leave_type=EmployeeLeave.LeaveType.DAY_OFF,
+            status=EmployeeLeave.Status.APPROVED,
+            start_date=date(2026, 6, 8),
+            end_date=date(2026, 6, 8),
+        )
+        self.client.force_authenticate(self.admin)
+
+        list_response = self.client.get("/api/v1/employee-leaves/")
+        set_status_response = self.client.post(
+            f"/api/v1/employee-leaves/{requested_leave.id}/set-status/",
+            {"status": EmployeeLeave.Status.REJECTED},
+            format="json",
+        )
+        update_response = self.client.patch(
+            f"/api/v1/employee-leaves/{requested_leave.id}/",
+            {"end_date": "2026-06-09"},
+            format="json",
+        )
+
+        requested_leave.refresh_from_db()
+        self.assertEqual(list_response.status_code, status.HTTP_200_OK)
+        self.assertEqual([item["id"] for item in list_response.data], [requested_leave.id])
+        self.assertEqual(set_status_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(requested_leave.status, EmployeeLeave.Status.REJECTED)
+        self.assertEqual(update_response.status_code, status.HTTP_403_FORBIDDEN)
+
     def test_employee_cannot_set_leave_status(self) -> None:
         requested_leave = EmployeeLeave.objects.create(
             employee=self.employee,
