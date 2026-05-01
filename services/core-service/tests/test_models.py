@@ -234,6 +234,8 @@ class CoreApiSmokeTests(APITestCase):
         self.assertEqual(response.data["assigned_by_type"], Assignment.SourceType.MANAGER)
         self.assertIsNone(response.data["source_plan_run_id"])
         self.assertEqual(response.data["approved_by_user"], manager.id)
+        task.refresh_from_db()
+        self.assertEqual(task.status, Task.Status.ASSIGNED)
 
     def test_manual_assignment_endpoint_rejects_task_without_dates(self) -> None:
         user_model = get_user_model()
@@ -322,8 +324,10 @@ class CoreApiSmokeTests(APITestCase):
         response = self.client.post(f"/api/v1/assignments/{assignment.id}/reject/", {}, format="json")
 
         assignment.refresh_from_db()
+        task.refresh_from_db()
         self.assertEqual(response.status_code, 200)
         self.assertEqual(assignment.status, Assignment.Status.REJECTED)
+        self.assertEqual(task.status, Task.Status.PLANNED)
 
     def test_manual_assignment_endpoint_rejects_second_final_assignment_for_task(self) -> None:
         user_model = get_user_model()
@@ -524,6 +528,9 @@ class CoreApiSmokeTests(APITestCase):
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.data["status"], "approved")
         self.assertEqual(response.data["approved_by_user"], manager.id)
+        self.assertEqual(response.data["end_date"], "2026-05-04")
+        task.refresh_from_db()
+        self.assertEqual(task.status, Task.Status.ASSIGNED)
 
     @patch("operations.approvals.PlannerServiceClient.fetch_plan_run")
     def test_approve_proposal_endpoint_rejects_missing_planner_proposal(self, fetch_plan_run_mock) -> None:
