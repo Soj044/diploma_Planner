@@ -23,6 +23,8 @@ Use this note before any `frontend-app` task so the agent starts from current ba
 - Manager/admin runtime already supports:
   - owned task workspace on `/tasks`
   - task create-and-assign wizard on `/tasks/new`
+  - employee schedule management workspace on `/schedule`
+  - requested leave review queue on `/leaves`
   - task-requirement CRUD
   - persisted plan-run launch
   - persisted proposal review
@@ -116,9 +118,8 @@ These backend changes are already implemented in `core-service`, even if the cur
 - Final `Assignment` records are still created only by `core-service`.
 - Planner approval must still go through `POST /api/v1/assignments/approve-proposal/`.
 
-## Current frontend debt after Stage 3/4 tasks slice
+## Current frontend debt after Stage 4 completion
 
-- Manager/admin leave queue UI is still missing on `/leaves`.
-- Manager/admin schedule management UI is still missing on `/schedule`.
 - Hidden advanced `/planning` and `/assignments` screens still coexist with `/tasks/new` and should be reconsidered in a later cleanup slice.
+- Manager/admin assignment rejection UI is still missing even though backend `POST /api/v1/assignments/{id}/reject/` is already available.
 - Any new frontend slice must keep using the existing planner boundary and must not move eligibility/scoring/approval rules into browser code.

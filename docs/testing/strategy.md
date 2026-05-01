@@ -86,8 +86,6 @@ docker compose up --build
 
 ## Frontend Manual Smoke
 
-Stage 3 now ships the real employee canonical routes, while manager/admin leave and schedule management still remain follow-up UI work.
-
 - Preferred runtime: `docker compose up --build` from the repository root.
 - Optional alternative: start backend in Docker and run `frontend-app` on the host with `npm run dev`.
 - Start backend services and the frontend shell locally.
@@ -109,6 +107,12 @@ Stage 3 now ships the real employee canonical routes, while manager/admin leave 
 - As employee, verify `/tasks` is assignment-first and shows deadline from `assignment.end_date`, plus title/description/department/status from joined task data.
 - As employee, verify `/schedule` is read-only and exposes no create/edit/delete controls.
 - As employee, verify `/leaves` shows all leave records, opens a create form without a writable `status` field, and exposes edit/delete only while status is `requested`.
+- As manager/admin, verify `/schedule` loads a cross-employee workspace rather than the employee read-only view.
+- As manager/admin, verify `/schedule` lets the operator choose an employee, create a schedule, edit a schedule, delete a schedule, and keep default-schedule selection visible.
+- As manager/admin, verify `/schedule` lets the operator create, edit, and delete weekday rules for the selected schedule.
+- As manager/admin, verify non-working weekday rules are persisted without editable time inputs in the browser.
+- As manager/admin, verify `/leaves` shows only requested records, resolves employee names/positions from `GET /api/v1/employees/`, and never exposes date/type/comment editing controls.
+- As manager/admin, verify `/leaves` `Approve` and `Reject` both call the status-only action and remove the decided record from the queue after reload.
 - On `/tasks`, verify manager/admin see only tasks where `created_by_user === currentUser.id`.
 - On `/tasks/new`, verify task create uses the authenticated user from `/auth/me` and no longer requires reading `/users/`.
 - On `/tasks/new`, verify `Save task` persists the task without planner launch.
@@ -126,14 +130,16 @@ Stage 3 now ships the real employee canonical routes, while manager/admin leave 
 - As employee, verify `GET /api/v1/assignments/` only surfaces own assignments.
 - Verify assignment filters stay local-only and do not mutate backend state.
 - On `/profile`, verify the screen renders `email`, `role`, `full_name`, `department_id`, `position_name`, `hire_date`, and `is_active` directly from the auth session payload.
-- Backend follow-up for the next frontend slice:
-  confirm manager/admin leave queue UX lands on `/leaves` through `POST /api/v1/employee-leaves/{id}/set-status/`.
 - If browser automation is unavailable in the environment, fall back to a live proxy smoke that still exercises `frontend -> /api|/planner-api -> core/planner` on real services.
 - As employee, verify task requirements are no longer exposed as a writable concept on the canonical `/tasks` route.
 - Backend truth after Stage 3/4:
   employee `work-schedules` and `work-schedule-days` are read-only through the API and through the canonical `/schedule` route.
 - Backend truth after Stage 3/4:
   employee `employee-leaves` can be created freely, but update/delete work only while status is `requested`.
+- Backend truth after Stage 4 completion:
+  manager/admin `/schedule` is the operational CRUD workspace for any employee schedule and weekday rule.
+- Backend truth after Stage 4 completion:
+  manager/admin `/leaves` is the requested-only review queue powered by `POST /api/v1/employee-leaves/{id}/set-status/`.
 - Backend truth after Stage 3/4:
   manual final assignment uses `POST /api/v1/assignments/manual/`, planner approval uses `POST /api/v1/assignments/approve-proposal/`, and both sync the task into `assigned`.
 - Verify task and leave validation errors from backend are surfaced unchanged.

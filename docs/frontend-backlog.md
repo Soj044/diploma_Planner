@@ -23,6 +23,7 @@ Track frontend delivery slices for `frontend-app` without losing scope boundarie
 - `2026-04-30`: backend Stage 1 role-contract slice completed on branch `feature/TASK-01-stage1-role-contracts`; frontend now lags the latest backend truth for employee schedules/leaves and for the new manual assignment flow.
 - `2026-04-30`: frontend Stage 2 shared shell slice completed on branch `feature/TASK-02-stage2-frontend-shell`; primary navigation moved to a top bar, canonical routes were stabilized, `Profile` became a real thin screen, and frontend service/types caught up with Stage 1 backend contracts.
 - `2026-05-01`: Stage 3 employee UX and Stage 4 manager/admin task flow completed on branch `feature/TASK-03-stage3-stage4-ux`; employee canonical routes now render real assignment/schedule/leave/directory screens, and manager/admin task creation moved to `/tasks/new` with single-task planner/manual assignment handoff.
+- `2026-05-01`: remaining Stage 4 manager/admin operational UX completed on branch `feature/TASK-04-stage4-remaining`; canonical `/schedule` now hosts cross-employee schedule CRUD, canonical `/leaves` now hosts the requested review queue, and Stage 4 frontend scope is operationally complete.
 
 ## Milestone 1 slices
 
@@ -73,7 +74,6 @@ Reason: `work-schedules`, `work-schedule-days`, and `employee-leaves` were inten
 
 - core-service still has no Swagger/OpenAPI UI, so frontend work relies on serializers/routes and manual contract reading.
 - In the current agent environment, true headless browser access to `127.0.0.1:5173` timed out, so the final live smoke was executed through the real frontend proxy boundary from inside `frontend-smoke` rather than by DOM-level browser automation.
-- Manager/admin leave queue UI is still deferred even though `POST /api/v1/employee-leaves/{id}/set-status/` is backend-ready.
 - Manager/admin assignment rejection UI is still deferred even though `POST /api/v1/assignments/{id}/reject/` is backend-ready.
 - `/planning` and `/assignments` remain advanced compatibility routes while `/tasks/new` becomes the main create-and-assign path.
 
@@ -94,10 +94,9 @@ Reason: `work-schedules`, `work-schedule-days`, and `employee-leaves` were inten
   - Stage 5: employee self-service and final docs pass
   - Stage 6 auth migration complete
 
-## Next expected slice after Stage 3 and Stage 4 tasks flow
+## Next expected slice after Stage 4 completion
 
-- The next recommended slice is manager/admin operational follow-up outside `/tasks/new`:
-  - add requested-leaves queue UI on `/leaves`;
-  - add manager/admin schedule management on `/schedule`;
-  - expose assignment rejection where it fits the approved workflow;
-  - decide whether the hidden `/planning` and `/assignments` screens should stay as advanced routes or be folded deeper into the task workspace.
+- The next recommended slice is workflow cleanup and operational completeness around the now-finished canonical routes:
+  - expose assignment rejection where it best fits the approved manager/admin workflow;
+  - decide whether hidden `/planning` and `/assignments` should stay as advanced routes or be folded deeper into `/tasks`;
+  - revisit deferred planning inputs such as `employee-skills` and `availability-overrides`.

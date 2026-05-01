@@ -2,17 +2,21 @@
 import { computed, onMounted, reactive, ref } from "vue";
 
 import DialogModal from "../components/DialogModal.vue";
-import SectionPlaceholder from "../components/SectionPlaceholder.vue";
 import { useAuth } from "../composables/useAuth";
 import { coreService } from "../services/core-service";
 import { describeRequestError } from "../services/http";
-import type { EmployeeLeave, EmployeeLeaveInput } from "../types/api";
+import type { Employee, EmployeeLeave, EmployeeLeaveInput } from "../types/api";
 
 interface LeaveFormState {
   leave_type: string;
   start_date: string;
   end_date: string;
   comment: string;
+}
+
+interface LeaveQueueRow {
+  leave: EmployeeLeave;
+  employee: Employee | null;
 }
 
 const leaveTypeOptions = [
@@ -23,9 +27,11 @@ const leaveTypeOptions = [
 ] as const;
 
 const auth = useAuth();
+const employees = ref<Employee[]>([]);
 const leaves = ref<EmployeeLeave[]>([]);
 const isLoading = ref(false);
 const isSaving = ref(false);
+const actingLeaveId = ref<number | null>(null);
 const deletingId = ref<number | null>(null);
 const editingLeaveId = ref<number | null>(null);
 const errorMessage = ref("");
@@ -39,8 +45,22 @@ const form = reactive<LeaveFormState>({
   comment: "",
 });
 
+const employeeById = computed(() => {
+  return new Map(employees.value.map((employee) => [employee.id, employee]));
+});
+
 const sortedLeaves = computed(() => {
   return [...leaves.value].sort((left, right) => right.start_date.localeCompare(left.start_date));
+});
+
+const queueRows = computed<LeaveQueueRow[]>(() => {
+  return leaves.value
+    .filter((leave) => leave.status === "requested")
+    .sort((left, right) => left.start_date.localeCompare(right.start_date))
+    .map((leave) => ({
+      leave,
+      employee: employeeById.value.get(leave.employee) ?? null,
+    }));
 });
 
 const modalTitle = computed(() => (editingLeaveId.value === null ? "Create leave" : "Edit requested leave"));
@@ -91,15 +111,22 @@ function buildPayload(): EmployeeLeaveInput | null {
 }
 
 async function load() {
-  if (auth.role.value !== "employee") {
-    return;
-  }
-
   isLoading.value = true;
   errorMessage.value = "";
 
   try {
-    leaves.value = await coreService.listEmployeeLeaves();
+    if (auth.role.value === "employee") {
+      leaves.value = await coreService.listEmployeeLeaves();
+      employees.value = [];
+      return;
+    }
+
+    const [leaveRows, employeeRows] = await Promise.all([
+      coreService.listEmployeeLeaves(),
+      coreService.listEmployees(),
+    ]);
+    leaves.value = leaveRows;
+    employees.value = employeeRows;
   } catch (error: unknown) {
     errorMessage.value = describeRequestError(error);
   } finally {
@@ -153,6 +180,22 @@ async function removeLeave(id: number) {
   }
 }
 
+async function setLeaveStatus(leave: EmployeeLeave, status: "approved" | "rejected") {
+  actingLeaveId.value = leave.id;
+  errorMessage.value = "";
+  successMessage.value = "";
+
+  try {
+    await coreService.setEmployeeLeaveStatus(leave.id, { status });
+    successMessage.value = status === "approved" ? "Leave approved." : "Leave rejected.";
+    await load();
+  } catch (error: unknown) {
+    errorMessage.value = describeRequestError(error);
+  } finally {
+    actingLeaveId.value = null;
+  }
+}
+
 onMounted(load);
 </script>
 
@@ -161,13 +204,13 @@ onMounted(load);
     <section class="page-card">
       <p class="eyebrow">Leaves</p>
       <h3 class="page-title">
-        {{ auth.role.value === "employee" ? "Your leave requests" : "Leave queue" }}
+        {{ auth.role.value === "employee" ? "Your leave requests" : "Requested leave queue" }}
       </h3>
       <p class="page-description">
         {{
           auth.role.value === "employee"
             ? "Employees can create leave requests and modify them only while they remain requested."
-            : "Manager/admin leave review stays deferred in this slice. The route remains reserved for the requested queue."
+            : "Managers and admins review only requested leave records and decide them through the backend status action."
         }}
       </p>
       <div class="pill-row">
@@ -226,16 +269,63 @@ onMounted(load);
       </ul>
     </section>
 
-    <SectionPlaceholder
-      v-else
-      eyebrow="Canonical route"
-      title="Manager/admin queue follows in the next stage"
-      description="This route remains the future home of the requested-leaves queue backed by POST /employee-leaves/{id}/set-status/."
-    >
-      <div class="notice">
-        Keep manager/admin leave decisions on the backend status action. This slice only ships employee self-service.
+    <section v-else class="page-card">
+      <div class="editor-header">
+        <div>
+          <p class="section-caption">Requested queue</p>
+          <p class="resource-copy">
+            This list is driven by `GET /employee-leaves/` for manager/admin roles and uses `set-status` for decisions.
+          </p>
+        </div>
+        <button class="button-secondary" type="button" :disabled="isLoading" @click="load">Refresh</button>
       </div>
-    </SectionPlaceholder>
+
+      <p v-if="errorMessage" class="status-banner is-error">{{ errorMessage }}</p>
+      <p v-if="successMessage" class="status-banner is-success">{{ successMessage }}</p>
+      <p v-if="isLoading" class="resource-copy">Loading requested leave queue...</p>
+      <p v-else-if="queueRows.length === 0" class="empty-state">No requested leave records are waiting for review.</p>
+      <ul v-else class="resource-list">
+        <li v-for="row in queueRows" :key="row.leave.id" class="resource-item">
+          <div class="resource-heading">
+            <div>
+              <p class="resource-label">
+                {{ row.employee?.full_name || `Employee #${row.leave.employee}` }}
+              </p>
+              <p class="resource-copy">
+                {{ row.employee?.position_name || "Position not set" }} · {{ row.leave.leave_type }}
+              </p>
+            </div>
+            <div class="inline-actions">
+              <button
+                class="button-primary"
+                type="button"
+                :disabled="actingLeaveId === row.leave.id"
+                @click="setLeaveStatus(row.leave, 'approved')"
+              >
+                {{ actingLeaveId === row.leave.id ? "Saving..." : "Approve" }}
+              </button>
+              <button
+                class="button-danger"
+                type="button"
+                :disabled="actingLeaveId === row.leave.id"
+                @click="setLeaveStatus(row.leave, 'rejected')"
+              >
+                {{ actingLeaveId === row.leave.id ? "Saving..." : "Reject" }}
+              </button>
+            </div>
+          </div>
+
+          <div class="pill-row">
+            <span class="pill">requested</span>
+          </div>
+          <p class="resource-copy">{{ row.leave.start_date }} → {{ row.leave.end_date }}</p>
+          <p class="resource-copy">{{ row.leave.comment || "No comment." }}</p>
+          <p class="item-meta">
+            Leave #{{ row.leave.id }} · updated {{ new Date(row.leave.updated_at).toLocaleString() }}
+          </p>
+        </li>
+      </ul>
+    </section>
 
     <DialogModal
       :open="isModalOpen"

@@ -18,6 +18,14 @@ const profileStatus = computed(() => {
 
   return "Active";
 });
+
+const roleBadgeLabel = computed(() => {
+  if (!auth.user.value?.role) {
+    return "No role";
+  }
+
+  return `${auth.user.value.role.charAt(0).toUpperCase()}${auth.user.value.role.slice(1)} role`;
+});
 </script>
 
 <template>
@@ -31,7 +39,7 @@ const profileStatus = computed(() => {
       </p>
       <div class="pill-row">
         <span class="pill">/profile</span>
-        <span v-if="auth.role.value" class="pill is-warm">{{ auth.role.value }}</span>
+        <span v-if="auth.role.value" class="pill is-warm">{{ roleBadgeLabel }}</span>
       </div>
     </section>
 

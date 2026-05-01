@@ -11,7 +11,7 @@
 ```text
 manager -> frontend-app: navigate top-nav tasks/schedule/leaves/departments/profile, plus /tasks/new and hidden planning/assignments advanced routes
 employee -> frontend-app: navigate top-nav tasks/schedule/leaves/departments/profile routes backed by assignment-first tasks and read-only self-service screens
-frontend-app -> core-service: create/update employees, skills, tasks, leave decisions, and assignment actions
+frontend-app -> core-service: create/update employees, skills, tasks, work schedules, weekday rules, leave decisions, and assignment actions
 frontend-app -> core-service: login/signup/refresh/me (employee_profile included) + employee schedule/leave/assignment reads
 frontend-app -> core-service: GET /api/v1/departments/ (nested employee summaries)
 frontend-app -> planner-service: POST /api/v1/plan-runs (single-task flow uses task_ids=[task.id] from /tasks/new)
@@ -121,6 +121,10 @@ frontend-app:
     no frontend-owned business truth
     token auth via core-service (access bearer + refresh cookie)
     frontend must follow backend-owned role and lifecycle rules for assignments, schedules, and leaves
+
+  canonical role split:
+    /schedule = employee read-only view, manager/admin cross-employee CRUD workspace
+    /leaves = employee requested-only self-service, manager/admin requested review queue
 ```
 
 ## Auth Flow (MVP)
@@ -145,8 +149,20 @@ core-service -> planner-service: persisted approval reread via X-Internal-Servic
 employee -> core-service: POST /api/v1/employee-leaves/ (status forced to requested)
 employee -> core-service: PATCH/DELETE own requested leave only
 employee -> core-service: cannot set leave status directly
+manager/admin -> frontend-app: canonical /leaves route shows requested queue only
 manager/admin -> core-service: GET /api/v1/employee-leaves/ (requested queue visible)
 manager/admin -> core-service: POST /api/v1/employee-leaves/{id}/set-status/ approved|rejected
+```
+
+## Schedule Management Boundary
+
+```text
+employee -> core-service: GET /api/v1/work-schedules/ + GET /api/v1/work-schedule-days/ (self-scope read-only)
+manager/admin -> frontend-app: canonical /schedule route selects employee + schedule
+manager/admin -> core-service: GET /api/v1/employees/
+manager/admin -> core-service: GET/POST/PATCH/DELETE /api/v1/work-schedules/
+manager/admin -> core-service: GET/POST/PATCH/DELETE /api/v1/work-schedule-days/
+frontend-app: joins schedules with weekday rules locally, but keeps schedule truth in core-service
 ```
 
 ## RBAC Boundary (Core-Service)
