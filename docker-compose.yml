@@ -21,6 +21,9 @@ services:
     container_name: workestrator-core
     env_file:
       - .env
+    environment:
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-local-dev-internal-service-token}
+      PLANNER_SERVICE_URL: http://planner-service:8001
     depends_on:
       postgres:
         condition: service_healthy
@@ -37,6 +40,9 @@ services:
     container_name: workestrator-planner
     env_file:
       - .env
+    environment:
+      CORE_SERVICE_URL: http://core-service:8000
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-local-dev-internal-service-token}
     depends_on:
       postgres:
         condition: service_healthy
