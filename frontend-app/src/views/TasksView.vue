@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 
-import TaskEditorSection from "../components/tasks/TaskEditorSection.vue";
+import EmployeeTaskInboxSection from "../components/tasks/EmployeeTaskInboxSection.vue";
+import ManagerTasksWorkspaceSection from "../components/tasks/ManagerTasksWorkspaceSection.vue";
 import TaskRequirementsSection from "../components/tasks/TaskRequirementsSection.vue";
 import SectionPlaceholder from "../components/SectionPlaceholder.vue";
 import { useAuth } from "../composables/useAuth";
@@ -13,10 +14,10 @@ const taskReloadToken = ref(0);
 
 const taskIntro = computed(() => {
   if (auth.role.value === "employee") {
-    return "Tasks remain visible to employee users, but editing stays disabled so browser UX does not promise actions that backend RBAC will reject.";
+    return "Employee task visibility now follows assignment truth: the browser joins self-scoped assignments with task and department labels without turning tasks into a second mutable source of truth.";
   }
 
-  return "Tasks and task requirements belong to the core business truth. The frontend now lets a manager create both parts of that flow without re-implementing any planner logic in the browser.";
+  return "Manager and admin users keep an owned task workspace on this route, while the create-and-assign flow now lives on a dedicated /tasks/new screen.";
 });
 
 function handleSelectedTaskChange(taskId: number | null) {
@@ -41,15 +42,19 @@ function handleTasksUpdated() {
       </div>
     </section>
 
-    <TaskEditorSection
-      @selected-task-change="handleSelectedTaskChange"
-      @tasks-updated="handleTasksUpdated"
-    />
+    <EmployeeTaskInboxSection v-if="auth.role.value === 'employee'" />
 
-    <TaskRequirementsSection
-      :selected-task-id="selectedTaskId"
-      :reload-token="taskReloadToken"
-    />
+    <template v-else>
+      <ManagerTasksWorkspaceSection
+        @selected-task-change="handleSelectedTaskChange"
+        @tasks-updated="handleTasksUpdated"
+      />
+
+      <TaskRequirementsSection
+        :selected-task-id="selectedTaskId"
+        :reload-token="taskReloadToken"
+      />
+    </template>
 
     <SectionPlaceholder
       eyebrow="Contracts"

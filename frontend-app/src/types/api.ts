@@ -170,7 +170,7 @@ export interface WorkScheduleDay {
 export interface EmployeeLeaveInput {
   employee: number;
   leave_type: string;
-  status: string;
+  status?: string;
   start_date: string;
   end_date: string;
   comment: string;

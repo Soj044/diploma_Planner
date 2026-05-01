@@ -12,6 +12,7 @@ import PlanningView from "../views/PlanningView.vue";
 import ProfileView from "../views/ProfileView.vue";
 import ScheduleView from "../views/ScheduleView.vue";
 import SignupView from "../views/SignupView.vue";
+import TaskCreateView from "../views/TaskCreateView.vue";
 import TasksView from "../views/TasksView.vue";
 
 const routes = [
@@ -53,6 +54,16 @@ const routes = [
         meta: {
           title: "Tasks",
           requiresAuth: true,
+        },
+      },
+      {
+        path: "tasks/new",
+        name: "task-create",
+        component: TaskCreateView,
+        meta: {
+          title: "Create Task",
+          requiresAuth: true,
+          allowedRoles: ["admin", "manager"],
         },
       },
       {

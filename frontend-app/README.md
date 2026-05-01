@@ -10,10 +10,12 @@ Vue 3 + Vite + TypeScript shell for the Workestrator MVP frontend.
 - token-based auth flow with login, signup, refresh, logout, and me bootstrap;
 - top navigation shell with role-aware primary routes and guarded access;
 - live CRUD for `users`, `departments`, `skills`, and `employees`;
-- live task CRUD and task-requirement CRUD;
+- employee-facing assignment inbox, read-only schedule, requested-only leaves, and department directory;
+- manager/admin owned task workspace on `/tasks` and create-and-assign flow on `/tasks/new`;
+- live task-requirement CRUD;
 - live planning run launch, persisted proposal review, and manager approval handoff;
 - live read-only assignments screen backed by `core-service`.
-- canonical Stage 2 routes for `schedule`, `leaves`, `departments`, `profile`, and `admin`;
+- canonical employee routes for `schedule`, `leaves`, `departments`, and `profile`;
 - hidden compatibility routes for `planning`, `assignments`, `reference-data`, `my-schedule`, and `my-leaves`.
 
 ## Local setup
@@ -73,6 +75,7 @@ npm run dev
   - `/signup`
 - protected canonical routes:
   - `/tasks`
+  - `/tasks/new` for `manager` and `admin`
   - `/schedule`
   - `/leaves`
   - `/departments`
@@ -95,13 +98,13 @@ npm run dev
 - list, create, edit, delete employees;
 - explicitly defer employee skills and availability overrides to a later slice.
 
-## Current point 6 coverage
+## Current task coverage
 
-- list, create, edit, delete tasks;
-- list, create, edit, delete task requirements;
-- focus task requirements from a selected task in the same screen;
-- create tasks with `created_by_user = me.id`;
-- keep employee task visibility read-only.
+- employee `/tasks` now reads self-scoped assignments and joins them with task and department labels;
+- manager/admin `/tasks` now shows only tasks created by the current authenticated user;
+- `/tasks/new` saves a task first, then can continue into the single-task assignment flow;
+- task requirements stay editable for manager/admin users after the task is saved;
+- single-task assignment still reuses persisted planner runs plus backend approval/manual assignment endpoints.
 
 ## Current point 7 coverage
 
@@ -134,9 +137,9 @@ npm run dev
 ## Current milestone status
 
 - frontend milestone 1 is functionally complete;
-- manager/admin flow still covers task creation, plan run launch, persisted proposal review, approval, and read-only assignments through advanced routes;
-- Stage 2 now installs the shared top navigation, canonical browser routes, a thin profile screen, and an admin wrapper over the reference-data workspace;
-- `schedule`, `leaves`, and `departments` routes are now canonical placeholders while the next frontend stage builds the role-specific domain UI on top of Stage 1 backend contracts.
+- employee canonical routes now render real assignment, schedule, leave, department, and profile UX on top of Stage 1 backend contracts;
+- manager/admin flow now splits into an owned task workspace on `/tasks` and a dedicated create-and-assign flow on `/tasks/new`;
+- `planning` and `assignments` remain available as advanced compatibility routes for persisted review and audit.
 
 ## Current shell coverage
 

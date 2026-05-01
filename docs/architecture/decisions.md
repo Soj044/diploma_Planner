@@ -122,6 +122,12 @@ Planner-service больше не должен принимать business truth
 - Stage 1 добавил второй backend-owned путь создания final `Assignment`: `POST /api/v1/assignments/manual/`.
 - Planner approval path не удалён и остаётся обязательным для persisted proposal handoff через reread planner artifacts.
 
+### Update Note (2026-05-01)
+- Final assignment lifecycle now also synchronizes task lifecycle in `core-service`:
+  - planner approval and manual assignment move `Task.status` to `assigned`;
+  - assignment rejection reopens the task to `planned`.
+- The frontend canonical create-and-assign UX may launch a single-task persisted run from `/tasks/new`, but approval still uses the same persisted handoff boundary and does not create final assignments in the browser.
+
 ## ADR-007: Frontend MVP Shell Uses Vue 3 + Vite as a Thin Client
 
 - Date: 2026-04-26

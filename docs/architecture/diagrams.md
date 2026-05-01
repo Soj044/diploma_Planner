@@ -9,12 +9,12 @@
 ## High-Level Service Flow (MVP)
 
 ```text
-manager -> frontend-app: navigate top-nav tasks/schedule/leaves/departments/profile + hidden planning/assignments advanced routes
-employee -> frontend-app: navigate top-nav tasks/schedule/leaves/departments/profile routes
+manager -> frontend-app: navigate top-nav tasks/schedule/leaves/departments/profile, plus /tasks/new and hidden planning/assignments advanced routes
+employee -> frontend-app: navigate top-nav tasks/schedule/leaves/departments/profile routes backed by assignment-first tasks and read-only self-service screens
 frontend-app -> core-service: create/update employees, skills, tasks, leave decisions, and assignment actions
 frontend-app -> core-service: login/signup/refresh/me (employee_profile included) + employee schedule/leave/assignment reads
 frontend-app -> core-service: GET /api/v1/departments/ (nested employee summaries)
-frontend-app -> planner-service: POST /api/v1/plan-runs (single-task flow still uses task_ids=[task.id])
+frontend-app -> planner-service: POST /api/v1/plan-runs (single-task flow uses task_ids=[task.id] from /tasks/new)
 planner-service -> core-service: POST /api/v1/planning-snapshot/ + X-Internal-Service-Token
 planner-service (CP-SAT): eligibility -> scoring -> optimization
 planner-service -> planner artifact store: save run + snapshot + proposals + diagnostics
@@ -24,7 +24,7 @@ frontend-app -> core-service: POST /api/v1/assignments/approve-proposal/
 frontend-app -> core-service: POST /api/v1/assignments/manual/ or POST /api/v1/assignments/{id}/reject/
 frontend-app -> core-service: POST /api/v1/employee-leaves/{id}/set-status/ (manager/admin)
 core-service -> planner-service: GET /api/v1/plan-runs/{id} + X-Internal-Service-Token
-core-service -> core database: store final assignments and leave status changes
+core-service -> core database: store final assignments, sync task status, and persist leave status changes
 ```
 
 ## Approval Handoff
@@ -41,11 +41,11 @@ manager/admin -> core-service: POST /api/v1/assignments/manual/
 core-service: copy start_date from task.start_date
 core-service: copy end_date from task.due_date
 core-service: set source_plan_run_id = null
-core-service: validate final-assignment invariant
+core-service: validate final-assignment invariant + sync task.status to assigned
 core-service -> core database: create approved Assignment + AssignmentChangeLog
 
 manager/admin -> core-service: POST /api/v1/assignments/{id}/reject/
-core-service -> core database: mark Assignment rejected + write AssignmentChangeLog
+core-service -> core database: mark Assignment rejected + write AssignmentChangeLog + reopen task.status to planned
 ```
 
 ## Runtime Diagram (Docker)
@@ -105,7 +105,7 @@ departments list:
 ```text
 frontend-app:
   routes:
-    login, signup, shell, tasks, schedule, leaves, departments, profile, admin
+    login, signup, shell, tasks, tasks/new, schedule, leaves, departments, profile, admin
     hidden advanced routes: planning, assignments
     compatibility redirects: reference-data -> admin, my-schedule -> schedule, my-leaves -> leaves
 

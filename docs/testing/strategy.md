@@ -22,7 +22,7 @@
 - core-service approval flow: persisted planner proposal lookup, manual final assignment creation, assignment rejection, idempotent replay for the same `task + employee + source_plan_run_id`, rejection of missing or non-selected proposals, rejection of second non-rejected final assignment for one task, manual assignment defaults (`start_date=task.start_date`, `end_date=task.due_date`, `source_plan_run_id=null`), upstream planner failure handling, and internal-token reread of planner-service after planner auth gate
 - planner-service: unit and integration tests for planning pipeline, `CreatePlanRunRequest` boundary, snapshot client failure handling, SQLite persistence of run/snapshot/proposals/unassigned/solver stats, persisted run retrieval for manager review, overlap conflict diagnostics, and weighted score stability
 - planner-service auth gate: Bearer header validation, deny employee role, allow manager/admin role, and controlled `503` when core introspection is unavailable
-- frontend-app: install dependencies, type-check the Vue shell, build production bundle, verify containerized Vite startup via `docker compose`, and manually verify token auth, guarded routing, top-nav shell behavior, canonical route redirects, hidden advanced routes, and current Stage 2 scaffold limitations
+- frontend-app: install dependencies, type-check the Vue shell, build production bundle, verify containerized Vite startup via `docker compose`, and manually verify token auth, guarded routing, employee canonical routes, manager/admin `/tasks/new` flow, and hidden advanced routes
 - contracts: schema compatibility between services
 
 ## Suggested MVP Commands
@@ -77,14 +77,16 @@ docker compose up --build
 - Verify `manager` and `admin` can review requested leaves and call `POST /api/v1/employee-leaves/{id}/set-status/` with `approved|rejected`.
 - Verify `GET /api/v1/assignments/` returns only own records for an `employee` token.
 - Verify `POST /api/v1/assignments/manual/` creates a final `approved` assignment with `start_date=task.start_date`, `end_date=task.due_date`, and `source_plan_run_id=null`.
-- Verify `POST /api/v1/assignments/{id}/reject/` marks the final assignment as rejected and reopens the task for a future non-rejected final assignment.
+- Verify `POST /api/v1/assignments/approve-proposal/` creates a final `approved` assignment, keeps planner handoff semantics, and moves `Task.status` to `assigned`.
+- Verify `POST /api/v1/assignments/manual/` moves `Task.status` to `assigned`.
+- Verify `POST /api/v1/assignments/{id}/reject/` marks the final assignment as rejected, reopens `Task.status` to `planned`, and allows a future non-rejected final assignment.
 - Verify planner approval and manual assignment both reject creation of a second non-rejected final assignment for the same task.
 - Verify single-task planning still uses the existing planner boundary `POST /api/v1/plan-runs` with `task_ids=[task.id]`.
+- Verify planner-backed final assignment keeps `end_date == task.due_date` for date-based tasks.
 
 ## Frontend Manual Smoke
 
-Stage 1 backend contracts intentionally move ahead of the current frontend employee screens.
-Until the follow-up frontend slice lands, treat employee schedule/leave CRUD mismatches as expected integration debt rather than backend regressions.
+Stage 3 now ships the real employee canonical routes, while manager/admin leave and schedule management still remain follow-up UI work.
 
 - Preferred runtime: `docker compose up --build` from the repository root.
 - Optional alternative: start backend in Docker and run `frontend-app` on the host with `npm run dev`.
@@ -101,33 +103,37 @@ Until the follow-up frontend slice lands, treat employee schedule/leave CRUD mis
 - As `admin`, verify the top navigation additionally shows `Admin`.
 - Verify `/reference-data` redirects to `/admin`, `/my-schedule` redirects to `/schedule`, and `/my-leaves` redirects to `/leaves`.
 - Verify `/planning` and `/assignments` remain reachable by direct URL for `manager` and `admin`, even though they are hidden from the primary navigation.
+- Verify `/tasks/new` is reachable only for `manager` and `admin`.
 - On `/admin`, verify the reference-data workspace still loads and preserves role-aware CRUD gating.
-- On departments screens, verify UI assumptions match the new nested employee summary shape and do not require employee email from `GET /api/v1/departments/`.
-- On `Tasks`, verify task create uses the authenticated user from `/auth/me` and no longer requires reading `/users/`.
+- On `/departments`, verify the directory renders nested employee summaries and does not require employee email from `GET /api/v1/departments/`.
+- As employee, verify `/tasks` is assignment-first and shows deadline from `assignment.end_date`, plus title/description/department/status from joined task data.
+- As employee, verify `/schedule` is read-only and exposes no create/edit/delete controls.
+- As employee, verify `/leaves` shows all leave records, opens a create form without a writable `status` field, and exposes edit/delete only while status is `requested`.
+- On `/tasks`, verify manager/admin see only tasks where `created_by_user === currentUser.id`.
+- On `/tasks/new`, verify task create uses the authenticated user from `/auth/me` and no longer requires reading `/users/`.
+- On `/tasks/new`, verify `Save task` persists the task without planner launch.
+- On `/tasks/new`, verify `Save + Assignment` requires `status=planned`, `start_date`, and `due_date`.
 - On `Planning`, verify manager/admin can launch a plan run with period-only scope, optional department filter, and optional selected task subset.
-- For single-task planning UX, verify the frontend still uses `POST /api/v1/plan-runs` with `task_ids=[task.id]` instead of inventing a new planner route.
+- For single-task planning UX, verify `/tasks/new` still uses `POST /api/v1/plan-runs` with `task_ids=[task.id]` instead of inventing a new planner route.
 - Verify the planning launch summary shows the returned `plan_run_id`, status, assigned count, and unassigned count after `POST /api/v1/plan-runs`.
 - Verify entering a persisted `plan_run_id` reloads the run through `GET /api/v1/plan-runs/{plan_run_id}`.
-- Verify the persisted review screen renders proposals, diagnostics, and solver statistics from planner-service.
-- Verify only the selected proposal exposes the approval CTA.
-- Verify approval sends only `task`, `employee`, `source_plan_run_id`, and optional notes to `POST /api/v1/assignments/approve-proposal/`.
-- Verify the approval success state shows the returned final `Assignment` summary from `core-service`.
-- Verify the browser does not ask the manager to re-enter assignment dates or planned hours during approval.
+- Verify the persisted review screen still renders proposals, diagnostics, and solver statistics from planner-service.
+- On `/tasks/new`, verify a selected proposal opens the planner suggestion modal, and no-candidate diagnostics open manual assignment mode.
+- Verify planner suggestion approval sends only `task`, `employee`, and `source_plan_run_id` to `POST /api/v1/assignments/approve-proposal/`.
+- Verify manual assignment sends `task`, `employee`, `planned_hours`, and optional `notes` to `POST /api/v1/assignments/manual/`.
+- Verify the browser never invents assignment dates and always displays task-backed dates in manual mode.
 - On `Assignments`, verify the read-only list loads persisted records from `GET /api/v1/assignments/`.
 - As employee, verify `GET /api/v1/assignments/` only surfaces own assignments.
 - Verify assignment filters stay local-only and do not mutate backend state.
 - On `/profile`, verify the screen renders `email`, `role`, `full_name`, `department_id`, `position_name`, `hire_date`, and `is_active` directly from the auth session payload.
-- On `/schedule`, `/leaves`, and `/departments`, verify the new canonical routes render stable Stage 2 scaffold copy instead of exposing stale CRUD UI that no longer matches backend rules.
 - Backend follow-up for the next frontend slice:
-  confirm `GET /api/v1/assignments/` now returns employee self-scope data for employee-facing task screens.
-- Backend follow-up for the next frontend slice:
-  confirm manager/admin can use `POST /api/v1/assignments/manual/` and `POST /api/v1/assignments/{id}/reject/`.
+  confirm manager/admin leave queue UX lands on `/leaves` through `POST /api/v1/employee-leaves/{id}/set-status/`.
 - If browser automation is unavailable in the environment, fall back to a live proxy smoke that still exercises `frontend -> /api|/planner-api -> core/planner` on real services.
-- As employee, verify `Tasks` and `Task Requirements` are read-only.
-- Backend truth after Stage 1:
-  employee `work-schedules` and `work-schedule-days` are read-only through the API, so Stage 2 intentionally does not surface the old employee schedule CRUD components.
-- Backend truth after Stage 1:
-  employee `employee-leaves` can be created freely, but update/delete work only while status is `requested`; manager/admin approval now uses `POST /api/v1/employee-leaves/{id}/set-status/`, so Stage 2 intentionally keeps the canonical leaves route as a scaffold until the role-specific UI catches up.
-- Backend truth after Stage 1:
-  manual final assignment uses `POST /api/v1/assignments/manual/`, and final assignment rejection uses `POST /api/v1/assignments/{id}/reject/`.
+- As employee, verify task requirements are no longer exposed as a writable concept on the canonical `/tasks` route.
+- Backend truth after Stage 3/4:
+  employee `work-schedules` and `work-schedule-days` are read-only through the API and through the canonical `/schedule` route.
+- Backend truth after Stage 3/4:
+  employee `employee-leaves` can be created freely, but update/delete work only while status is `requested`.
+- Backend truth after Stage 3/4:
+  manual final assignment uses `POST /api/v1/assignments/manual/`, planner approval uses `POST /api/v1/assignments/approve-proposal/`, and both sync the task into `assigned`.
 - Verify task and leave validation errors from backend are surfaced unchanged.

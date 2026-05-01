@@ -21,17 +21,23 @@ Use this note before any `frontend-app` task so the agent starts from current ba
 ## Current frontend milestone status
 
 - Manager/admin runtime already supports:
-  - reference-data CRUD through the `/admin` wrapper
-  - task CRUD
+  - owned task workspace on `/tasks`
+  - task create-and-assign wizard on `/tasks/new`
   - task-requirement CRUD
   - persisted plan-run launch
   - persisted proposal review
   - planner proposal approval
+  - manual assignment from the task creation wizard
   - read-only assignments screen
+- Admin runtime additionally supports:
+  - reference-data CRUD through `/admin`
 - Employee runtime already supports:
   - signup
   - guarded routing
-  - read-only tasks
+  - assignment-first tasks screen
+  - read-only schedule screen
+  - requested-only leave self-service screen
+  - department directory screen
   - top-nav shell and canonical routes
   - profile screen powered by auth session payload
 
@@ -51,6 +57,8 @@ Use this note before any `frontend-app` task so the agent starts from current ba
 - Hidden advanced routes kept for compatibility:
   - `/planning`
   - `/assignments`
+- Additional protected route:
+  - `/tasks/new` for `manager` and `admin`
 - Redirect compatibility:
   - `/` -> `/tasks`
   - `/reference-data` -> `/admin`
@@ -92,6 +100,9 @@ These backend changes are already implemented in `core-service`, even if the cur
   - `source_plan_run_id = null`
 - Planner approval and manual assignment share one invariant:
   - do not create a second non-rejected final assignment for the same task.
+- Final assignment backend truth now also syncs task lifecycle:
+  - manual assignment and planner approval move `Task.status` to `assigned`
+  - assignment rejection reopens the task to `planned`
 
 ## Planning boundary
 
@@ -105,10 +116,9 @@ These backend changes are already implemented in `core-service`, even if the cur
 - Final `Assignment` records are still created only by `core-service`.
 - Planner approval must still go through `POST /api/v1/assignments/approve-proposal/`.
 
-## Current frontend debt after Stage 2
+## Current frontend debt after Stage 3/4 tasks slice
 
-- The canonical `schedule`, `leaves`, and `departments` routes are still scaffold screens and do not yet implement the real role-specific UI.
-- The current `Tasks` route still follows the old task-centric screen; employee-facing assignment-first tasks remain a follow-up slice.
-- Existing manager/admin screens do not yet expose manual assignment, assignment reject, or leave status queue actions.
-- Stage 1 backend is still ahead of the current employee and manager/admin frontend business UX.
-- Any new frontend slice must keep using the Stage 2 route map and align the actual screens to backend-owned lifecycle rules before adding extra polish.
+- Manager/admin leave queue UI is still missing on `/leaves`.
+- Manager/admin schedule management UI is still missing on `/schedule`.
+- Hidden advanced `/planning` and `/assignments` screens still coexist with `/tasks/new` and should be reconsidered in a later cleanup slice.
+- Any new frontend slice must keep using the existing planner boundary and must not move eligibility/scoring/approval rules into browser code.
