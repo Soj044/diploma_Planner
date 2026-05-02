@@ -80,14 +80,21 @@ class Employee(TimeStampedModel):
 class EmployeeSkill(TimeStampedModel):
     """Skill level owned by a specific employee."""
 
-    employee = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name="skills")
+    employee = models.ForeignKey(
+        Employee, on_delete=models.CASCADE, related_name="skills"
+    )
     skill = models.ForeignKey(Skill, on_delete=models.CASCADE, related_name="employees")
     level = models.PositiveSmallIntegerField(default=1)
 
     class Meta:
         constraints = [
-            models.UniqueConstraint(fields=("employee", "skill"), name="unique_employee_skill"),
-            models.CheckConstraint(condition=models.Q(level__gte=1, level__lte=5), name="employee_skill_level_1_5"),
+            models.UniqueConstraint(
+                fields=("employee", "skill"), name="unique_employee_skill"
+            ),
+            models.CheckConstraint(
+                condition=models.Q(level__gte=1, level__lte=5),
+                name="employee_skill_level_1_5",
+            ),
         ]
         indexes = [
             models.Index(fields=("employee",), name="employee_skill_employee_idx"),
@@ -98,7 +105,9 @@ class EmployeeSkill(TimeStampedModel):
 class WorkSchedule(TimeStampedModel):
     """Reusable weekly schedule template for an employee."""
 
-    employee = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name="schedules")
+    employee = models.ForeignKey(
+        Employee, on_delete=models.CASCADE, related_name="schedules"
+    )
     name = models.CharField(max_length=255)
     is_default = models.BooleanField(default=True)
 
@@ -109,7 +118,9 @@ class WorkSchedule(TimeStampedModel):
 class WorkScheduleDay(models.Model):
     """Capacity rule for one weekday in a schedule."""
 
-    schedule = models.ForeignKey(WorkSchedule, on_delete=models.CASCADE, related_name="days")
+    schedule = models.ForeignKey(
+        WorkSchedule, on_delete=models.CASCADE, related_name="days"
+    )
     weekday = models.PositiveSmallIntegerField()
     is_working_day = models.BooleanField(default=True)
     capacity_hours = models.PositiveSmallIntegerField(default=8)
@@ -118,9 +129,17 @@ class WorkScheduleDay(models.Model):
 
     class Meta:
         constraints = [
-            models.UniqueConstraint(fields=("schedule", "weekday"), name="unique_schedule_weekday"),
-            models.CheckConstraint(condition=models.Q(weekday__gte=0, weekday__lte=6), name="schedule_weekday_0_6"),
-            models.CheckConstraint(condition=models.Q(capacity_hours__lte=24), name="schedule_capacity_lte_24"),
+            models.UniqueConstraint(
+                fields=("schedule", "weekday"), name="unique_schedule_weekday"
+            ),
+            models.CheckConstraint(
+                condition=models.Q(weekday__gte=0, weekday__lte=6),
+                name="schedule_weekday_0_6",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(capacity_hours__lte=24),
+                name="schedule_capacity_lte_24",
+            ),
         ]
         indexes = [
             models.Index(fields=("schedule",), name="schedule_day_schedule_idx"),
@@ -142,27 +161,39 @@ class EmployeeLeave(TimeStampedModel):
         REJECTED = "rejected", "Rejected"
         CANCELLED = "cancelled", "Cancelled"
 
-    employee = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name="leaves")
+    employee = models.ForeignKey(
+        Employee, on_delete=models.CASCADE, related_name="leaves"
+    )
     leave_type = models.CharField(max_length=24, choices=LeaveType.choices)
-    status = models.CharField(max_length=16, choices=Status.choices, default=Status.APPROVED)
+    status = models.CharField(
+        max_length=16, choices=Status.choices, default=Status.APPROVED
+    )
     start_date = models.DateField()
     end_date = models.DateField()
     comment = models.TextField(blank=True)
 
     class Meta:
         constraints = [
-            models.CheckConstraint(condition=models.Q(start_date__lte=models.F("end_date")), name="leave_valid_period"),
+            models.CheckConstraint(
+                condition=models.Q(start_date__lte=models.F("end_date")),
+                name="leave_valid_period",
+            ),
         ]
         indexes = [
             models.Index(fields=("employee",), name="employee_leave_employee_idx"),
-            models.Index(fields=("employee", "start_date", "end_date"), name="employee_leave_period_idx"),
+            models.Index(
+                fields=("employee", "start_date", "end_date"),
+                name="employee_leave_period_idx",
+            ),
         ]
 
 
 class EmployeeAvailabilityOverride(models.Model):
     """Single-day availability override for an employee."""
 
-    employee = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name="availability_overrides")
+    employee = models.ForeignKey(
+        Employee, on_delete=models.CASCADE, related_name="availability_overrides"
+    )
     date = models.DateField()
     available_hours = models.PositiveSmallIntegerField()
     reason = models.TextField(blank=True)
@@ -177,8 +208,13 @@ class EmployeeAvailabilityOverride(models.Model):
 
     class Meta:
         constraints = [
-            models.UniqueConstraint(fields=("employee", "date"), name="unique_employee_override_date"),
-            models.CheckConstraint(condition=models.Q(available_hours__lte=24), name="override_hours_lte_24"),
+            models.UniqueConstraint(
+                fields=("employee", "date"), name="unique_employee_override_date"
+            ),
+            models.CheckConstraint(
+                condition=models.Q(available_hours__lte=24),
+                name="override_hours_lte_24",
+            ),
         ]
         indexes = [
             models.Index(fields=("employee",), name="availability_employee_idx"),
@@ -211,8 +247,12 @@ class Task(TimeStampedModel):
     )
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True)
-    status = models.CharField(max_length=16, choices=Status.choices, default=Status.DRAFT)
-    priority = models.CharField(max_length=16, choices=Priority.choices, default=Priority.MEDIUM)
+    status = models.CharField(
+        max_length=16, choices=Status.choices, default=Status.DRAFT
+    )
+    priority = models.CharField(
+        max_length=16, choices=Priority.choices, default=Priority.MEDIUM
+    )
     estimated_hours = models.PositiveSmallIntegerField()
     actual_hours = models.PositiveSmallIntegerField(null=True, blank=True)
     start_date = models.DateField(null=True, blank=True)
@@ -226,7 +266,8 @@ class Task(TimeStampedModel):
     class Meta:
         constraints = [
             models.CheckConstraint(
-                condition=models.Q(start_date__isnull=True) | models.Q(start_date__lte=models.F("due_date")),
+                condition=models.Q(start_date__isnull=True)
+                | models.Q(start_date__lte=models.F("due_date")),
                 name="task_valid_period",
             ),
         ]
@@ -244,14 +285,22 @@ class Task(TimeStampedModel):
 class TaskRequirement(models.Model):
     """Skill requirement for a task."""
 
-    task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name="requirements")
-    skill = models.ForeignKey(Skill, on_delete=models.PROTECT, related_name="task_requirements")
+    task = models.ForeignKey(
+        Task, on_delete=models.CASCADE, related_name="requirements"
+    )
+    skill = models.ForeignKey(
+        Skill, on_delete=models.PROTECT, related_name="task_requirements"
+    )
     min_level = models.PositiveSmallIntegerField(default=1)
-    weight = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal("1.00"))
+    weight = models.DecimalField(
+        max_digits=5, decimal_places=2, default=Decimal("1.00")
+    )
 
     class Meta:
         constraints = [
-            models.UniqueConstraint(fields=("task", "skill"), name="unique_task_requirement"),
+            models.UniqueConstraint(
+                fields=("task", "skill"), name="unique_task_requirement"
+            ),
         ]
         indexes = [
             models.Index(fields=("task",), name="task_requirement_task_idx"),
@@ -276,12 +325,16 @@ class Assignment(models.Model):
         ADMIN = "admin", "Admin"
 
     task = models.ForeignKey(Task, on_delete=models.PROTECT, related_name="assignments")
-    employee = models.ForeignKey(Employee, on_delete=models.PROTECT, related_name="assignments")
+    employee = models.ForeignKey(
+        Employee, on_delete=models.PROTECT, related_name="assignments"
+    )
     source_plan_run_id = models.UUIDField(null=True, blank=True)
     planned_hours = models.PositiveSmallIntegerField()
     start_date = models.DateField()
     end_date = models.DateField()
-    status = models.CharField(max_length=16, choices=Status.choices, default=Status.PROPOSED)
+    status = models.CharField(
+        max_length=16, choices=Status.choices, default=Status.PROPOSED
+    )
     assigned_by_type = models.CharField(
         max_length=16,
         choices=SourceType.choices,
@@ -307,20 +360,27 @@ class Assignment(models.Model):
 
     class Meta:
         constraints = [
-            models.CheckConstraint(condition=models.Q(start_date__lte=models.F("end_date")), name="assignment_valid_period"),
+            models.CheckConstraint(
+                condition=models.Q(start_date__lte=models.F("end_date")),
+                name="assignment_valid_period",
+            ),
         ]
         indexes = [
             models.Index(fields=("task",), name="assignment_task_idx"),
             models.Index(fields=("employee",), name="assignment_employee_idx"),
             models.Index(fields=("status",), name="assignment_status_idx"),
-            models.Index(fields=("source_plan_run_id",), name="assignment_plan_run_idx"),
+            models.Index(
+                fields=("source_plan_run_id",), name="assignment_plan_run_idx"
+            ),
         ]
 
 
 class AssignmentChangeLog(models.Model):
     """Audit record for assignment reassignment or manual change."""
 
-    assignment = models.ForeignKey(Assignment, on_delete=models.CASCADE, related_name="change_log")
+    assignment = models.ForeignKey(
+        Assignment, on_delete=models.CASCADE, related_name="change_log"
+    )
     old_employee = models.ForeignKey(
         Employee,
         on_delete=models.PROTECT,

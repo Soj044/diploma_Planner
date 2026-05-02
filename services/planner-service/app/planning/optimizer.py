@@ -8,6 +8,8 @@ eligibility и scoring. Он связывает planner business rules с solver
 from math import ceil
 
 from contracts.schemas import AssignmentProposal, EmployeeSnapshot, TaskSnapshot
+from datetime import timedelta
+
 from ortools.sat.python import cp_model
 
 from .types import EligibilityResult, ScoreResult
@@ -95,7 +97,7 @@ def build_plan(
                         score=scores.by_task.get(task_id, {}).get(employee_id, 0.0),
                         planned_hours=_planned_hours(task),
                         start_date=task.starts_at.date(),
-                        end_date=task.ends_at.date(),
+                        end_date=(task.ends_at - timedelta(microseconds=1)).date(),
                     )
                 )
 

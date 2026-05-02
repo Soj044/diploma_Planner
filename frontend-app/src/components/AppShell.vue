@@ -1,57 +1,96 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { RouterLink, RouterView, useRoute } from "vue-router";
+import { RouterLink, RouterView, useRoute, useRouter } from "vue-router";
 
+import { useAuth } from "../composables/useAuth";
 import { appConfig, frontendAssumptions } from "../config/env";
+import type { AuthRole } from "../types/api";
 
 const route = useRoute();
+const router = useRouter();
+const auth = useAuth();
 
-const navigation = [
-  {
-    label: "Shell",
-    to: "/",
-  },
-  {
-    label: "Reference Data",
-    to: "/reference-data",
-  },
+interface NavigationItem {
+  label: string;
+  to: string;
+  roles: AuthRole[];
+}
+
+const navigation: NavigationItem[] = [
   {
     label: "Tasks",
     to: "/tasks",
+    roles: ["admin", "manager", "employee"],
   },
   {
-    label: "Planning",
-    to: "/planning",
+    label: "Schedule",
+    to: "/schedule",
+    roles: ["admin", "manager", "employee"],
   },
   {
-    label: "Assignments",
-    to: "/assignments",
+    label: "Leaves",
+    to: "/leaves",
+    roles: ["admin", "manager", "employee"],
   },
-] as const;
+  {
+    label: "Departments",
+    to: "/departments",
+    roles: ["admin", "manager", "employee"],
+  },
+  {
+    label: "Profile",
+    to: "/profile",
+    roles: ["admin", "manager", "employee"],
+  },
+  {
+    label: "Admin",
+    to: "/admin",
+    roles: ["admin"],
+  },
+];
 
 const pageTitle = computed(() => {
   return typeof route.meta.title === "string" ? route.meta.title : "Workestrator";
 });
+
+const visibleNavigation = computed(() => {
+  const role = auth.role.value;
+  return navigation.filter((item) => role !== null && item.roles.includes(role));
+});
+
+const sessionLabel = computed(() => {
+  if (!auth.user.value) {
+    return "No session";
+  }
+
+  return auth.user.value.employee_profile?.full_name || auth.user.value.email;
+});
+
+const sessionDetails = computed(() => {
+  if (!auth.user.value) {
+    return "Guest";
+  }
+
+  return `${auth.user.value.email} · ${auth.user.value.role}`;
+});
+
+async function handleLogout() {
+  await auth.logout();
+  await router.push({ name: "login" });
+}
 </script>
 
 <template>
   <div class="shell">
-    <aside class="shell-sidebar">
-      <div class="brand-card">
-        <p class="brand-kicker">Workestrator</p>
-        <h1 class="brand-title">Frontend MVP Shell</h1>
-        <p class="brand-copy">
-          Thin Vue client over existing `core-service` and `planner-service` contracts.
-        </p>
-        <div class="pill-row">
-          <span class="pill">Vue 3 + TypeScript</span>
-          <span class="pill is-warm">Auth gap explicit</span>
-        </div>
-      </div>
+    <header class="shell-topbar">
+      <RouterLink class="brand-link" to="/tasks">
+        <span class="brand-mark">Workestrator</span>
+        <span class="brand-copy">Operational planning frontend</span>
+      </RouterLink>
 
-      <nav class="nav-card" aria-label="Main navigation">
+      <nav class="top-nav" aria-label="Main navigation">
         <RouterLink
-          v-for="item in navigation"
+          v-for="item in visibleNavigation"
           :key="item.to"
           :to="item.to"
           class="nav-link"
@@ -61,39 +100,28 @@ const pageTitle = computed(() => {
         </RouterLink>
       </nav>
 
-      <div class="meta-card">
-        <p class="meta-title">Runtime config</p>
-        <ul class="key-value-list">
-          <li class="key-value-item">
-            <span class="key-label">Core API</span>
-            <span class="key-value">{{ appConfig.coreServiceUrl }}</span>
-          </li>
-          <li class="key-value-item">
-            <span class="key-label">Planner API</span>
-            <span class="key-value">{{ appConfig.plannerServiceUrl }}</span>
-          </li>
-          <li class="key-value-item">
-            <span class="key-label">Core auth</span>
-            <span class="key-value">
-              {{ appConfig.hasCoreServiceAuth ? "Basic credentials configured" : "Not configured yet" }}
-            </span>
-          </li>
-        </ul>
+      <div class="session-actions">
+        <div class="session-card">
+          <span class="session-primary">{{ sessionLabel }}</span>
+          <span class="session-secondary">{{ sessionDetails }}</span>
+        </div>
+        <button class="button-secondary logout-button" type="button" @click="handleLogout">Logout</button>
       </div>
-    </aside>
+    </header>
+
+    <section class="shell-subbar">
+      <div>
+        <p class="eyebrow">Current Section</p>
+        <h2 class="shell-title">{{ pageTitle }}</h2>
+      </div>
+      <div class="pill-row shell-pills">
+        <span class="pill">Core {{ appConfig.coreServiceUrl }}</span>
+        <span class="pill">Planner {{ appConfig.plannerServiceUrl }}</span>
+        <span class="pill is-warm">{{ frontendAssumptions.auth }}</span>
+      </div>
+    </section>
 
     <main class="shell-main">
-      <header class="topbar">
-        <div>
-          <p class="eyebrow">Current Slice</p>
-          <h2 class="page-title">{{ pageTitle }}</h2>
-        </div>
-        <div class="topbar-notes">
-          <p>{{ frontendAssumptions.proxy }}</p>
-          <p>{{ frontendAssumptions.auth }}</p>
-        </div>
-      </header>
-
       <RouterView />
     </main>
   </div>
@@ -103,65 +131,64 @@ const pageTitle = computed(() => {
 .shell {
   display: grid;
   gap: 1.5rem;
-  grid-template-columns: minmax(18rem, 21rem) minmax(0, 1fr);
   min-height: 100vh;
   padding: 1.5rem;
 }
 
-.shell-sidebar {
-  display: grid;
-  gap: 1rem;
-  align-content: start;
-}
-
-.brand-card,
-.nav-card,
-.meta-card,
-.topbar {
+.shell-topbar,
+.shell-subbar {
+  align-items: center;
   backdrop-filter: blur(12px);
   background: var(--app-surface);
   border: 1px solid var(--app-line);
   border-radius: 1.35rem;
   box-shadow: var(--app-shadow);
+  display: flex;
+  gap: 1rem;
 }
 
-.brand-card,
-.meta-card,
-.topbar {
-  padding: 1.25rem;
+.shell-topbar {
+  justify-content: space-between;
+  padding: 1rem 1.25rem;
 }
 
-.brand-kicker {
+.shell-subbar {
+  justify-content: space-between;
+  padding: 1rem 1.25rem;
+}
+
+.brand-link {
+  display: grid;
+  gap: 0.18rem;
+  min-width: 14rem;
+}
+
+.brand-mark {
   color: var(--app-accent);
-  font-size: 0.75rem;
-  font-weight: 800;
-  letter-spacing: 0.12em;
-  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-}
-
-.brand-title {
-  font-size: 1.8rem;
-  line-height: 1.1;
-  margin: 0.6rem 0 0;
 }
 
 .brand-copy {
   color: var(--app-muted);
-  margin: 0.75rem 0 1rem;
+  font-size: 0.88rem;
 }
 
-.nav-card {
-  display: grid;
-  gap: 0.4rem;
-  padding: 0.7rem;
+.top-nav {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: center;
 }
 
 .nav-link {
-  border-radius: 0.95rem;
+  border-radius: 999px;
   color: var(--app-muted);
-  font-weight: 700;
-  padding: 0.85rem 1rem;
+  font-weight: 800;
+  padding: 0.65rem 1rem;
   transition: background-color 150ms ease, color 150ms ease, transform 150ms ease;
 }
 
@@ -170,18 +197,49 @@ const pageTitle = computed(() => {
   background: rgba(16, 125, 103, 0.08);
   color: var(--app-accent);
   outline: none;
-  transform: translateX(2px);
+  transform: translateY(-1px);
 }
 
 .nav-link.is-active {
-  background: linear-gradient(135deg, rgba(16, 125, 103, 0.16), rgba(16, 125, 103, 0.06));
+  background: linear-gradient(135deg, rgba(16, 125, 103, 0.16), rgba(16, 125, 103, 0.05));
   color: var(--app-ink);
 }
 
-.meta-title {
-  font-size: 0.9rem;
+.session-actions {
+  align-items: center;
+  display: flex;
+  gap: 0.8rem;
+}
+
+.session-card {
+  align-items: end;
+  display: grid;
+  gap: 0.2rem;
+  justify-items: end;
+}
+
+.session-primary {
+  font-size: 0.95rem;
   font-weight: 800;
-  margin: 0 0 1rem;
+}
+
+.session-secondary {
+  color: var(--app-muted);
+  font-size: 0.8rem;
+}
+
+.logout-button {
+  white-space: nowrap;
+}
+
+.shell-title {
+  font-size: clamp(1.4rem, 2vw, 2rem);
+  line-height: 1.1;
+  margin: 0;
+}
+
+.shell-pills {
+  justify-content: end;
 }
 
 .shell-main {
@@ -190,40 +248,21 @@ const pageTitle = computed(() => {
   align-content: start;
 }
 
-.topbar {
-  align-items: start;
-  display: grid;
-  gap: 1rem;
-  grid-template-columns: minmax(0, 1fr) minmax(18rem, 26rem);
-}
-
-.topbar-notes {
-  display: grid;
-  gap: 0.7rem;
-}
-
-.topbar-notes p {
-  background: rgba(255, 255, 255, 0.68);
-  border: 1px solid var(--app-line);
-  border-radius: 1rem;
-  color: var(--app-muted);
-  margin: 0;
-  padding: 0.8rem 0.9rem;
-}
-
 @media (max-width: 1100px) {
-  .shell {
-    grid-template-columns: 1fr;
+  .shell-topbar,
+  .shell-subbar {
+    align-items: start;
+    flex-direction: column;
   }
 
-  .topbar {
-    grid-template-columns: 1fr;
+  .top-nav {
+    justify-content: start;
   }
-}
 
-@media (max-width: 720px) {
-  .shell {
-    padding: 1rem;
+  .session-actions,
+  .session-card,
+  .shell-pills {
+    justify-items: start;
   }
 }
 </style>

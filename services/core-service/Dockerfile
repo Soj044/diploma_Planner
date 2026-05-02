@@ -10,6 +10,7 @@ WORKDIR /app/services/core-service
 
 RUN pip install --no-cache-dir "poetry==$POETRY_VERSION"
 
+COPY packages/contracts /app/packages/contracts
 COPY services/core-service/pyproject.toml services/core-service/poetry.lock* ./
 RUN poetry install --only main --no-root
 

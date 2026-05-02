@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from "vue";
+import { computed, onMounted, reactive, ref } from "vue";
 
 import SectionPlaceholder from "../SectionPlaceholder.vue";
 import { describeRequestError } from "../../services/http";
@@ -15,7 +15,7 @@ interface CatalogItem {
 
 type CatalogInput = DepartmentInput | SkillInput;
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   eyebrow: string;
   title: string;
   description: string;
@@ -25,7 +25,14 @@ const props = defineProps<{
   createItem: (payload: CatalogInput) => Promise<CatalogItem>;
   updateItem: (id: number, payload: CatalogInput) => Promise<CatalogItem>;
   deleteItem: (id: number) => Promise<void>;
-}>();
+  allowCreate?: boolean;
+  allowEdit?: boolean;
+  allowDelete?: boolean;
+}>(), {
+  allowCreate: true,
+  allowEdit: true,
+  allowDelete: true,
+});
 
 const items = ref<CatalogItem[]>([]);
 const isLoading = ref(false);
@@ -40,6 +47,8 @@ const form = reactive<CatalogInput>({
   description: "",
 });
 
+const hasEditor = computed(() => props.allowCreate || props.allowEdit);
+
 function resetForm() {
   form.name = "";
   form.description = "";
@@ -47,6 +56,10 @@ function resetForm() {
 }
 
 function startEditing(item: CatalogItem) {
+  if (!props.allowEdit) {
+    return;
+  }
+
   editingId.value = item.id;
   form.name = item.name;
   form.description = item.description;
@@ -68,6 +81,10 @@ async function load() {
 }
 
 async function save() {
+  if ((editingId.value === null && !props.allowCreate) || (editingId.value !== null && !props.allowEdit)) {
+    return;
+  }
+
   isSaving.value = true;
   errorMessage.value = "";
   successMessage.value = "";
@@ -96,6 +113,10 @@ async function save() {
 }
 
 async function remove(id: number) {
+  if (!props.allowDelete) {
+    return;
+  }
+
   deletingId.value = id;
   errorMessage.value = "";
   successMessage.value = "";
@@ -119,8 +140,8 @@ onMounted(load);
 
 <template>
   <SectionPlaceholder :eyebrow="eyebrow" :title="title" :description="description">
-    <div class="data-layout">
-      <form class="editor-card" @submit.prevent="save">
+    <div class="data-layout" :class="{ 'data-layout-single': !hasEditor }">
+      <form v-if="hasEditor" class="editor-card" @submit.prevent="save">
         <div class="editor-header">
           <div>
             <p class="section-caption">{{ editingId === null ? `Create ${entityLabel}` : `Edit ${entityLabel}` }}</p>
@@ -129,7 +150,7 @@ onMounted(load);
           <div class="inline-actions">
             <button class="button-secondary" type="button" :disabled="isLoading" @click="load">Refresh</button>
             <button
-              v-if="editingId !== null"
+              v-if="editingId !== null && allowEdit"
               class="button-secondary"
               type="button"
               :disabled="isSaving"
@@ -171,15 +192,20 @@ onMounted(load);
           <span class="pill">{{ items.length }} rows</span>
         </div>
 
+        <div v-if="!hasEditor" class="notice">
+          This role has read-only access to {{ title.toLowerCase() }}.
+        </div>
+
         <p v-if="isLoading" class="resource-copy">Loading...</p>
         <p v-else-if="items.length === 0" class="empty-state">No records yet.</p>
         <ul v-else class="resource-list">
           <li v-for="item in items" :key="item.id" class="resource-item">
             <div class="resource-heading">
               <p class="resource-label">{{ item.name }}</p>
-              <div class="inline-actions">
+              <div v-if="allowEdit || allowDelete" class="inline-actions">
                 <button class="button-secondary" type="button" @click="startEditing(item)">Edit</button>
                 <button
+                  v-if="allowDelete"
                   class="button-danger"
                   type="button"
                   :disabled="deletingId === item.id"

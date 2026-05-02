@@ -49,10 +49,10 @@
 ## Post-Merge Closeout
 - After merge, review all GitHub issues linked to the task/PR.
 - Close only the issues that are actually resolved by the merged change.
-- If the merge changes backlog status, update `docs/project/tasks.md` in the same closeout step.
+- If the merge changes backlog status, update the relevant tracking document in the same closeout step, for example `docs/frontend-backlog.md` or another active backlog file for that slice.
 - After the PR is closed, delete branches that are no longer needed locally and on GitHub to keep
   the branch list clean.
-- Task delivery is not complete until issue closeout and `docs/project/tasks.md` synchronization are finished.
+- Task delivery is not complete until issue closeout and the relevant backlog/tracking document is synchronized.
 
 ## GitHub CLI Operations (`gh`)
 - Always check auth state before PR automation: `gh auth status`.

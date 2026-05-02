@@ -7,7 +7,7 @@ planner proposal и превращает его в финальный Assignment
 
 from rest_framework import serializers
 
-from .approvals import approve_planner_proposal
+from .approvals import approve_planner_proposal, create_manual_assignment
 from .models import (
     Assignment,
     AssignmentChangeLog,
@@ -24,10 +24,19 @@ from .models import (
 )
 
 
+class DepartmentEmployeeSummarySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Employee
+        fields = ("id", "full_name", "position_name")
+        read_only_fields = fields
+
+
 class DepartmentSerializer(serializers.ModelSerializer):
+    employees = DepartmentEmployeeSummarySerializer(many=True, read_only=True)
+
     class Meta:
         model = Department
-        fields = ("id", "name", "description", "created_at", "updated_at")
+        fields = ("id", "name", "description", "employees", "created_at", "updated_at")
         read_only_fields = ("id", "created_at", "updated_at")
 
 
@@ -106,7 +115,7 @@ class EmployeeLeaveSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         )
-        read_only_fields = ("id", "created_at", "updated_at")
+        read_only_fields = ("id", "status", "created_at", "updated_at")
 
     def validate(self, attrs: dict) -> dict:
         start_date = attrs.get("start_date", getattr(self.instance, "start_date", None))
@@ -114,6 +123,10 @@ class EmployeeLeaveSerializer(serializers.ModelSerializer):
         if start_date and end_date and start_date > end_date:
             raise serializers.ValidationError("Leave start_date must be before or equal to end_date.")
         return attrs
+
+
+class EmployeeLeaveStatusSerializer(serializers.Serializer):
+    status = serializers.ChoiceField(choices=[EmployeeLeave.Status.APPROVED, EmployeeLeave.Status.REJECTED])
 
 
 class EmployeeAvailabilityOverrideSerializer(serializers.ModelSerializer):
@@ -209,6 +222,21 @@ class AssignmentApprovalSerializer(serializers.Serializer):
         validated_data.setdefault("notes", "")
         return approve_planner_proposal(
             approved_by_user=approved_by_user,
+            **validated_data,
+        )
+
+
+class AssignmentManualCreateSerializer(serializers.Serializer):
+    task = serializers.PrimaryKeyRelatedField(queryset=Task.objects.all())
+    employee = serializers.PrimaryKeyRelatedField(queryset=Employee.objects.all())
+    planned_hours = serializers.IntegerField(min_value=1)
+    notes = serializers.CharField(required=False, allow_blank=True)
+
+    def create(self, validated_data: dict) -> Assignment:
+        created_by_user = validated_data.pop("created_by_user")
+        validated_data.setdefault("notes", "")
+        return create_manual_assignment(
+            created_by_user=created_by_user,
             **validated_data,
         )
 

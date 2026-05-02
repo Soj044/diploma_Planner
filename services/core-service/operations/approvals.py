@@ -24,6 +24,50 @@ FINAL_TASK_STATUSES = [
 ]
 
 
+def create_manual_assignment(
+    *,
+    task: Task,
+    employee: Employee,
+    planned_hours: int,
+    notes: str = "",
+    created_by_user,
+) -> Assignment:
+    """Create a direct final assignment in core-service without planner artifacts."""
+
+    if task.start_date is None or task.due_date is None:
+        raise serializers.ValidationError("Task start_date and due_date are required for manual assignment.")
+
+    with transaction.atomic():
+        locked_task = Task.objects.select_for_update().get(pk=task.pk)
+        _ensure_task_has_no_final_assignment(task)
+
+        assignment = Assignment.objects.create(
+            task=task,
+            employee=employee,
+            source_plan_run_id=None,
+            planned_hours=planned_hours,
+            start_date=task.start_date,
+            end_date=task.due_date,
+            status=Assignment.Status.APPROVED,
+            assigned_by_type=_assigned_by_type_for_user(created_by_user),
+            assigned_by_user=created_by_user,
+            approved_by_user=created_by_user,
+            approved_at=timezone.now(),
+            notes=notes,
+        )
+        AssignmentChangeLog.objects.create(
+            assignment=assignment,
+            old_employee=None,
+            new_employee=assignment.employee,
+            change_reason="Created manual assignment",
+            changed_by_user=created_by_user,
+        )
+        if locked_task.status != Task.Status.ASSIGNED:
+            locked_task.status = Task.Status.ASSIGNED
+            locked_task.save(update_fields=["status"])
+        return assignment
+
+
 def approve_planner_proposal(
     *,
     task: Task,
@@ -36,29 +80,37 @@ def approve_planner_proposal(
     """Validate a persisted planner proposal and create the final core assignment from it."""
 
     # Repeating the same approval request should be safe for UI retries and network retries.
-    existing_assignment = Assignment.objects.filter(task=task, employee=employee, source_plan_run_id=source_plan_run_id).first()
+    existing_assignment = Assignment.objects.exclude(status=Assignment.Status.REJECTED).filter(
+        task=task,
+        employee=employee,
+        source_plan_run_id=source_plan_run_id,
+    ).first()
     if existing_assignment is not None:
         return existing_assignment
 
     # Core reads the persisted planner artifact instead of trusting assignment timing from client payloads.
-    plan_run = (planner_client or PlannerServiceClient(settings.PLANNER_SERVICE_URL)).fetch_plan_run(str(source_plan_run_id))
+    plan_run = (
+        planner_client
+        or PlannerServiceClient(
+            settings.PLANNER_SERVICE_URL,
+            internal_service_token=settings.INTERNAL_SERVICE_TOKEN,
+        )
+    ).fetch_plan_run(str(source_plan_run_id))
     proposal = _find_matching_proposal(plan_run, str(task.id), str(employee.id))
     _validate_planner_handoff(plan_run, proposal, task, employee)
 
     with transaction.atomic():
         # Lock the task row so concurrent approvals cannot create two final assignments for the same task.
-        Task.objects.select_for_update().get(pk=task.pk)
+        locked_task = Task.objects.select_for_update().get(pk=task.pk)
         existing_assignment = Assignment.objects.filter(
             task=task,
             employee=employee,
             source_plan_run_id=source_plan_run_id,
-        ).first()
+        ).exclude(status=Assignment.Status.REJECTED).first()
         if existing_assignment is not None:
             return existing_assignment
 
-        # The task may move through only one final assignee in the MVP approval flow.
-        if Assignment.objects.filter(task=task, status__in=FINAL_TASK_STATUSES).exists():
-            raise serializers.ValidationError("Task already has a final assignment.")
+        _ensure_task_has_no_final_assignment(task)
 
         assignment = Assignment.objects.create(
             task=task,
@@ -66,9 +118,9 @@ def approve_planner_proposal(
             source_plan_run_id=source_plan_run_id,
             planned_hours=proposal.planned_hours,
             start_date=proposal.start_date,
-            end_date=proposal.end_date,
+            end_date=task.due_date,
             status=Assignment.Status.APPROVED,
-            assigned_by_type=Assignment.SourceType.MANAGER,
+            assigned_by_type=_assigned_by_type_for_user(approved_by_user),
             assigned_by_user=approved_by_user,
             approved_by_user=approved_by_user,
             approved_at=timezone.now(),
@@ -81,7 +133,36 @@ def approve_planner_proposal(
             change_reason="Approved persisted planner proposal",
             changed_by_user=approved_by_user,
         )
+        if locked_task.status != Task.Status.ASSIGNED:
+            locked_task.status = Task.Status.ASSIGNED
+            locked_task.save(update_fields=["status"])
         return assignment
+
+
+def reject_assignment(*, assignment: Assignment, rejected_by_user) -> Assignment:
+    """Mark an approved assignment as rejected while preserving audit history."""
+
+    with transaction.atomic():
+        locked_assignment = Assignment.objects.select_for_update().select_related("employee").get(pk=assignment.pk)
+        if locked_assignment.status == Assignment.Status.REJECTED:
+            return locked_assignment
+        if locked_assignment.status != Assignment.Status.APPROVED:
+            raise serializers.ValidationError("Only approved assignments can be rejected.")
+
+        old_employee = locked_assignment.employee
+        locked_assignment.status = Assignment.Status.REJECTED
+        locked_assignment.save(update_fields=["status"])
+        if locked_assignment.task.status != Task.Status.PLANNED:
+            locked_assignment.task.status = Task.Status.PLANNED
+            locked_assignment.task.save(update_fields=["status"])
+        AssignmentChangeLog.objects.create(
+            assignment=locked_assignment,
+            old_employee=old_employee,
+            new_employee=None,
+            change_reason="Rejected assignment",
+            changed_by_user=rejected_by_user,
+        )
+        return locked_assignment
 
 
 def _find_matching_proposal(plan_run: PlanResponse, task_id: str, employee_id: str) -> AssignmentProposal:
@@ -113,3 +194,18 @@ def _validate_planner_handoff(
         raise serializers.ValidationError("Planner proposal does not match the requested task/employee pair.")
     if proposal.planned_hours is None or proposal.start_date is None or proposal.end_date is None:
         raise serializers.ValidationError("Planner proposal is missing assignment timing data.")
+
+
+def _ensure_task_has_no_final_assignment(task: Task) -> None:
+    """Reject new final assignment writes when the task already has an active final assignee."""
+
+    if Assignment.objects.filter(task=task, status__in=FINAL_TASK_STATUSES).exists():
+        raise serializers.ValidationError("Task already has a final assignment.")
+
+
+def _assigned_by_type_for_user(user) -> str:
+    """Map actor role to assignment source type for manual assignment creation."""
+
+    if getattr(user, "role", "") == "admin":
+        return Assignment.SourceType.ADMIN
+    return Assignment.SourceType.MANAGER

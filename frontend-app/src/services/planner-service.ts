@@ -6,8 +6,12 @@ import type {
   WorkflowStepDescriptor,
 } from "../types/api";
 import { createJsonClient } from "./http";
+import { getAccessToken, refreshAccessToken } from "./auth-service";
 
-const client = createJsonClient(appConfig.plannerServiceUrl);
+const client = createJsonClient(appConfig.plannerServiceUrl, {
+  getAccessToken,
+  onUnauthorized: refreshAccessToken,
+});
 
 export const plannerResources: ResourceDescriptor[] = [
   {
@@ -15,21 +19,21 @@ export const plannerResources: ResourceDescriptor[] = [
     label: "Create Plan Run",
     endpoint: "/plan-runs",
     description: "Launches a persisted planner run for a selected period and optional scope filters.",
-    nextStep: "Add planning form after task creation screens exist.",
+    nextStep: "Implemented in point 7: manager launch form with period and scope filters.",
   },
   {
     key: "get-plan-run",
     label: "Get Persisted Plan Run",
     endpoint: "/plan-runs/{plan_run_id}",
     description: "Returns summary, proposals, diagnostics, and solver artifacts for manager review.",
-    nextStep: "Add run review screen and approval CTA in the next planning slices.",
+    nextStep: "Implemented in points 8 and 9: persisted review now includes manager approval handoff to core-service.",
   },
 ];
 
 export const planningWorkflow: WorkflowStepDescriptor[] = [
   {
     title: "Launch",
-    details: "Frontend sends CreatePlanRunRequest to planner-service without embedding business truth.",
+    details: "Frontend sends CreatePlanRunRequest to planner-service using the authenticated manager/admin user ID.",
   },
   {
     title: "Snapshot pull",
@@ -56,7 +60,7 @@ export const planRunRequestFields: WorkflowStepDescriptor[] = [
   },
   {
     title: "initiated_by_user_id",
-    details: "Core user ID that initiated the run.",
+    details: "Core user ID of the currently authenticated manager or admin.",
   },
   {
     title: "department_id",

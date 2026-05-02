@@ -76,6 +76,11 @@ Planner-service больше не должен принимать business truth
 ### Consequences
 - Плюсы: одна стабильная service boundary, planner не дублирует бизнес-логику core, интеграцию проще тестировать.
 - Минусы: появляется простая внутренняя secret-конфигурация между сервисами, а planner create flow теперь зависит от доступности `core-service`.
+- Update note (2026-04-27): the runtime access policy was later narrowed by ADR-010. In the current MVP, `POST /api/v1/planning-snapshot/` is internal-token only and no longer accepts ordinary user-token access.
+
+### Update Note (2026-04-30)
+- `planning-snapshot` больше не считается endpoint для обычных authenticated user flows.
+- Актуальная MVP boundary: `POST /api/v1/planning-snapshot/` доступен только через `X-Internal-Service-Token`.
 
 ## ADR-005: Minimal Planner Artifact Persistence
 
@@ -114,6 +119,16 @@ Planner-service больше не должен принимать business truth
 - Плюсы: финальная бизнес-истина остаётся только в `core-service`, approval payload минимален, а retry/manager UI можно делать безопасно.
 - Минусы: approval flow теперь зависит от доступности `planner-service`, а полная защита от конкурентных approvals остаётся на стороне транзакций и core-service проверок.
 
+### Update Note (2026-04-30)
+- Stage 1 добавил второй backend-owned путь создания final `Assignment`: `POST /api/v1/assignments/manual/`.
+- Planner approval path не удалён и остаётся обязательным для persisted proposal handoff через reread planner artifacts.
+
+### Update Note (2026-05-01)
+- Final assignment lifecycle now also synchronizes task lifecycle in `core-service`:
+  - planner approval and manual assignment move `Task.status` to `assigned`;
+  - assignment rejection reopens the task to `planned`.
+- The frontend canonical create-and-assign UX may launch a single-task persisted run from `/tasks/new`, but approval still uses the same persisted handoff boundary and does not create final assignments in the browser.
+
 ## ADR-007: Frontend MVP Shell Uses Vue 3 + Vite as a Thin Client
 
 - Date: 2026-04-26
@@ -132,3 +147,193 @@ Backend MVP уже стабилизирован достаточно, чтобы
 ### Consequences
 - Плюсы: появляется минимальная, понятная точка входа для manager UI; backend contracts переиспользуются без редизайна; dev-среда проста и обратима.
 - Минусы: auth flow пока остаётся временным и непригодным для production; frontend shell пока покрывает только каркас и навигацию, без полноценных CRUD/user flows.
+- Update note (2026-04-28/2026-04-29): the bootstrap runtime/auth details in this ADR were later superseded by ADR-012 and ADR-014. The current MVP uses token auth, same-origin `/api/*` plus `/planner-api/*` proxies, and a Docker Compose Vite runtime for `frontend-app`.
+
+## ADR-008: Token-Based API Auth with Core-Service as Auth Authority
+
+- Date: 2026-04-27
+- Status: accepted
+
+### Context
+Frontend-app уже использует отдельный browser runtime и обращается сразу к двум backend-сервисам (`core-service` и `planner-service`). Session-only auth неудобен для такого SPA-потока и не дает стабильного механизма role-check в `planner-service`.
+
+### Decision
+- Использовать JWT-based auth для API в `core-service`:
+  - short-lived access token в JSON ответе;
+  - refresh token в HttpOnly cookie;
+  - refresh token rotation + blacklist.
+- Сохранить Django session auth как вспомогательный канал для `/admin/`.
+- Добавить auth endpoints:
+  - `POST /api/v1/auth/signup`
+  - `POST /api/v1/auth/login`
+  - `POST /api/v1/auth/refresh`
+  - `POST /api/v1/auth/logout`
+  - `GET /api/v1/auth/me`
+  - `POST /api/v1/auth/introspect` для внутренней проверки access tokens.
+- `core-service` считается единственным auth authority для остальных сервисов.
+
+### Consequences
+- Плюсы: стабильный API auth flow для frontend, единый источник role/user контекста, готовая база для planner role-gate через introspection.
+- Минусы: появляется дополнительная ответственность у `core-service` за token lifecycle и cookie-политику; требуется согласованная настройка internal token и cookie параметров в окружениях.
+
+## ADR-009: Auto-Creation of Employee Profile for Manager and Employee Roles
+
+- Date: 2026-04-27
+- Status: accepted
+
+### Context
+В MVP пользователи с ролями `manager` и `employee` должны иметь employee profile, иначе self-scope flow и часть planning-boundary логики становятся хрупкими и требуют ручных шагов после создания пользователя.
+
+### Decision
+- При signup, user-create и role-change автоматически создавать `Employee` profile для ролей `manager` и `employee`, если профиль отсутствует.
+- При смене роли на `admin` существующий `Employee` profile не удалять.
+- Использовать безопасные defaults: `full_name` из user данных или email, `position_name = "Pending assignment"`, `employment_type = full_time`, `weekly_capacity_hours = 40`, `timezone = "UTC"`.
+
+### Consequences
+- Плюсы: меньше ручных шагов в CRUD и auth flows, стабильный `me` payload и проще подготовка данных для planning.
+- Минусы: появляется связанная логика между `users` и `operations`, поэтому изменения role semantics должны проверяться интеграционными тестами.
+
+## ADR-010: Core-Service RBAC with Deny-by-Default and Employee Self-Scope
+
+- Date: 2026-04-27
+- Status: accepted
+
+### Context
+После добавления token auth по умолчанию любой аутентифицированный пользователь всё ещё имел доступ к большинству CRUD операций. Для MVP нужны явные role boundaries: admin full access, manager operational access, employee self-scope + read-only task visibility.
+
+### Decision
+- В `core-service` внедрить role-aware permission classes для каждого resource viewset:
+  - `admin`: полный доступ;
+  - `manager`: operational CRUD/read доступ согласно MVP матрице;
+  - `employee`: только self-scope на графики/leave и read-only доступ к задачам.
+- Закрыть `users` API для не-admin ролей.
+- Закрыть `planning-snapshot` от обычных user tokens и оставить только `X-Internal-Service-Token`.
+- Оставить assignment approval (`/assignments/approve-proposal`) только для `admin` и `manager`.
+
+### Consequences
+- Плюсы: предсказуемая модель прав, защита от случайного расширения доступа, готовая база для planner role-gate.
+- Минусы: больше permission-кода и тестов; любые изменения бизнес-ролей требуют синхронного обновления permission matrix и API-тестов.
+
+### Update Note (2026-04-30)
+- Employee self-scope уточнён:
+  - `work-schedules` и `work-schedule-days` теперь read-only для employee;
+  - `employee-leaves` остаются self-scope, но employee может менять только requested leaves;
+  - `assignments` теперь доступны employee в read-only self-scope;
+  - manager/admin leave review идёт через status-only action, а не generic leave PATCH.
+
+## ADR-011: Planner-Service Access via Core Introspection
+
+- Date: 2026-04-27
+- Status: accepted
+
+### Context
+После внедрения token auth и RBAC в `core-service` planner endpoints оставались открытыми, что позволяло запускать planning без user-role контроля. Нужен простой, единый способ авторизации planner запросов без дублирования auth logic в `planner-service`.
+
+### Decision
+- Защитить `planner-service` routes `POST /api/v1/plan-runs` и `GET /api/v1/plan-runs/{id}` через Bearer token dependency.
+- Валидировать access token в `planner-service` через `core-service /api/v1/auth/introspect` с `X-Internal-Service-Token`.
+- Разрешить planner routes только ролям `admin` и `manager`.
+- Для ошибок auth dependency использовать контролируемые ответы:
+  - `401` для отсутствующего/некорректного Bearer token;
+  - `403` для запрещенной роли или неактивного пользователя;
+  - `503` при недоступности introspection.
+
+### Consequences
+- Плюсы: единый auth authority в `core-service`, planner не хранит user sessions или refresh tokens, политика доступа согласована с core RBAC.
+- Минусы: planner create/get теперь зависят от доступности `core-service` introspection endpoint и internal token конфигурации.
+
+## ADR-013: Core Approval Reread Uses Internal Planner Read Access
+
+- Date: 2026-04-29
+- Status: accepted
+
+### Context
+После того как `planner-service` стал требовать Bearer token на `GET /api/v1/plan-runs/{id}`, approval handoff в `core-service` начал ломаться: manager approval приходит в `core-service`, но сам reread persisted planner artifact выполняется уже не от лица браузера. Передавать browser access token дальше внутрь `core-service` не хотелось, потому что final approval должен оставаться backend-owned handoff, а не browser token relay.
+
+### Decision
+- Сохранить manager/admin Bearer доступ для browser review на `GET /api/v1/plan-runs/{id}`.
+- Дополнительно разрешить trusted internal reread того же persisted route по `X-Internal-Service-Token` только для backend handoff из `core-service`.
+- Обновить `core-service` planner client так, чтобы он отправлял shared internal token при reread persisted plan run во время `approve-proposal`.
+- Не открывать `POST /api/v1/plan-runs` для internal token-only вызовов; внутреннее исключение нужно только для reread approval artifacts.
+
+### Consequences
+- Плюсы: manager review остаётся user-authenticated, а final approval снова работает end-to-end без передачи browser access token через frontend или core payloads.
+- Минусы: boundary `core-service -> planner-service` теперь зависит не только от planner snapshot token path, но и от внутреннего read-access правила для persisted plan runs.
+
+## ADR-012: Frontend Token Auth Runtime Uses Same-Origin Core Proxy and In-Memory Access Tokens
+
+- Date: 2026-04-28
+- Status: accepted
+
+### Context
+Первый frontend shell стартовал с локальным Basic auth workaround, но после появления backend token auth и planner introspection это стало мешать реальному browser flow. Refresh cookie от backend живет на пути `/api/v1/auth/`, поэтому старый dev path `/core-api/api/v1/*` конфликтовал с silent refresh и создавал ложное чувство работоспособности.
+
+### Decision
+- Перевести frontend-app на token-based auth flow:
+  - `login`, `signup`, `refresh`, `logout`, `me` идут только через `core-service`;
+  - access token хранится только в in-memory reactive state frontend-app;
+  - refresh token хранится только в HttpOnly cookie backend.
+- Для локальной разработки использовать same-origin proxy contract:
+  - `/api/*` -> `core-service` без rewrite;
+  - `/planner-api/*` -> `planner-service` с rewrite префикса.
+- Добавить guest-only auth routes (`/login`, `/signup`) и protected app routes.
+- Добавить role-aware navigation и route guards в frontend только как UX-layer; backend RBAC остается единственным permission truth.
+- Добавить employee self-service screens для own schedules, schedule days, and leaves вместо попытки расширять manager reference-data screens до всех ролей.
+
+### Consequences
+- Плюсы: refresh cookie path совпадает с browser request path, SPA auth flow соответствует backend контрактам, manager/employee UX перестает обещать заведомо запрещенные действия.
+- Минусы: access token не переживает закрытие вкладки без refresh cookie; frontend bootstrap теперь зависит от `refresh -> me` и чувствителен к доступности `core-service`.
+
+## ADR-014: Frontend Dev Runtime Is Available in Docker Compose via Vite Container
+
+- Date: 2026-04-29
+- Status: accepted
+
+### Context
+После завершения frontend Milestone 1 browser shell уже покрывает manager и employee flows, но локальный запуск всё ещё требовал отдельного `npm run dev` вне `docker compose`. Это создавало лишний шаг в onboarding и мешало трактовать `docker compose up --build` как полный dev runtime проекта.
+
+### Decision
+- Добавить `frontend-app/Dockerfile` на базе `node:20-alpine`.
+- Добавить `frontend-app` service в корневой `docker-compose.yml` и запускать его в dev-режиме через `Vite` на порту `5173`.
+- Оставить runtime схему frontend без изменений:
+  - `/api/*` проксируется в `core-service`;
+  - `/planner-api/*` проксируется в `planner-service`;
+  - access token остаётся в памяти браузера;
+  - refresh token остаётся в HttpOnly cookie.
+- Сохранить standalone host-run (`cd frontend-app && npm run dev`) как допустимую альтернативу для более быстрых локальных UI-итераций.
+
+### Consequences
+- Плюсы: `docker compose up --build` теперь поднимает полный full-stack dev runtime, onboarding упрощается, а smoke-проверки можно выполнять без отдельной ручной установки frontend на хосте.
+- Минусы: контейнерный dev startup frontend медленнее, чем standalone host-run, и при использовании bind mount + `npm install` на старте возрастает время первого запуска.
+
+## ADR-015: Stage 1 Role Contracts Enrich Frontend Read Models and Add Dual Final Assignment Paths
+
+- Date: 2026-04-30
+- Status: accepted
+
+### Context
+После завершения frontend Milestone 1 backend Stage 1 уточнил реальные role-aware contracts. Нужно было одновременно:
+- стабилизировать frontend bootstrap и lightweight read models;
+- ужесточить employee self-scope там, где Milestone 1 UX был слишком широким;
+- добавить manual fallback для final assignment без изменения planner boundary.
+
+### Decision
+- Возвращать `employee_profile` в `GET /api/v1/auth/me` и в auth payloads `signup`, `login`, `refresh` с полями `id`, `full_name`, `department_id`, `position_name`, `hire_date`, `is_active`.
+- Расширить `GET /api/v1/departments/` nested employee summaries, оставив в них только `id`, `full_name`, `position_name` без email.
+- Открыть `GET /api/v1/assignments/` для employee в self-scope read-only режиме.
+- Добавить explicit backend actions:
+  - `POST /api/v1/assignments/manual/`
+  - `POST /api/v1/assignments/{id}/reject/`
+  - `POST /api/v1/employee-leaves/{id}/set-status/`
+- Сузить employee lifecycle rules:
+  - schedules и schedule days только `list/retrieve`;
+  - employee leave create всегда сохраняет `requested`;
+  - employee leave update/delete разрешены только пока статус `requested`;
+  - employee не меняет leave status напрямую.
+- Для manual assignment создавать сразу final `approved` assignment с `start_date = task.start_date`, `end_date = task.due_date`, `source_plan_run_id = null`.
+- Сохранить общий invariant для planner approval и manual assignment: у одной задачи не может появиться второй non-rejected final assignment.
+- Не менять `planner-service` и `packages/contracts`; single-task planning по-прежнему идёт через существующий `POST /api/v1/plan-runs` с `task_ids=[task.id]`.
+
+### Consequences
+- Плюсы: frontend получает стабильный bootstrap/read-model payload, manager flows получают явную leave-review и manual-assignment опору, а final assignment остаётся backend-owned truth в `core-service`.
+- Минусы: Stage 1 backend теперь опережает текущий employee frontend UX, поэтому до следующего frontend slice ожидаемы интеграционные расхождения на schedule/leave/assignment экранах.

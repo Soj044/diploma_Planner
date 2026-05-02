@@ -13,7 +13,15 @@ export class ApiError extends Error {
 }
 
 interface JsonClientOptions {
-  authHeader?: string | null;
+  defaultCredentials?: RequestCredentials;
+  getAccessToken?: () => string | null;
+  onUnauthorized?: () => Promise<boolean>;
+}
+
+interface RequestOptions {
+  auth?: "bearer" | "none";
+  credentials?: RequestCredentials;
+  retryOnUnauthorized?: boolean;
 }
 
 function stringifyPayload(payload: unknown): string {
@@ -62,7 +70,23 @@ function withQuery(url: string, query: Record<string, QueryValue> | undefined): 
   return queryString ? `${url}?${queryString}` : url;
 }
 
-function getErrorMessage(payload: unknown, fallback: string): string {
+function fallbackMessageByStatus(status: number, fallback: string): string {
+  if (status === 401) {
+    return "Authentication is required or the current session has expired.";
+  }
+
+  if (status === 403) {
+    return "This action is not allowed for the current user role.";
+  }
+
+  if (status === 502 || status === 503) {
+    return "Backend service is temporarily unavailable.";
+  }
+
+  return fallback;
+}
+
+function getErrorMessage(payload: unknown, fallback: string, status: number): string {
   if (typeof payload === "string" && payload.trim()) {
     return payload;
   }
@@ -80,7 +104,7 @@ function getErrorMessage(payload: unknown, fallback: string): string {
     return payloadText;
   }
 
-  return fallback;
+  return fallbackMessageByStatus(status, fallback);
 }
 
 async function parsePayload(response: Response): Promise<unknown> {
@@ -103,8 +127,10 @@ export function createJsonClient(baseUrl: string, options: JsonClientOptions = {
     path: string,
     payload?: unknown,
     query?: Record<string, QueryValue>,
+    requestOptions: RequestOptions = {},
   ): Promise<T> {
     const url = withQuery(joinUrl(baseUrl, path), query);
+    const authMode = requestOptions.auth || "bearer";
     const headers = new Headers({
       Accept: "application/json",
     });
@@ -113,21 +139,55 @@ export function createJsonClient(baseUrl: string, options: JsonClientOptions = {
       headers.set("Content-Type", "application/json");
     }
 
-    if (options.authHeader) {
-      headers.set("Authorization", options.authHeader);
+    const accessToken = authMode === "bearer" ? options.getAccessToken?.() : null;
+    if (accessToken) {
+      headers.set("Authorization", `Bearer ${accessToken}`);
     }
 
-    const response = await fetch(url, {
-      method,
-      headers,
-      body: payload === undefined ? undefined : JSON.stringify(payload),
-    });
+    const runRequest = async (): Promise<Response> =>
+      fetch(url, {
+        method,
+        headers,
+        body: payload === undefined ? undefined : JSON.stringify(payload),
+        credentials: requestOptions.credentials ?? options.defaultCredentials,
+      });
+
+    let response = await runRequest();
+
+    if (
+      response.status === 401 &&
+      authMode === "bearer" &&
+      requestOptions.retryOnUnauthorized !== false &&
+      options.onUnauthorized
+    ) {
+      const refreshed = await options.onUnauthorized();
+      if (refreshed) {
+        const retriedHeaders = new Headers(headers);
+        const retriedToken = options.getAccessToken?.();
+        if (retriedToken) {
+          retriedHeaders.set("Authorization", `Bearer ${retriedToken}`);
+        } else {
+          retriedHeaders.delete("Authorization");
+        }
+
+        response = await fetch(url, {
+          method,
+          headers: retriedHeaders,
+          body: payload === undefined ? undefined : JSON.stringify(payload),
+          credentials: requestOptions.credentials ?? options.defaultCredentials,
+        });
+      }
+    }
 
     const parsedPayload = await parsePayload(response);
 
     if (!response.ok) {
       throw new ApiError(
-        getErrorMessage(parsedPayload, `${method} ${path} failed with status ${response.status}`),
+        getErrorMessage(
+          parsedPayload,
+          `${method} ${path} failed with status ${response.status}`,
+          response.status,
+        ),
         response.status,
         parsedPayload,
       );
@@ -137,20 +197,20 @@ export function createJsonClient(baseUrl: string, options: JsonClientOptions = {
   }
 
   return {
-    get<T>(path: string, query?: Record<string, QueryValue>) {
-      return request<T>("GET", path, undefined, query);
+    get<T>(path: string, query?: Record<string, QueryValue>, requestOptions?: RequestOptions) {
+      return request<T>("GET", path, undefined, query, requestOptions);
     },
-    post<T>(path: string, payload: unknown) {
-      return request<T>("POST", path, payload);
+    post<T>(path: string, payload?: unknown, requestOptions?: RequestOptions) {
+      return request<T>("POST", path, payload, undefined, requestOptions);
     },
-    put<T>(path: string, payload: unknown) {
-      return request<T>("PUT", path, payload);
+    put<T>(path: string, payload: unknown, requestOptions?: RequestOptions) {
+      return request<T>("PUT", path, payload, undefined, requestOptions);
     },
-    patch<T>(path: string, payload: unknown) {
-      return request<T>("PATCH", path, payload);
+    patch<T>(path: string, payload: unknown, requestOptions?: RequestOptions) {
+      return request<T>("PATCH", path, payload, undefined, requestOptions);
     },
-    delete<T>(path: string) {
-      return request<T>("DELETE", path);
+    delete<T>(path: string, requestOptions?: RequestOptions) {
+      return request<T>("DELETE", path, undefined, undefined, requestOptions);
     },
   };
 }
