@@ -97,7 +97,19 @@ Reason: `work-schedules`, `work-schedule-days`, and `employee-leaves` were inten
 
 ## Next expected slice after Stage 4 completion
 
+- Frontend Milestone 1 is complete and the default dev runtime is now full-stack via Docker Compose; the next slice should be chosen explicitly from a new backlog decision.
+
+## Historical numbering note
+
+- References to "point 5" through "point 10" in this file come from the original delivery sequence used during Milestone 1 implementation.
+- The canonical current state is the Milestone 1 table above: all seven slices are complete.
+
+## Candidate slices after Milestone 1
+
 - The next recommended slice is workflow cleanup and operational completeness around the now-finished canonical routes:
   - expose assignment rejection where it best fits the approved manager/admin workflow;
   - decide whether hidden `/planning` and `/assignments` should stay as advanced routes or be folded deeper into `/tasks`;
   - revisit deferred planning inputs such as `employee-skills` and `availability-overrides`.
+- `availability-overrides`: lowest-risk next frontend slice because `core-service` already exposes manager CRUD for `/api/v1/availability-overrides/`, so the browser can stay a thin client over an existing backend truth.
+- `employee-skills`: higher planning value because it improves planning inputs, but it is not a frontend-only slice right now; current backend RBAC exposes `employee-skills` to managers as read-only, so a follow-up decision is needed before frontend CRUD can be advertised.
+- No candidate is selected by default yet; choose explicitly based on whether the next priority is zero-backend-change UI delivery or planning-input completeness.

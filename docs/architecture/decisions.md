@@ -76,6 +76,7 @@ Planner-service больше не должен принимать business truth
 ### Consequences
 - Плюсы: одна стабильная service boundary, planner не дублирует бизнес-логику core, интеграцию проще тестировать.
 - Минусы: появляется простая внутренняя secret-конфигурация между сервисами, а planner create flow теперь зависит от доступности `core-service`.
+- Update note (2026-04-27): the runtime access policy was later narrowed by ADR-010. In the current MVP, `POST /api/v1/planning-snapshot/` is internal-token only and no longer accepts ordinary user-token access.
 
 ### Update Note (2026-04-30)
 - `planning-snapshot` больше не считается endpoint для обычных authenticated user flows.
@@ -146,6 +147,7 @@ Backend MVP уже стабилизирован достаточно, чтобы
 ### Consequences
 - Плюсы: появляется минимальная, понятная точка входа для manager UI; backend contracts переиспользуются без редизайна; dev-среда проста и обратима.
 - Минусы: auth flow пока остаётся временным и непригодным для production; frontend shell пока покрывает только каркас и навигацию, без полноценных CRUD/user flows.
+- Update note (2026-04-28/2026-04-29): the bootstrap runtime/auth details in this ADR were later superseded by ADR-012 and ADR-014. The current MVP uses token auth, same-origin `/api/*` plus `/planner-api/*` proxies, and a Docker Compose Vite runtime for `frontend-app`.
 
 ## ADR-008: Token-Based API Auth with Core-Service as Auth Authority
 

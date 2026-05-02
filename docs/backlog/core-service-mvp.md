@@ -3,6 +3,12 @@
 ## Goal
 Keep `core-service` as the source of truth for users, employees, schedules, tasks, and final assignments.
 
+## Current status
+
+- The baseline `core-service` MVP backlog is functionally complete.
+- This document remains as the backend baseline record for the delivered MVP scope.
+- New browser-facing slices should be tracked in `docs/frontend-backlog.md`.
+
 ## Ground Rules
 - `users` owns the custom Django user model and roles.
 - `operations` owns MVP business models until the schema stabilizes.
@@ -26,7 +32,7 @@ Keep `core-service` as the source of truth for users, employees, schedules, task
 
 ## Phase 4: Planner Snapshot Boundary
 - Export stable planning snapshots from core data.
-- Allow planner-service to fetch snapshots via a minimal internal token or authenticated user access.
+- Allow planner-service to fetch snapshots only via the shared internal service token.
 - Ensure planner receives copied business truth and uses only logical external IDs.
 - Keep approved assignment creation in `core-service`.
 
