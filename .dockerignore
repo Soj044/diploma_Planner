@@ -6,3 +6,6 @@ __pycache__/
 .pytest_cache/
 .venv/
 .env
+frontend-app/node_modules
+frontend-app/dist
+frontend-app/*.tsbuildinfo

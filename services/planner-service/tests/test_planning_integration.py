@@ -107,3 +107,40 @@ def test_optimizer_leaves_overlapping_task_as_capacity_conflict() -> None:
     assert len(response.proposals) == 1
     assert response.unassigned[0].reason_code == "capacity_or_conflict"
     assert response.unassigned[0].task_id in {"t-first", "t-overlap"}
+
+
+def test_optimizer_keeps_inclusive_end_date_for_date_based_tasks() -> None:
+    snapshot = PlanningSnapshot(
+        planning_period_start=datetime(2026, 3, 23, 0, 0, tzinfo=timezone.utc),
+        planning_period_end=datetime(2026, 3, 24, 0, 0, tzinfo=timezone.utc),
+        employees=[
+            EmployeeSnapshot(
+                employee_id="e1",
+                department_id="dep-1",
+                availability=[
+                    EmployeeAvailability(
+                        start_at=datetime(2026, 3, 23, 8, 0, tzinfo=timezone.utc),
+                        end_at=datetime(2026, 3, 24, 0, 0, tzinfo=timezone.utc),
+                        available_hours=8,
+                    )
+                ],
+            )
+        ],
+        tasks=[
+            TaskSnapshot(
+                task_id="t-date-based",
+                department_id="dep-1",
+                title="Date based task",
+                starts_at=datetime(2026, 3, 23, 8, 0, tzinfo=timezone.utc),
+                ends_at=datetime(2026, 3, 24, 0, 0, tzinfo=timezone.utc),
+                estimated_hours=4,
+            )
+        ],
+    )
+
+    response = run_planning(snapshot)
+
+    assert response.summary.assigned_count == 1
+    assert len(response.proposals) == 1
+    assert response.proposals[0].start_date.isoformat() == "2026-03-23"
+    assert response.proposals[0].end_date.isoformat() == "2026-03-23"

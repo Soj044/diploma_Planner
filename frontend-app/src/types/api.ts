@@ -12,6 +12,44 @@ export interface WorkflowStepDescriptor {
   details: string;
 }
 
+export type AuthRole = "admin" | "manager" | "employee";
+
+export interface AuthEmployeeProfile {
+  id: number;
+  full_name: string;
+  department_id: number | null;
+  position_name: string;
+  hire_date: string | null;
+  is_active: boolean;
+}
+
+export interface AuthUser {
+  id: number;
+  email: string;
+  role: AuthRole;
+  is_active: boolean;
+  employee_id: number | null;
+  employee_profile: AuthEmployeeProfile | null;
+}
+
+export interface AuthResponse {
+  access: string;
+  user: AuthUser;
+}
+
+export interface LoginRequest {
+  email: string;
+  password: string;
+}
+
+export interface SignupRequest {
+  email: string;
+  password: string;
+  username?: string;
+  first_name?: string;
+  last_name?: string;
+}
+
 export interface UserInput {
   email: string;
   username: string;
@@ -40,10 +78,17 @@ export interface DepartmentInput {
   description: string;
 }
 
+export interface DepartmentEmployeeSummary {
+  id: number;
+  full_name: string;
+  position_name: string;
+}
+
 export interface Department {
   id: number;
   name: string;
   description: string;
+  employees: DepartmentEmployeeSummary[];
   created_at: string;
   updated_at: string;
 }
@@ -88,6 +133,74 @@ export interface Employee {
   updated_at: string;
 }
 
+export interface WorkScheduleInput {
+  employee: number;
+  name: string;
+  is_default: boolean;
+}
+
+export interface WorkSchedule {
+  id: number;
+  employee: number;
+  name: string;
+  is_default: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WorkScheduleDayInput {
+  schedule: number;
+  weekday: number;
+  is_working_day: boolean;
+  capacity_hours: number;
+  start_time: string | null;
+  end_time: string | null;
+}
+
+export interface WorkScheduleDay {
+  id: number;
+  schedule: number;
+  weekday: number;
+  is_working_day: boolean;
+  capacity_hours: number;
+  start_time: string | null;
+  end_time: string | null;
+}
+
+export interface EmployeeLeaveInput {
+  employee: number;
+  leave_type: string;
+  status?: string;
+  start_date: string;
+  end_date: string;
+  comment: string;
+}
+
+export interface EmployeeLeave {
+  id: number;
+  employee: number;
+  leave_type: string;
+  status: string;
+  start_date: string;
+  end_date: string;
+  comment: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TaskInput {
+  department: number | null;
+  title: string;
+  description: string;
+  status: string;
+  priority: string;
+  estimated_hours: number;
+  actual_hours: number | null;
+  start_date: string | null;
+  due_date: string;
+  created_by_user: number;
+}
+
 export interface Task {
   id: number;
   department: number | null;
@@ -102,6 +215,13 @@ export interface Task {
   created_by_user: number;
   created_at: string;
   updated_at: string;
+}
+
+export interface TaskRequirementInput {
+  task: number;
+  skill: number;
+  min_level: number;
+  weight: string;
 }
 
 export interface TaskRequirement {
@@ -134,6 +254,17 @@ export interface AssignmentApprovalPayload {
   employee: number;
   source_plan_run_id: string;
   notes?: string;
+}
+
+export interface AssignmentManualCreatePayload {
+  task: number;
+  employee: number;
+  planned_hours: number;
+  notes?: string;
+}
+
+export interface EmployeeLeaveStatusUpdatePayload {
+  status: "approved" | "rejected";
 }
 
 export interface CreatePlanRunRequest {

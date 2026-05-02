@@ -3,6 +3,12 @@
 ## Goal
 Keep `core-service` as the source of truth for users, employees, schedules, tasks, and final assignments.
 
+## Current status
+
+- The baseline `core-service` MVP backlog is functionally complete.
+- This document remains as the backend baseline record for the delivered MVP scope.
+- New browser-facing slices should be tracked in `docs/frontend-backlog.md`.
+
 ## Ground Rules
 - `users` owns the custom Django user model and roles.
 - `operations` owns MVP business models until the schema stabilizes.
@@ -26,7 +32,7 @@ Keep `core-service` as the source of truth for users, employees, schedules, task
 
 ## Phase 4: Planner Snapshot Boundary
 - Export stable planning snapshots from core data.
-- Allow planner-service to fetch snapshots via a minimal internal token or authenticated user access.
+- Allow planner-service to fetch snapshots only via the shared internal service token.
 - Ensure planner receives copied business truth and uses only logical external IDs.
 - Keep approved assignment creation in `core-service`.
 
@@ -35,8 +41,30 @@ Keep `core-service` as the source of truth for users, employees, schedules, task
 - Read the persisted planner run from `planner-service`, validate the selected proposal, and create approved `Assignment` records plus assignment change logs in `core-service`.
 - Keep planner proposal status as artifact metadata only; final business truth stays in `core-service`.
 
+## Phase 6: Auth Foundation (completed)
+- Add token-based API auth foundation with `djangorestframework-simplejwt`.
+- Keep Django sessions for `/admin/` and manual browsable API usage.
+- Configure access/refresh lifetimes, refresh rotation, and token blacklist support.
+
+## Phase 7: Auth API Flow (completed)
+- Add `signup`, `login`, `refresh`, `logout`, `me`, and internal `introspect` endpoints.
+- Keep access token in JSON response and refresh token in HttpOnly cookie.
+- Block login/refresh/introspection for inactive users.
+
+## Phase 8: User-Employee Profile Sync (completed)
+- Auto-create `Employee` profile when creating `manager` or `employee` users.
+- Auto-create `Employee` profile when role changes from `admin` to `manager/employee`.
+- Keep existing `Employee` profile when role changes from `manager/employee` to `admin`.
+- Use stable default profile values for auto-created employees (`Pending assignment`, `UTC`, capacity `40`).
+
+## Phase 9: RBAC Policy Enforcement (completed)
+- Add role-aware permission matrix for `admin`, `manager`, and `employee`.
+- Restrict `users` API to admin only.
+- Enforce worker self-scope for `work-schedules`, `work-schedule-days`, and `employee-leaves`.
+- Restrict assignment approval endpoint to admin and manager only.
+- Restrict planning snapshot export to internal service token only.
+
 ## Explicitly Out of Scope For This Stage
 - Frontend flows.
-- Advanced permissions.
 - Notifications.
 - RAG/LLM or AI scoring.
