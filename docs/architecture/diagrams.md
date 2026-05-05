@@ -15,6 +15,7 @@ frontend-app -> core-service: create/update employees, skills, tasks, work sched
 frontend-app -> core-service: login/signup/refresh/me (employee_profile included) + employee schedule/leave/assignment reads
 frontend-app -> core-service: GET /api/v1/departments/ (nested employee summaries)
 frontend-app -> planner-service: POST /api/v1/plan-runs (single-task flow uses task_ids=[task.id] from /tasks/new)
+frontend-app runtime: reserves /ai-api for future ai-layer explanation routes
 planner-service -> core-service: POST /api/v1/planning-snapshot/ + X-Internal-Service-Token
 planner-service (CP-SAT): eligibility -> scoring -> optimization
 planner-service -> planner artifact store: save run + snapshot + proposals + diagnostics
@@ -24,6 +25,8 @@ frontend-app -> core-service: POST /api/v1/assignments/approve-proposal/
 frontend-app -> core-service: POST /api/v1/assignments/manual/ or POST /api/v1/assignments/{id}/reject/
 frontend-app -> core-service: POST /api/v1/employee-leaves/{id}/set-status/ (manager/admin)
 core-service -> planner-service: GET /api/v1/plan-runs/{id} + X-Internal-Service-Token
+ai-layer -> postgres: bootstrap vector extension + ai_layer schema for derived AI storage
+ai-layer -> ollama: future local chat/embedding calls
 core-service -> core database: store final assignments, sync task status, and persist leave status changes
 ```
 
@@ -60,13 +63,13 @@ browser
 | docker compose svc  |
 |       :5173         |
 +----------+----------+
-           | /api, /planner-api
+           | /api, /planner-api, /ai-api (reserved)
            v
-+---------------------+      +-----------------------+
-|   core-service      |<---->|       postgres        |
-|   django + drf      |      |      postgres:16      |
-+----------+----------+      +-----------------------+
-           ^
++---------------------+      +-----------------------------+
+|   core-service      |<---->|          postgres           |
+|   django + drf      |      | pgvector + core db +        |
++----------+----------+      | ai_layer schema foundation  |
+           ^                 +-----------------------------+
            | POST /api/v1/planning-snapshot/
            | X-Internal-Service-Token
            |
@@ -75,9 +78,21 @@ browser
 |   planner-service   |----->|   planner sqlite db   |
 |  fastapi + or-tools |      |   planner.sqlite3     |
 +---------------------+      +-----------------------+
+
++---------------------+      +-----------------------+
+|      ai-layer       |----->|        ollama         |
+|  fastapi bootstrap  |      | local model runtime   |
+|       :8002         |      |        :11434         |
++----------+----------+      +-----------------------+
+           |
+           v
+      postgres ai_layer bootstrap
+      - CREATE EXTENSION vector
+      - CREATE SCHEMA ai_layer
 ```
 
 `frontend-app` can also be run standalone on the host with `npm run dev`, but `docker compose up --build` is now the default full-stack dev runtime.
+`ai-layer` runtime is available in compose now, but no frontend AI UX or retrieval API is wired in this cycle.
 
 ## Frontend-Useful Read Models (Stage 1)
 

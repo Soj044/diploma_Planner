@@ -11,6 +11,7 @@
 - planning constraints
 - planner artifact persistence and retrieval
 - final assignment flows (planner approval, manual assignment, rejection)
+- ai-layer runtime/bootstrap and shared pgvector foundation
 - shared contracts validation for planning windows and proposal dates
 
 ## Basic checks
@@ -22,6 +23,7 @@
 - core-service approval flow: persisted planner proposal lookup, manual final assignment creation, assignment rejection, idempotent replay for the same `task + employee + source_plan_run_id`, rejection of missing or non-selected proposals, rejection of second non-rejected final assignment for one task, manual assignment defaults (`start_date=task.start_date`, `end_date=task.due_date`, `source_plan_run_id=null`), upstream planner failure handling, and internal-token reread of planner-service after planner auth gate
 - planner-service: unit and integration tests for planning pipeline, `CreatePlanRunRequest` boundary, snapshot client failure handling, SQLite persistence of run/snapshot/proposals/unassigned/solver stats, persisted run retrieval for manager review, overlap conflict diagnostics, and weighted score stability
 - planner-service auth gate: Bearer header validation, deny employee role, allow manager/admin role, and controlled `503` when core introspection is unavailable
+- ai-layer: containerized startup, `/health` probe, PostgreSQL connectivity bootstrap, `CREATE EXTENSION vector`, and isolated `ai_layer` schema creation without touching core/planner truth tables
 - frontend-app: install dependencies, type-check the Vue shell, build production bundle, verify containerized Vite startup via `docker compose`, and manually verify token auth, guarded routing, employee canonical routes, manager/admin `/tasks/new` flow, and hidden advanced routes
 - contracts: schema compatibility between services
 
@@ -44,6 +46,11 @@ cd services/planner-service
 poetry install
 poetry run pytest -q
 
+# AI layer
+cd services/ai-layer
+poetry install
+poetry run uvicorn app.main:app --host 0.0.0.0 --port 8002
+
 # Frontend app
 cd frontend-app
 npm install
@@ -53,6 +60,11 @@ npm run build
 # Container smoke
 cd /path/to/repo
 docker compose up --build
+
+# AI foundation smoke
+curl http://localhost:8002/health
+docker exec workestrator-postgres psql -U workestrator -d workestrator -c '\dx vector'
+docker exec workestrator-postgres psql -U workestrator -d workestrator -c '\dn'
 
 # Frontend container only
 docker compose up --build frontend-app
@@ -89,6 +101,7 @@ docker compose up --build
 - Preferred runtime: `docker compose up --build` from the repository root.
 - Optional alternative: start backend in Docker and run `frontend-app` on the host with `npm run dev`.
 - Start backend services and the frontend shell locally.
+- In the current cycle, optionally verify that `/ai-api` is reserved in Vite runtime even though no user-facing AI UI is wired yet.
 - Before planner-dependent checks, prepare two task datasets:
   - a positive planner case with eligible employee skills and an availability slot that covers the whole date-based task window so `/tasks/new` can surface a selected proposal;
   - a manual fallback case with no eligible employee so `/tasks/new` opens manual assignment mode directly.

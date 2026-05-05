@@ -6,6 +6,7 @@
 
 - `services/core-service` — Django + DRF, источник бизнес-истины
 - `services/planner-service` — FastAPI + OR-Tools/CP-SAT, persisted `plan runs`, `proposals`, `diagnostics`
+- `services/ai-layer` — FastAPI bootstrap для будущего AI support layer, локальный `ollama`, shared `pgvector` foundation
 - `frontend-app` — Vue 3 + Vite thin client для manager и employee flows
 - `packages/contracts` — общий слой DTO/контрактов между сервисами
 
@@ -17,12 +18,29 @@
 - запуск planning run через `planner-service`
 - persisted review proposals и diagnostics
 - manager approval flow через `POST /api/v1/assignments/approve-proposal/`
-- read-only экран итоговых assignments во frontend
-- Stage 2 shared frontend shell: top navigation, canonical routes, thin profile screen, admin workspace wrapper
+- manual assignment flow через `POST /api/v1/assignments/manual/`
+- employee canonical UX:
+- assignment-first `Tasks`
+- read-only `Schedule`
+- requested-only `Leaves`
+- `Departments`
+- `Profile`
+- manager/admin canonical UX:
+- top navigation
+- own `Tasks` workspace
+- `/tasks/new` create-and-assign wizard
+- employee schedule management
+- requested leave review queue
+- read-only экран итоговых assignments
+- admin users/roles workspace
+- AI runtime foundation:
+- `ai-layer` health/bootstrap service
+- `ollama` container in local compose runtime
+- shared PostgreSQL `pgvector` + `ai_layer` schema bootstrap
 
 ## Что еще не реализовано
 
-- AI/RAG слой
+- frontend-facing AI/RAG retrieval and explanation flows
 - сложные уведомления, realtime и внешние интеграции
 
 ## Требования
@@ -40,7 +58,7 @@
 cp .env.example .env
 ```
 
-Текущий `.env.example` уже достаточен для локального MVP запуска.
+Текущий `.env.example` уже достаточен для локального MVP запуска, включая foundation для `ai-layer`, `ollama` и shared `pgvector` storage.
 
 ### 2. Поднять весь dev runtime
 
@@ -54,6 +72,8 @@ docker compose up --build
 - `Django admin`: `http://localhost:8000/admin/`
 - `planner-service health`: `http://localhost:8001/health`
 - `planner-service docs`: `http://localhost:8001/docs`
+- `ai-layer health`: `http://localhost:8002/health`
+- `ollama API`: `http://localhost:11434/api/tags`
 - `frontend-app`: `http://localhost:5173`
 
 Если `core-service` падает с `InconsistentMigrationHistory`, значит локальный `postgres_data` volume остался от более старой схемы. Для чистого MVP-старта:
@@ -129,6 +149,7 @@ npm run dev
 - `core-service` вызывается через `/api/v1/*`
 - auth endpoints вызываются через `/api/v1/auth/*`
 - `planner-service` вызывается через `/planner-api/api/v1/*`
+- будущие frontend-facing AI routes будут вызываться через `/ai-api/api/v1/*`
 - Vite proxy используется и в standalone-режиме, и внутри `frontend-app` container
 - refresh token хранится в HttpOnly cookie
 - access token хранится только в памяти frontend
@@ -136,7 +157,7 @@ npm run dev
 Важно:
 
 - frontend больше не использует Basic auth workaround
-- при запуске через `docker compose` frontend автоматически проксирует `core-service` и `planner-service` по именам compose-сервисов
+- при запуске через `docker compose` frontend автоматически проксирует `core-service`, `planner-service` и зарезервированный `ai-layer` runtime path по именам compose-сервисов
 - при standalone-запуске frontend использует `localhost` proxy targets из `frontend-app/.env.example`
 
 ## Минимальный ручной сценарий проверки
@@ -168,6 +189,8 @@ npm run dev
 - `core-service API root`: `http://localhost:8000/api/v1/`
 - `core-service admin`: `http://localhost:8000/admin/`
 - `planner-service docs`: `http://localhost:8001/docs`
+- `ai-layer health`: `http://localhost:8002/health`
+- `ollama API`: `http://localhost:11434/api/tags`
 - `frontend-app`: `http://localhost:5173`
 
 ## Локальная разработка по сервисам
@@ -196,6 +219,16 @@ poetry install
 poetry run pytest -q
 poetry run uvicorn app.main:app --host 0.0.0.0 --port 8001
 ```
+
+### ai-layer
+
+```bash
+cd services/ai-layer
+poetry install
+poetry run uvicorn app.main:app --host 0.0.0.0 --port 8002
+```
+
+При старте `ai-layer` сам проверяет доступность PostgreSQL, включает `CREATE EXTENSION IF NOT EXISTS vector` и создает отдельную schema `ai_layer`.
 
 ### frontend-app
 
@@ -230,6 +263,9 @@ DJANGO_TEST_SQLITE=true poetry run python manage.py test
 # planner-service
 cd services/planner-service
 poetry run pytest -q
+
+# ai-layer bootstrap smoke
+curl http://localhost:8002/health
 ```
 
 ## Документация
