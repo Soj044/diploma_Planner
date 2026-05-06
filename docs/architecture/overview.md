@@ -4,7 +4,7 @@
 - `core-service` (Django + DRF): source of truth for business entities and final approved assignments.
 - `planner-service` (FastAPI + OR-Tools / CP-SAT): planning runs, snapshots, eligibility, scoring, proposals, diagnostics.
 - `frontend-app` (Vue 3 + Vite): thin manager/employee UI over existing backend contracts; not a source of business truth.
-- `ai-layer` (FastAPI): support layer for future AI features; current scope includes runtime bootstrap, authenticated capability checks, and internal-service boundary wiring, but it is not a source of business truth.
+- `ai-layer` (FastAPI): support layer for future AI features; current scope includes runtime bootstrap, authenticated capability and explanation contracts, internal-service boundary wiring, and derived pgvector-backed storage, but it is not a source of business truth.
 
 ## Core-Service Structure
 - `users`: custom Django user model with MVP roles.
@@ -30,7 +30,9 @@
 - `frontend-app` can still run standalone on the host when faster UI iteration is needed
 - frontend development uses Vite proxies `/api` -> `core-service`, `/planner-api` -> `planner-service`, and reserves `/ai-api` -> `ai-layer`
 - `ai-layer` bootstraps `CREATE EXTENSION IF NOT EXISTS vector` and an isolated `ai_layer` schema inside the shared PostgreSQL instance
+- `ai-layer` owns the derived tables `index_items`, `sync_state`, and `explanation_logs`, plus an HNSW cosine index over stored embeddings
 - frontend-facing `ai-layer` routes use the same Bearer-to-introspection pattern as `planner-service`: browser Bearer token -> `core-service /api/v1/auth/introspect` with `X-Internal-Service-Token`
+- frontend-facing `ai-layer` routes currently include `GET /api/v1/capabilities`, `POST /api/v1/explanations/assignment-rationale`, and `POST /api/v1/explanations/unassigned-task`
 - `core-service` and `planner-service` both expose internal AI helper endpoints only through `X-Internal-Service-Token`
 
 ## Main Principle

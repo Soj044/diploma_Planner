@@ -16,10 +16,13 @@ frontend-app -> core-service: login/signup/refresh/me (employee_profile included
 frontend-app -> core-service: GET /api/v1/departments/ (nested employee summaries)
 frontend-app -> planner-service: POST /api/v1/plan-runs (single-task flow uses task_ids=[task.id] from /tasks/new)
 frontend-app -> ai-layer: GET /api/v1/capabilities (Authorization: Bearer <access>)
+frontend-app -> ai-layer: POST /api/v1/explanations/assignment-rationale (Authorization: Bearer <access>)
+frontend-app -> ai-layer: POST /api/v1/explanations/unassigned-task (Authorization: Bearer <access>)
 planner-service -> core-service: POST /api/v1/planning-snapshot/ + X-Internal-Service-Token
 ai-layer -> core-service: POST /api/v1/auth/introspect + X-Internal-Service-Token
 ai-layer -> core-service: GET /api/v1/internal/ai/service-boundary/ + X-Internal-Service-Token
 ai-layer -> planner-service: GET /api/v1/internal/ai/service-boundary + X-Internal-Service-Token
+ai-layer -> ollama: /api/embed for retrieval query vectors
 planner-service (CP-SAT): eligibility -> scoring -> optimization
 planner-service -> planner artifact store: save run + snapshot + proposals + diagnostics
 planner-service -> frontend-app: assignment proposals + diagnostics
@@ -29,7 +32,8 @@ frontend-app -> core-service: POST /api/v1/assignments/manual/ or POST /api/v1/a
 frontend-app -> core-service: POST /api/v1/employee-leaves/{id}/set-status/ (manager/admin)
 core-service -> planner-service: GET /api/v1/plan-runs/{id} + X-Internal-Service-Token
 ai-layer -> postgres: bootstrap vector extension + ai_layer schema for derived AI storage
-ai-layer -> ollama: future local chat/embedding calls
+ai-layer -> postgres: create index_items + sync_state + explanation_logs + HNSW cosine index
+ai-layer -> ollama: local embedding/generation calls for explanation skeleton
 core-service -> core database: store final assignments, sync task status, and persist leave status changes
 ```
 
@@ -84,18 +88,21 @@ browser
 
 +---------------------+      +-----------------------+
 |      ai-layer       |----->|        ollama         |
-|  fastapi bootstrap  |      | local model runtime   |
-|       :8002         |      |        :11434         |
-+----------+----------+      +-----------------------+
+| fastapi explanation |      | local model runtime   |
+| skeleton + storage  |      |       :11434          |
+|       :8002         |      +-----------------------+
++----------+----------+
            |
            v
       postgres ai_layer bootstrap
       - CREATE EXTENSION vector
       - CREATE SCHEMA ai_layer
+      - CREATE TABLE index_items/sync_state/explanation_logs
+      - CREATE INDEX ... USING hnsw (embedding vector_cosine_ops)
 ```
 
 `frontend-app` can also be run standalone on the host with `npm run dev`, but `docker compose up --build` is now the default full-stack dev runtime.
-`ai-layer` runtime is available in compose now with authenticated frontend capability wiring and token-protected internal helper endpoints, but retrieval/explanation APIs are still deferred.
+`ai-layer` runtime is available in compose now with authenticated capability and explanation endpoints plus token-protected internal helper boundaries, but live context ingestion and rich retrieval feeds are still deferred.
 
 ## Frontend-Useful Read Models (Stage 1)
 

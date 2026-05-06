@@ -11,7 +11,7 @@
 - planning constraints
 - planner artifact persistence and retrieval
 - final assignment flows (planner approval, manual assignment, rejection)
-- ai-layer runtime/bootstrap and shared pgvector foundation
+- ai-layer runtime/bootstrap, explanation skeleton, and shared pgvector foundation
 - shared contracts validation for planning windows and proposal dates
 
 ## Basic checks
@@ -23,7 +23,7 @@
 - core-service approval flow: persisted planner proposal lookup, manual final assignment creation, assignment rejection, idempotent replay for the same `task + employee + source_plan_run_id`, rejection of missing or non-selected proposals, rejection of second non-rejected final assignment for one task, manual assignment defaults (`start_date=task.start_date`, `end_date=task.due_date`, `source_plan_run_id=null`), upstream planner failure handling, and internal-token reread of planner-service after planner auth gate
 - planner-service: unit and integration tests for planning pipeline, `CreatePlanRunRequest` boundary, snapshot client failure handling, SQLite persistence of run/snapshot/proposals/unassigned/solver stats, persisted run retrieval for manager review, overlap conflict diagnostics, and weighted score stability
 - planner-service auth gate: Bearer header validation, deny employee role, allow manager/admin role, and controlled `503` when core introspection is unavailable
-- ai-layer: containerized startup, `/health` probe, authenticated `/api/v1/capabilities`, PostgreSQL connectivity bootstrap, `CREATE EXTENSION vector`, and isolated `ai_layer` schema creation without touching core/planner truth tables
+- ai-layer: containerized startup, `/health` probe, authenticated `/api/v1/capabilities`, authenticated explanation routes with controlled `503` while the index is empty, PostgreSQL connectivity bootstrap, `CREATE EXTENSION vector`, isolated `ai_layer` schema creation without touching core/planner truth tables, repository creation of `index_items`/`sync_state`/`explanation_logs`, and HNSW cosine index creation
 - internal AI helper routes: `core-service` and `planner-service` service-boundary endpoints accept only `X-Internal-Service-Token`
 - frontend-app: install dependencies, type-check the Vue shell, build production bundle, verify containerized Vite startup via `docker compose`, and manually verify token auth, guarded routing, employee canonical routes, manager/admin `/tasks/new` flow, and hidden advanced routes
 - contracts: schema compatibility between services
@@ -66,8 +66,12 @@ docker compose up --build
 # AI foundation smoke
 curl http://localhost:8002/health
 curl -H "Authorization: Bearer <manager-or-admin-access-token>" http://localhost:8002/api/v1/capabilities
+curl -X POST -H "Authorization: Bearer <manager-or-admin-access-token>" -H "Content-Type: application/json" \
+  -d '{"task_id":"1","employee_id":"1","plan_run_id":"1"}' \
+  http://localhost:8002/api/v1/explanations/assignment-rationale
 docker exec workestrator-postgres psql -U workestrator -d workestrator -c '\dx vector'
 docker exec workestrator-postgres psql -U workestrator -d workestrator -c '\dn'
+docker exec workestrator-postgres psql -U workestrator -d workestrator -c '\d ai_layer.index_items'
 
 # Frontend container only
 docker compose up --build frontend-app
@@ -106,6 +110,7 @@ docker compose up --build
 - Start backend services and the frontend shell locally.
 - In the current cycle, optionally verify that `/ai-api` is reserved in Vite runtime even though no user-facing AI UI is wired yet.
 - Verify `ai-layer` returns `401` without Bearer auth, `403` for `employee`, and `200` for `manager|admin` on `/api/v1/capabilities`.
+- Verify `ai-layer` explanation routes return `503` with `AI retrieval index is not ready.` until the retrieval index is populated.
 - Verify `GET /api/v1/internal/ai/service-boundary/` in `core-service` rejects missing internal token and accepts the shared token.
 - Verify `GET /api/v1/internal/ai/service-boundary` in `planner-service` rejects missing internal token and accepts the shared token.
 - Before planner-dependent checks, prepare two task datasets:
