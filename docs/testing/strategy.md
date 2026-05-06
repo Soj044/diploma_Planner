@@ -23,7 +23,8 @@
 - core-service approval flow: persisted planner proposal lookup, manual final assignment creation, assignment rejection, idempotent replay for the same `task + employee + source_plan_run_id`, rejection of missing or non-selected proposals, rejection of second non-rejected final assignment for one task, manual assignment defaults (`start_date=task.start_date`, `end_date=task.due_date`, `source_plan_run_id=null`), upstream planner failure handling, and internal-token reread of planner-service after planner auth gate
 - planner-service: unit and integration tests for planning pipeline, `CreatePlanRunRequest` boundary, snapshot client failure handling, SQLite persistence of run/snapshot/proposals/unassigned/solver stats, persisted run retrieval for manager review, overlap conflict diagnostics, and weighted score stability
 - planner-service auth gate: Bearer header validation, deny employee role, allow manager/admin role, and controlled `503` when core introspection is unavailable
-- ai-layer: containerized startup, `/health` probe, PostgreSQL connectivity bootstrap, `CREATE EXTENSION vector`, and isolated `ai_layer` schema creation without touching core/planner truth tables
+- ai-layer: containerized startup, `/health` probe, authenticated `/api/v1/capabilities`, PostgreSQL connectivity bootstrap, `CREATE EXTENSION vector`, and isolated `ai_layer` schema creation without touching core/planner truth tables
+- internal AI helper routes: `core-service` and `planner-service` service-boundary endpoints accept only `X-Internal-Service-Token`
 - frontend-app: install dependencies, type-check the Vue shell, build production bundle, verify containerized Vite startup via `docker compose`, and manually verify token auth, guarded routing, employee canonical routes, manager/admin `/tasks/new` flow, and hidden advanced routes
 - contracts: schema compatibility between services
 
@@ -49,6 +50,7 @@ poetry run pytest -q
 # AI layer
 cd services/ai-layer
 poetry install
+poetry run pytest -q
 poetry run uvicorn app.main:app --host 0.0.0.0 --port 8002
 
 # Frontend app
@@ -63,6 +65,7 @@ docker compose up --build
 
 # AI foundation smoke
 curl http://localhost:8002/health
+curl -H "Authorization: Bearer <manager-or-admin-access-token>" http://localhost:8002/api/v1/capabilities
 docker exec workestrator-postgres psql -U workestrator -d workestrator -c '\dx vector'
 docker exec workestrator-postgres psql -U workestrator -d workestrator -c '\dn'
 
@@ -102,6 +105,9 @@ docker compose up --build
 - Optional alternative: start backend in Docker and run `frontend-app` on the host with `npm run dev`.
 - Start backend services and the frontend shell locally.
 - In the current cycle, optionally verify that `/ai-api` is reserved in Vite runtime even though no user-facing AI UI is wired yet.
+- Verify `ai-layer` returns `401` without Bearer auth, `403` for `employee`, and `200` for `manager|admin` on `/api/v1/capabilities`.
+- Verify `GET /api/v1/internal/ai/service-boundary/` in `core-service` rejects missing internal token and accepts the shared token.
+- Verify `GET /api/v1/internal/ai/service-boundary` in `planner-service` rejects missing internal token and accepts the shared token.
 - Before planner-dependent checks, prepare two task datasets:
   - a positive planner case with eligible employee skills and an availability slot that covers the whole date-based task window so `/tasks/new` can surface a selected proposal;
   - a manual fallback case with no eligible employee so `/tasks/new` opens manual assignment mode directly.

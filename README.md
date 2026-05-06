@@ -73,6 +73,7 @@ docker compose up --build
 - `planner-service health`: `http://localhost:8001/health`
 - `planner-service docs`: `http://localhost:8001/docs`
 - `ai-layer health`: `http://localhost:8002/health`
+- `ai-layer capabilities`: `http://localhost:8002/api/v1/capabilities`
 - `ollama API`: `http://localhost:11434/api/tags`
 - `frontend-app`: `http://localhost:5173`
 
@@ -149,7 +150,7 @@ npm run dev
 - `core-service` вызывается через `/api/v1/*`
 - auth endpoints вызываются через `/api/v1/auth/*`
 - `planner-service` вызывается через `/planner-api/api/v1/*`
-- будущие frontend-facing AI routes будут вызываться через `/ai-api/api/v1/*`
+- `ai-layer` вызывается через `/ai-api/api/v1/*`
 - Vite proxy используется и в standalone-режиме, и внутри `frontend-app` container
 - refresh token хранится в HttpOnly cookie
 - access token хранится только в памяти frontend
@@ -159,6 +160,7 @@ npm run dev
 - frontend больше не использует Basic auth workaround
 - при запуске через `docker compose` frontend автоматически проксирует `core-service`, `planner-service` и зарезервированный `ai-layer` runtime path по именам compose-сервисов
 - при standalone-запуске frontend использует `localhost` proxy targets из `frontend-app/.env.example`
+- frontend-facing `ai-layer` routes повторяют auth pattern `planner-service`: Bearer token from browser -> core-service introspection through shared `INTERNAL_SERVICE_TOKEN` -> allow only `admin|manager`
 
 ## Минимальный ручной сценарий проверки
 
@@ -190,6 +192,7 @@ npm run dev
 - `core-service admin`: `http://localhost:8000/admin/`
 - `planner-service docs`: `http://localhost:8001/docs`
 - `ai-layer health`: `http://localhost:8002/health`
+- `ai-layer capabilities`: `http://localhost:8002/api/v1/capabilities`
 - `ollama API`: `http://localhost:11434/api/tags`
 - `frontend-app`: `http://localhost:5173`
 

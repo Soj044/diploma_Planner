@@ -15,8 +15,11 @@ frontend-app -> core-service: create/update employees, skills, tasks, work sched
 frontend-app -> core-service: login/signup/refresh/me (employee_profile included) + employee schedule/leave/assignment reads
 frontend-app -> core-service: GET /api/v1/departments/ (nested employee summaries)
 frontend-app -> planner-service: POST /api/v1/plan-runs (single-task flow uses task_ids=[task.id] from /tasks/new)
-frontend-app runtime: reserves /ai-api for future ai-layer explanation routes
+frontend-app -> ai-layer: GET /api/v1/capabilities (Authorization: Bearer <access>)
 planner-service -> core-service: POST /api/v1/planning-snapshot/ + X-Internal-Service-Token
+ai-layer -> core-service: POST /api/v1/auth/introspect + X-Internal-Service-Token
+ai-layer -> core-service: GET /api/v1/internal/ai/service-boundary/ + X-Internal-Service-Token
+ai-layer -> planner-service: GET /api/v1/internal/ai/service-boundary + X-Internal-Service-Token
 planner-service (CP-SAT): eligibility -> scoring -> optimization
 planner-service -> planner artifact store: save run + snapshot + proposals + diagnostics
 planner-service -> frontend-app: assignment proposals + diagnostics
@@ -63,7 +66,7 @@ browser
 | docker compose svc  |
 |       :5173         |
 +----------+----------+
-           | /api, /planner-api, /ai-api (reserved)
+           | /api, /planner-api, /ai-api
            v
 +---------------------+      +-----------------------------+
 |   core-service      |<---->|          postgres           |
@@ -92,7 +95,7 @@ browser
 ```
 
 `frontend-app` can also be run standalone on the host with `npm run dev`, but `docker compose up --build` is now the default full-stack dev runtime.
-`ai-layer` runtime is available in compose now, but no frontend AI UX or retrieval API is wired in this cycle.
+`ai-layer` runtime is available in compose now with authenticated frontend capability wiring and token-protected internal helper endpoints, but retrieval/explanation APIs are still deferred.
 
 ## Frontend-Useful Read Models (Stage 1)
 
@@ -155,6 +158,8 @@ core-service -> frontend-app: rotated refresh cookie + new access token + employ
 frontend-app -> planner-service: Authorization: Bearer <access>
 planner-service -> core-service: POST /api/v1/auth/introspect + X-Internal-Service-Token
 core-service -> planner-service: user_id + role + is_active + employee_id
+ai-layer -> core-service: POST /api/v1/auth/introspect + X-Internal-Service-Token
+core-service -> ai-layer: user_id + role + is_active + employee_id
 core-service -> planner-service: persisted approval reread via X-Internal-Service-Token
 ```
 
