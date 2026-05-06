@@ -5,8 +5,13 @@ Bootstrap foundation for the future AI support layer.
 Current scope:
 - FastAPI runtime with a `/health` endpoint;
 - authenticated `GET /api/v1/capabilities` endpoint for frontend auth/capability baseline;
+- authenticated `POST /api/v1/explanations/assignment-rationale` endpoint for advisory proposal explanations;
+- authenticated `POST /api/v1/explanations/unassigned-task` endpoint for advisory unassigned-task explanations;
 - environment-driven configuration aligned with other backend services;
-- PostgreSQL bootstrap that enables `pgvector` and creates the `ai_layer` schema;
+- PostgreSQL repository/bootstrap that enables `pgvector`, creates the `ai_layer` schema, and maintains:
+  - `ai_layer.index_items`
+  - `ai_layer.sync_state`
+  - `ai_layer.explanation_logs`;
 - runtime wiring to the local `ollama` container;
 - core-service token introspection for `admin|manager` access only.
 
@@ -32,11 +37,11 @@ Important env vars:
 - `INTERNAL_SERVICE_TOKEN`
 
 Planned future scope:
-- support explanations for assignment proposals and unassigned diagnostics;
+- enrich explanations with live context from `core-service` and `planner-service`;
 - assistive retrieval over historical planning context stored as derived AI index data;
 - optional auxiliary scoring signals that remain advisory only.
 
 Still out of scope in this cycle:
-- retrieval/index APIs;
-- frontend-facing explanation endpoints;
+- retrieval/feed ingestion from `core-service` and `planner-service`;
+- live explanation synthesis from task/proposal context;
 - any LLM-driven replacement for optimization logic.
