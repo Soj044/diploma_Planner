@@ -11,7 +11,7 @@
 - planning constraints
 - planner artifact persistence and retrieval
 - final assignment flows (planner approval, manual assignment, rejection)
-- ai-layer runtime/bootstrap, explanation skeleton, and shared pgvector foundation
+- ai-layer runtime/bootstrap, retrieval sync, structured explanations, and shared pgvector foundation
 - shared contracts validation for planning windows and proposal dates
 
 ## Basic checks
@@ -23,8 +23,11 @@
 - core-service approval flow: persisted planner proposal lookup, manual final assignment creation, assignment rejection, idempotent replay for the same `task + employee + source_plan_run_id`, rejection of missing or non-selected proposals, rejection of second non-rejected final assignment for one task, manual assignment defaults (`start_date=task.start_date`, `end_date=task.due_date`, `source_plan_run_id=null`), upstream planner failure handling, and internal-token reread of planner-service after planner auth gate
 - planner-service: unit and integration tests for planning pipeline, `CreatePlanRunRequest` boundary, snapshot client failure handling, SQLite persistence of run/snapshot/proposals/unassigned/solver stats, persisted run retrieval for manager review, overlap conflict diagnostics, and weighted score stability
 - planner-service auth gate: Bearer header validation, deny employee role, allow manager/admin role, and controlled `503` when core introspection is unavailable
-- ai-layer: containerized startup, `/health` probe, authenticated `/api/v1/capabilities`, authenticated explanation routes with controlled `503` while the index is empty, PostgreSQL connectivity bootstrap, `CREATE EXTENSION vector`, isolated `ai_layer` schema creation without touching core/planner truth tables, repository creation of `index_items`/`sync_state`/`explanation_logs`, and HNSW cosine index creation
-- internal AI helper routes: `core-service` and `planner-service` service-boundary endpoints accept only `X-Internal-Service-Token`
+- ai-layer: containerized startup, `/health` probe, authenticated `/api/v1/capabilities`, authenticated explanation routes, PostgreSQL connectivity bootstrap, `CREATE EXTENSION vector`, isolated `ai_layer` schema creation without touching core/planner truth tables, repository creation of `index_items`/`sync_state`/`explanation_logs`, HNSW cosine index creation, full/incremental sync, delete-path handling, stale-index fallback, and structured Ollama output validation
+- internal AI helper routes:
+  - `core-service`: `service-boundary`, `index-feed`, `assignment-context`
+  - `planner-service`: `service-boundary`, `index-feed`, `proposal-context`, `unassigned-context`
+  - all accept only `X-Internal-Service-Token`
 - frontend-app: install dependencies, type-check the Vue shell, build production bundle, verify containerized Vite startup via `docker compose`, and manually verify token auth, guarded routing, employee canonical routes, manager/admin `/tasks/new` flow, and hidden advanced routes
 - contracts: schema compatibility between services
 
@@ -52,6 +55,7 @@ cd services/ai-layer
 poetry install
 poetry run pytest -q
 poetry run uvicorn app.main:app --host 0.0.0.0 --port 8002
+poetry run python -m app.cli.reindex --mode full
 
 # Frontend app
 cd frontend-app
@@ -111,8 +115,11 @@ docker compose up --build
 - In the current cycle, optionally verify that `/ai-api` is reserved in Vite runtime even though no user-facing AI UI is wired yet.
 - Verify `ai-layer` returns `401` without Bearer auth, `403` for `employee`, and `200` for `manager|admin` on `/api/v1/capabilities`.
 - Verify `ai-layer` explanation routes return `503` with `AI retrieval index is not ready.` until the retrieval index is populated.
-- Verify `GET /api/v1/internal/ai/service-boundary/` in `core-service` rejects missing internal token and accepts the shared token.
-- Verify `GET /api/v1/internal/ai/service-boundary` in `planner-service` rejects missing internal token and accepts the shared token.
+- Run `poetry run python -m app.cli.reindex --mode full` in `services/ai-layer`, then verify explanation routes can return `200`.
+- Verify `GET /api/v1/internal/ai/service-boundary/`, `GET /api/v1/internal/ai/index-feed/`, and `GET /api/v1/internal/ai/tasks/{task_id}/assignment-context/` in `core-service` reject missing internal token and accept the shared token.
+- Verify `GET /api/v1/internal/ai/service-boundary`, `GET /api/v1/internal/ai/index-feed`, `GET /api/v1/internal/ai/plan-runs/{plan_run_id}/proposal-context`, and `GET /api/v1/internal/ai/plan-runs/{plan_run_id}/unassigned-context` in `planner-service` reject missing internal token and accept the shared token.
+- Verify `assignment-rationale` explanations use live task/employee context plus retrieved `assignment_case` history, while `unassigned-task` explanations use persisted diagnostic context plus retrieved `unassigned_case` history.
+- Verify stopping `ollama` causes explanation routes to degrade with controlled `503`, not broken approval/manual assignment flows.
 - Before planner-dependent checks, prepare two task datasets:
   - a positive planner case with eligible employee skills and an availability slot that covers the whole date-based task window so `/tasks/new` can surface a selected proposal;
   - a manual fallback case with no eligible employee so `/tasks/new` opens manual assignment mode directly.

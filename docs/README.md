@@ -11,8 +11,8 @@ This directory contains architecture, domain, planner flow, testing, engineering
 - support the employee flow: signup, assignment-first tasks, read-only schedules, requested-only leaves, departments directory, and auth-backed profile;
 - support two final-assignment paths in `core-service`: persisted planner approval and explicit manager/admin manual assignment;
 - run the full local dev runtime via `docker compose up --build`;
-- keep user-facing AI/RAG flows out of scope until the non-AI MVP remains stable, explicit, and testable;
-- allow only the bootstrap AI runtime/storage foundation for `ai-layer`, `ollama`, and shared `pgvector`.
+- keep browser AI UX out of scope until the non-AI MVP remains stable, explicit, and testable;
+- allow backend-side AI retrieval/explanation support only through `ai-layer`, local `ollama`, and shared `pgvector`, without creating a second business truth.
 
 ## Frontend Task Context
 

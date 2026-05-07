@@ -21,8 +21,14 @@ frontend-app -> ai-layer: POST /api/v1/explanations/unassigned-task (Authorizati
 planner-service -> core-service: POST /api/v1/planning-snapshot/ + X-Internal-Service-Token
 ai-layer -> core-service: POST /api/v1/auth/introspect + X-Internal-Service-Token
 ai-layer -> core-service: GET /api/v1/internal/ai/service-boundary/ + X-Internal-Service-Token
+ai-layer -> core-service: GET /api/v1/internal/ai/index-feed/ + X-Internal-Service-Token
+ai-layer -> core-service: GET /api/v1/internal/ai/tasks/{task_id}/assignment-context/?employee_id=... + X-Internal-Service-Token
 ai-layer -> planner-service: GET /api/v1/internal/ai/service-boundary + X-Internal-Service-Token
-ai-layer -> ollama: /api/embed for retrieval query vectors
+ai-layer -> planner-service: GET /api/v1/internal/ai/index-feed + X-Internal-Service-Token
+ai-layer -> planner-service: GET /api/v1/internal/ai/plan-runs/{plan_run_id}/proposal-context?task_id=...&employee_id=... + X-Internal-Service-Token
+ai-layer -> planner-service: GET /api/v1/internal/ai/plan-runs/{plan_run_id}/unassigned-context?task_id=... + X-Internal-Service-Token
+ai-layer -> ollama: /api/embed for feed vectors and retrieval query vectors
+ai-layer -> ollama: /api/chat stream=false + JSON schema for structured explanations
 planner-service (CP-SAT): eligibility -> scoring -> optimization
 planner-service -> planner artifact store: save run + snapshot + proposals + diagnostics
 planner-service -> frontend-app: assignment proposals + diagnostics
@@ -33,7 +39,7 @@ frontend-app -> core-service: POST /api/v1/employee-leaves/{id}/set-status/ (man
 core-service -> planner-service: GET /api/v1/plan-runs/{id} + X-Internal-Service-Token
 ai-layer -> postgres: bootstrap vector extension + ai_layer schema for derived AI storage
 ai-layer -> postgres: create index_items + sync_state + explanation_logs + HNSW cosine index
-ai-layer -> ollama: local embedding/generation calls for explanation skeleton
+ai-layer -> postgres: upsert/delete assignment_case and unassigned_case rows during full/incremental sync
 core-service -> core database: store final assignments, sync task status, and persist leave status changes
 ```
 
@@ -89,7 +95,7 @@ browser
 +---------------------+      +-----------------------+
 |      ai-layer       |----->|        ollama         |
 | fastapi explanation |      | local model runtime   |
-| skeleton + storage  |      |       :11434          |
+| sync + retrieval    |      |       :11434          |
 |       :8002         |      +-----------------------+
 +----------+----------+
            |
@@ -99,10 +105,11 @@ browser
       - CREATE SCHEMA ai_layer
       - CREATE TABLE index_items/sync_state/explanation_logs
       - CREATE INDEX ... USING hnsw (embedding vector_cosine_ops)
+      - full/incremental sync for assignment_case + unassigned_case
 ```
 
 `frontend-app` can also be run standalone on the host with `npm run dev`, but `docker compose up --build` is now the default full-stack dev runtime.
-`ai-layer` runtime is available in compose now with authenticated capability and explanation endpoints plus token-protected internal helper boundaries, but live context ingestion and rich retrieval feeds are still deferred.
+`ai-layer` runtime is available in compose now with authenticated capability/explanation endpoints, token-protected internal feed/context reads, pgvector sync, and structured Ollama generation. Frontend UI for these explanations is still deferred.
 
 ## Frontend-Useful Read Models (Stage 1)
 

@@ -83,6 +83,8 @@ Flow:
 - `employee`: read-only tasks plus self-scope CRUD for own schedules and leaves.
 - `planning-snapshot` is internal-only via `X-Internal-Service-Token`.
 - `GET /api/v1/internal/ai/service-boundary/` is internal-only via `X-Internal-Service-Token`.
+- `GET /api/v1/internal/ai/index-feed/` is internal-only via `X-Internal-Service-Token`.
+- `GET /api/v1/internal/ai/tasks/{task_id}/assignment-context/` is internal-only via `X-Internal-Service-Token`.
 
 ## Approval handoff
 
@@ -110,3 +112,13 @@ core business truth. The endpoint accepts either:
 `GET /api/v1/internal/ai/service-boundary/` returns a compact description of
 the `core-service` ownership boundary for trusted backend-to-backend AI calls.
 It is intended for `ai-layer` integration only and never accepts browser auth.
+
+`GET /api/v1/internal/ai/index-feed/` returns flattened `assignment_case`
+records for ai-layer retrieval sync. The feed indexes only successful final
+assignments in current flattened form and emits `index_action=delete` when a
+previously indexed assignment becomes `rejected` or `cancelled`.
+
+`GET /api/v1/internal/ai/tasks/{task_id}/assignment-context/?employee_id=...`
+returns live task, requirements, employee, employee skills, and only the
+availability slice that overlaps the task window. This payload is intended for
+assignment-rationale explanations only and does not create a second business truth.

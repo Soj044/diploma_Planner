@@ -6,7 +6,7 @@
 
 - `services/core-service` — Django + DRF, источник бизнес-истины
 - `services/planner-service` — FastAPI + OR-Tools/CP-SAT, persisted `plan runs`, `proposals`, `diagnostics`
-- `services/ai-layer` — FastAPI bootstrap для будущего AI support layer, локальный `ollama`, shared `pgvector` foundation
+- `services/ai-layer` — FastAPI AI support layer с локальным `ollama`, shared `pgvector`, retrieval sync и advisory explanations
 - `frontend-app` — Vue 3 + Vite thin client для manager и employee flows
 - `packages/contracts` — общий слой DTO/контрактов между сервисами
 
@@ -37,10 +37,12 @@
 - `ai-layer` health/bootstrap service
 - `ollama` container in local compose runtime
 - shared PostgreSQL `pgvector` + `ai_layer` schema bootstrap
+- internal AI feeds/context between `core-service`, `planner-service`, and `ai-layer`
+- advisory backend explanation pipeline for `assignment-rationale` and `unassigned-task`
 
 ## Что еще не реализовано
 
-- frontend-facing AI/RAG retrieval and explanation flows
+- frontend UI wiring for AI explanations
 - сложные уведомления, realtime и внешние интеграции
 
 ## Требования
@@ -232,6 +234,11 @@ poetry run uvicorn app.main:app --host 0.0.0.0 --port 8002
 ```
 
 При старте `ai-layer` сам проверяет доступность PostgreSQL, включает `CREATE EXTENSION IF NOT EXISTS vector` и создает отдельную schema `ai_layer`.
+Полный AI corpus можно вручную наполнить через:
+
+```bash
+poetry run python -m app.cli.reindex --mode full
+```
 
 ### frontend-app
 
@@ -269,6 +276,10 @@ poetry run pytest -q
 
 # ai-layer bootstrap smoke
 curl http://localhost:8002/health
+
+# ai-layer full reindex
+cd services/ai-layer
+poetry run python -m app.cli.reindex --mode full
 ```
 
 ## Документация

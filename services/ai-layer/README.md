@@ -13,7 +13,15 @@ Current scope:
   - `ai_layer.sync_state`
   - `ai_layer.explanation_logs`;
 - runtime wiring to the local `ollama` container;
-- core-service token introspection for `admin|manager` access only.
+- core-service token introspection for `admin|manager` access only;
+- internal full/incremental sync over:
+  - `assignment_case` feed from `core-service`
+  - `unassigned_case` feed from `planner-service`;
+- live context reads for:
+  - task + employee assignment explanation context from `core-service`
+  - persisted proposal/unassigned context from `planner-service`;
+- structured explanation generation through `Ollama /api/chat` with JSON-schema output;
+- CLI full reindex entrypoint: `poetry run python -m app.cli.reindex --mode full`.
 
 Current service boundary:
 - `core-service` remains business truth;
@@ -36,12 +44,12 @@ Important env vars:
 - `AI_SYNC_STALE_SECONDS`
 - `INTERNAL_SERVICE_TOKEN`
 
-Planned future scope:
-- enrich explanations with live context from `core-service` and `planner-service`;
-- assistive retrieval over historical planning context stored as derived AI index data;
-- optional auxiliary scoring signals that remain advisory only.
+Current retrieval/index scope:
+- `assignment_case` uses current flattened successful-assignment state from `core-service`;
+- `unassigned_case` uses completed persisted diagnostics from `planner-service`;
+- `employee/schedule/leave` stay out of the vector corpus and are used only as live context.
 
 Still out of scope in this cycle:
-- retrieval/feed ingestion from `core-service` and `planner-service`;
-- live explanation synthesis from task/proposal context;
+- frontend UI wiring for AI explanations;
+- richer hybrid retrieval or document-based RAG;
 - any LLM-driven replacement for optimization logic.
