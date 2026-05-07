@@ -86,10 +86,18 @@ def get_ollama_client() -> OllamaClient:
 
 def get_reindex_service(
     repository: PostgresAiRepository = Depends(get_ai_repository),
+    core_service_client: CoreServiceAuthClient = Depends(get_core_service_client),
+    planner_service_client: PlannerServiceClient = Depends(get_planner_service_client),
+    ollama_client: OllamaClient = Depends(get_ollama_client),
 ) -> ReindexService:
     """Return the application helper that owns index readiness state."""
 
-    return ReindexService(repository=repository)
+    return ReindexService(
+        repository=repository,
+        core_service_client=core_service_client,
+        planner_service_client=planner_service_client,
+        ollama_client=ollama_client,
+    )
 
 
 def get_explanation_service(

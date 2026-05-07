@@ -9,6 +9,7 @@ from decimal import Decimal
 
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
 
 
 class TimeStampedModel(models.Model):
@@ -100,6 +101,20 @@ class EmployeeSkill(TimeStampedModel):
             models.Index(fields=("employee",), name="employee_skill_employee_idx"),
             models.Index(fields=("skill",), name="employee_skill_skill_idx"),
         ]
+
+    def save(self, *args, **kwargs) -> None:
+        """Persist the skill row and touch the parent employee for AI incremental sync."""
+
+        super().save(*args, **kwargs)
+        Employee.objects.filter(pk=self.employee_id).update(updated_at=timezone.now())
+
+    def delete(self, *args, **kwargs):
+        """Delete the skill row and touch the parent employee for AI incremental sync."""
+
+        employee_id = self.employee_id
+        deleted = super().delete(*args, **kwargs)
+        Employee.objects.filter(pk=employee_id).update(updated_at=timezone.now())
+        return deleted
 
 
 class WorkSchedule(TimeStampedModel):
@@ -306,6 +321,20 @@ class TaskRequirement(models.Model):
             models.Index(fields=("task",), name="task_requirement_task_idx"),
             models.Index(fields=("skill",), name="task_requirement_skill_idx"),
         ]
+
+    def save(self, *args, **kwargs) -> None:
+        """Persist the requirement row and touch the parent task for AI incremental sync."""
+
+        super().save(*args, **kwargs)
+        Task.objects.filter(pk=self.task_id).update(updated_at=timezone.now())
+
+    def delete(self, *args, **kwargs):
+        """Delete the requirement row and touch the parent task for AI incremental sync."""
+
+        task_id = self.task_id
+        deleted = super().delete(*args, **kwargs)
+        Task.objects.filter(pk=task_id).update(updated_at=timezone.now())
+        return deleted
 
 
 class Assignment(models.Model):

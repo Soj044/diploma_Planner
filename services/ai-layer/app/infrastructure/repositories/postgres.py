@@ -255,12 +255,47 @@ class PostgresAiRepository:
         assert record is not None
         return record
 
-    def count_index_items(self) -> int:
-        """Return the number of retrieval items currently stored in ai-layer."""
+    def delete_index_item(
+        self,
+        *,
+        source_service: str,
+        source_type: str,
+        source_key: str,
+    ) -> int:
+        """Delete one retrieval item by its stable upstream identity."""
 
         with connect(self._dsn, autocommit=True) as connection:
             with connection.cursor() as cursor:
-                cursor.execute("SELECT COUNT(*) FROM ai_layer.index_items;")
+                cursor.execute(
+                    """
+                    DELETE FROM ai_layer.index_items
+                    WHERE source_service = %s
+                      AND source_type = %s
+                      AND source_key = %s;
+                    """,
+                    (source_service, source_type, source_key),
+                )
+                return cursor.rowcount
+
+    def count_index_items(self, filters: IndexSearchFilters | None = None) -> int:
+        """Return the number of retrieval items currently stored in ai-layer."""
+
+        effective_filters = filters or IndexSearchFilters()
+        conditions: list[str] = []
+        parameters: list[object] = []
+        if effective_filters.source_service:
+            conditions.append("source_service = %s")
+            parameters.append(effective_filters.source_service)
+        if effective_filters.source_type:
+            conditions.append("source_type = %s")
+            parameters.append(effective_filters.source_type)
+        where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        with connect(self._dsn, autocommit=True) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    f"SELECT COUNT(*) FROM ai_layer.index_items {where_clause};",
+                    parameters,
+                )
                 row = cursor.fetchone()
         assert row is not None
         return int(row[0])

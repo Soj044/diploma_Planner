@@ -1,10 +1,11 @@
-"""SQLite-хранилище planner artifacts для MVP расчета задач и назначений.
+"""SQLite repository for persisted planner artifacts.
 
-Этот файл сохраняет plan runs, snapshots, proposals и diagnostics между
-запусками planner-service. Он связывает application layer с persisted artifact
-store и поддерживает manager review и approval handoff в core-service.
+This module saves plan runs, snapshots, proposals, and diagnostics between
+planner-service restarts. It also exposes typed read helpers for internal AI
+feeds and explanation context without introducing an ORM layer.
 """
 
+from dataclasses import dataclass
 import json
 import sqlite3
 from datetime import datetime
@@ -24,6 +25,20 @@ from contracts.schemas import (
 ALGORITHM_NAME = "cp_sat"
 ALGORITHM_VERSION = "mvp-stage6"
 OBJECTIVE_SUMMARY = "Maximize assigned tasks first, then prefer higher candidate scores."
+
+
+@dataclass(frozen=True)
+class PersistedPlanRunRecord:
+    """One completed persisted plan run together with its saved snapshot and response."""
+
+    internal_id: int
+    plan_run_id: str
+    initiated_by_user_id: str
+    department_id: str | None
+    status: str
+    created_at: datetime
+    snapshot: PlanningSnapshot
+    response: PlanResponse
 
 
 class SqlitePlanRunRepository:
@@ -215,71 +230,119 @@ class SqlitePlanRunRepository:
         """Rebuild the public `PlanResponse` from persisted planner tables."""
 
         with self._connect() as connection:
-            plan_run = connection.execute(
-                "SELECT * FROM plan_runs WHERE external_uuid = ?",
-                (plan_run_id,),
-            ).fetchone()
+            plan_run = self._get_plan_run_row(connection, plan_run_id)
             if plan_run is None:
                 return None
+            return self._load_persisted_record(connection, plan_run).response
 
-            snapshot_row = connection.execute(
+    def get_record(self, plan_run_id: str) -> PersistedPlanRunRecord | None:
+        """Return one typed persisted plan run record for internal AI read models."""
+
+        with self._connect() as connection:
+            plan_run = self._get_plan_run_row(connection, plan_run_id)
+            if plan_run is None:
+                return None
+            return self._load_persisted_record(connection, plan_run)
+
+    def list_completed_records(self, changed_since: datetime | None) -> list[PersistedPlanRunRecord]:
+        """Return completed persisted plan runs filtered by the optional AI sync cursor."""
+
+        query = """
+            SELECT *
+            FROM plan_runs
+            WHERE status = 'completed'
+        """
+        parameters: tuple[object, ...] = ()
+        if changed_since is not None:
+            query += " AND created_at > ?"
+            parameters = (changed_since.isoformat(),)
+        query += " ORDER BY created_at, id"
+
+        with self._connect() as connection:
+            plan_runs = connection.execute(query, parameters).fetchall()
+            return [self._load_persisted_record(connection, row) for row in plan_runs]
+
+    def _connect(self) -> sqlite3.Connection:
+        """Create a connection with row-based access and foreign keys enabled."""
+
+        connection = sqlite3.connect(self._db_path)
+        connection.row_factory = sqlite3.Row
+        connection.execute("PRAGMA foreign_keys = ON")
+        return connection
+
+    def _get_plan_run_row(self, connection: sqlite3.Connection, plan_run_id: str) -> sqlite3.Row | None:
+        """Load the raw `plan_runs` row for one external public plan run identifier."""
+
+        return connection.execute(
+            "SELECT * FROM plan_runs WHERE external_uuid = ?",
+            (plan_run_id,),
+        ).fetchone()
+
+    def _load_persisted_record(
+        self,
+        connection: sqlite3.Connection,
+        plan_run: sqlite3.Row,
+    ) -> PersistedPlanRunRecord:
+        """Rebuild one typed persisted plan run record from SQLite child tables."""
+
+        snapshot_row = connection.execute(
+            """
+            SELECT snapshot_json
+            FROM plan_input_snapshots
+            WHERE plan_run_id = ?
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            (plan_run["id"],),
+        ).fetchone()
+        snapshot = PlanningSnapshot.model_validate_json(snapshot_row["snapshot_json"])
+
+        proposals = [
+            AssignmentProposal(
+                task_id=row["external_task_id"],
+                employee_id=row["external_employee_id"],
+                score=row["score"],
+                proposal_rank=row["proposal_rank"],
+                is_selected=bool(row["is_selected"]),
+                planned_hours=row["planned_hours"],
+                start_date=datetime.fromisoformat(row["start_date"]).date() if row["start_date"] else None,
+                end_date=datetime.fromisoformat(row["end_date"]).date() if row["end_date"] else None,
+                status=row["status"],
+                explanation_text=row["explanation_text"] or "",
+            )
+            for row in connection.execute(
                 """
-                SELECT snapshot_json
-                FROM plan_input_snapshots
+                SELECT *
+                FROM assignment_proposals
                 WHERE plan_run_id = ?
-                ORDER BY id DESC
-                LIMIT 1
+                ORDER BY proposal_rank, id
                 """,
                 (plan_run["id"],),
-            ).fetchone()
-            snapshot = PlanningSnapshot.model_validate_json(snapshot_row["snapshot_json"])
-
-            proposals = [
-                AssignmentProposal(
-                    task_id=row["external_task_id"],
-                    employee_id=row["external_employee_id"],
-                    score=row["score"],
-                    proposal_rank=row["proposal_rank"],
-                    is_selected=bool(row["is_selected"]),
-                    planned_hours=row["planned_hours"],
-                    start_date=datetime.fromisoformat(row["start_date"]).date() if row["start_date"] else None,
-                    end_date=datetime.fromisoformat(row["end_date"]).date() if row["end_date"] else None,
-                    status=row["status"],
-                    explanation_text=row["explanation_text"] or "",
-                )
-                for row in connection.execute(
-                    """
-                    SELECT *
-                    FROM assignment_proposals
-                    WHERE plan_run_id = ?
-                    ORDER BY proposal_rank, id
-                    """,
-                    (plan_run["id"],),
-                ).fetchall()
-            ]
-            unassigned = [
-                UnassignedTaskDiagnostic(
-                    task_id=row["external_task_id"],
-                    reason_code=row["reason_code"],
-                    message=row["message"],
-                    reason_details=row["reason_details"] or "",
-                )
-                for row in connection.execute(
-                    """
-                    SELECT *
-                    FROM unassigned_tasks
-                    WHERE plan_run_id = ?
-                    ORDER BY id
-                    """,
-                    (plan_run["id"],),
-                ).fetchall()
-            ]
-            solver_row = connection.execute(
-                "SELECT stats_json FROM solver_statistics WHERE plan_run_id = ?",
+            ).fetchall()
+        ]
+        unassigned = [
+            UnassignedTaskDiagnostic(
+                task_id=row["external_task_id"],
+                reason_code=row["reason_code"],
+                message=row["message"],
+                reason_details=row["reason_details"] or "",
+            )
+            for row in connection.execute(
+                """
+                SELECT *
+                FROM unassigned_tasks
+                WHERE plan_run_id = ?
+                ORDER BY id
+                """,
                 (plan_run["id"],),
-            ).fetchone()
+            ).fetchall()
+        ]
+        solver_row = connection.execute(
+            "SELECT stats_json FROM solver_statistics WHERE plan_run_id = ?",
+            (plan_run["id"],),
+        ).fetchone()
 
-        return PlanResponse(
+        response = PlanResponse(
             summary=PlanRunSummary(
                 plan_run_id=plan_run["external_uuid"],
                 status=plan_run["status"],
@@ -297,14 +360,16 @@ class SqlitePlanRunRepository:
                 solver_statistics=json.loads(solver_row["stats_json"]) if solver_row else {},
             ),
         )
-
-    def _connect(self) -> sqlite3.Connection:
-        """Create a connection with row-based access and foreign keys enabled."""
-
-        connection = sqlite3.connect(self._db_path)
-        connection.row_factory = sqlite3.Row
-        connection.execute("PRAGMA foreign_keys = ON")
-        return connection
+        return PersistedPlanRunRecord(
+            internal_id=int(plan_run["id"]),
+            plan_run_id=plan_run["external_uuid"],
+            initiated_by_user_id=plan_run["initiated_by_user_id"],
+            department_id=plan_run["department_id"],
+            status=plan_run["status"],
+            created_at=datetime.fromisoformat(plan_run["created_at"]),
+            snapshot=snapshot,
+            response=response,
+        )
 
     def _ensure_schema(self) -> None:
         """Create the minimal Stage 6 planner tables if they do not exist yet."""

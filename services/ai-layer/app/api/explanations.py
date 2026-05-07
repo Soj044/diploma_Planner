@@ -11,8 +11,8 @@ from pydantic import BaseModel, ConfigDict
 from app.application.explanations import (
     ExplanationIndexNotReadyError,
     ExplanationResult,
+    ExplanationServiceError,
     ExplanationService,
-    ExplanationServiceUnavailableError,
 )
 from app.dependencies import get_explanation_service, require_ai_layer_access
 from app.infrastructure.clients.core_service import AuthenticatedUserContext
@@ -81,8 +81,8 @@ def create_assignment_rationale(
             plan_run_id=request.plan_run_id,
             user_context=context,
         )
-    except (ExplanationIndexNotReadyError, ExplanationServiceUnavailableError) as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except ExplanationServiceError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
     return _build_response_payload(result)
 
 
@@ -100,6 +100,6 @@ def create_unassigned_task_explanation(
             plan_run_id=request.plan_run_id,
             user_context=context,
         )
-    except (ExplanationIndexNotReadyError, ExplanationServiceUnavailableError) as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except ExplanationServiceError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
     return _build_response_payload(result)

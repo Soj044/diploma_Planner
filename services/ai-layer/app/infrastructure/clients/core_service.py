@@ -2,12 +2,17 @@
 
 This module keeps auth authority in core-service and centralizes the shared
 internal-token client that ai-layer will use for browser token introspection and
-future internal AI helper reads.
+future internal AI helper reads such as retrieval feeds and live assignment
+context payloads.
 """
 
+from datetime import datetime
 from dataclasses import dataclass
 
 import httpx
+from pydantic import ValidationError
+
+from app.dtos import AssignmentLiveContext, IndexFeedEnvelope
 
 
 class CoreServiceClientError(Exception):
@@ -25,6 +30,10 @@ class CoreServiceAuthError(CoreServiceClientError):
 
 class CoreServiceBoundaryError(CoreServiceClientError):
     """Raised when internal AI boundary reads from core-service fail."""
+
+
+class CoreServiceAiReadError(CoreServiceClientError):
+    """Raised when internal AI feeds or live context reads from core-service fail."""
 
 
 @dataclass(frozen=True)
@@ -112,6 +121,38 @@ class CoreServiceAuthClient:
         )
         return self._parse_boundary_payload(payload)
 
+    def list_index_feed(self, changed_since: datetime | None) -> IndexFeedEnvelope:
+        """Read the flattened `assignment_case` feed used by ai-layer sync."""
+
+        if not self._internal_service_token:
+            raise CoreServiceAiReadError(status_code=503, detail="ai-layer internal core-service access is not configured")
+
+        payload = self._request_json(
+            method="GET",
+            path="/api/v1/internal/ai/index-feed/",
+            query_params={"changed_since": changed_since.isoformat()} if changed_since else None,
+            error_cls=CoreServiceAiReadError,
+            unavailable_detail="core-service internal AI index feed is unavailable",
+            passthrough_status_codes={401, 403, 404},
+        )
+        return self._parse_index_feed_payload(payload)
+
+    def get_assignment_context(self, *, task_id: str, employee_id: str) -> AssignmentLiveContext:
+        """Read one live task-plus-employee assignment explanation context."""
+
+        if not self._internal_service_token:
+            raise CoreServiceAiReadError(status_code=503, detail="ai-layer internal core-service access is not configured")
+
+        payload = self._request_json(
+            method="GET",
+            path=f"/api/v1/internal/ai/tasks/{task_id}/assignment-context/",
+            query_params={"employee_id": employee_id},
+            error_cls=CoreServiceAiReadError,
+            unavailable_detail="core-service internal AI assignment context is unavailable",
+            passthrough_status_codes={401, 403, 404},
+        )
+        return self._parse_assignment_context_payload(payload)
+
     def _build_headers(self) -> dict[str, str]:
         """Build headers for internal ai-layer calls to core-service."""
 
@@ -138,6 +179,28 @@ class CoreServiceAuthClient:
             owns=owns,
         )
 
+    def _parse_index_feed_payload(self, payload: dict[str, object]) -> IndexFeedEnvelope:
+        """Validate one internal AI index-feed payload returned by core-service."""
+
+        try:
+            return IndexFeedEnvelope.model_validate(payload)
+        except ValidationError as exc:
+            raise CoreServiceAiReadError(
+                status_code=502,
+                detail="core-service returned invalid internal AI index feed payload",
+            ) from exc
+
+    def _parse_assignment_context_payload(self, payload: dict[str, object]) -> AssignmentLiveContext:
+        """Validate one live assignment explanation context from core-service."""
+
+        try:
+            return AssignmentLiveContext.model_validate(payload)
+        except ValidationError as exc:
+            raise CoreServiceAiReadError(
+                status_code=502,
+                detail="core-service returned invalid internal AI assignment context payload",
+            ) from exc
+
     def _request_json(
         self,
         *,
@@ -147,6 +210,7 @@ class CoreServiceAuthClient:
         unavailable_detail: str,
         passthrough_status_codes: set[int],
         json_body: dict[str, object] | None = None,
+        query_params: dict[str, str] | None = None,
     ) -> dict[str, object]:
         """Execute one JSON request against core-service and map errors consistently."""
 
@@ -157,7 +221,12 @@ class CoreServiceAuthClient:
                 timeout=self._timeout_seconds,
                 transport=self._transport,
             ) as client:
-                response = client.request(method=method, url=path, json=json_body)
+                response = client.request(
+                    method=method,
+                    url=path,
+                    json=json_body,
+                    params=query_params,
+                )
         except httpx.HTTPError as exc:
             raise error_cls(status_code=503, detail=unavailable_detail) from exc
 

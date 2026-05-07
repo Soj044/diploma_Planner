@@ -132,3 +132,44 @@ def test_seed_sync_targets_does_not_duplicate_rows(repository: PostgresAiReposit
 
     assert row is not None
     assert int(row[0]) == 2
+
+
+def test_delete_index_item_removes_matching_identity(repository: PostgresAiRepository) -> None:
+    """Delete one retrieval row by stable source identity when a feed emits `delete`."""
+
+    source_key = f"repo-delete-{uuid4()}"
+    source_updated_at = datetime.now(tz=UTC)
+    repository.upsert_index_item(
+        source_service="core-service",
+        source_type="assignment_case",
+        source_key=source_key,
+        title="Delete me",
+        content="Derived assignment case",
+        metadata_json={"status": "approved"},
+        source_updated_at=source_updated_at,
+        embedding=_embedding(0.3),
+    )
+
+    deleted_count = repository.delete_index_item(
+        source_service="core-service",
+        source_type="assignment_case",
+        source_key=source_key,
+    )
+
+    assert deleted_count == 1
+    with connect(_build_test_dsn(), autocommit=True) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT COUNT(*)
+                FROM ai_layer.index_items
+                WHERE source_service = 'core-service'
+                  AND source_type = 'assignment_case'
+                  AND source_key = %s;
+                """,
+                (source_key,),
+            )
+            row = cursor.fetchone()
+
+    assert row is not None
+    assert int(row[0]) == 0

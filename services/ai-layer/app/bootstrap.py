@@ -14,8 +14,17 @@ from app.config import (
     AI_DB_CONNECT_RETRIES,
     AI_DB_CONNECT_RETRY_DELAY_SECONDS,
     AI_VECTOR_DIM,
+    CORE_SERVICE_URL,
+    INTERNAL_SERVICE_TOKEN,
+    OLLAMA_BASE_URL,
+    OLLAMA_CHAT_MODEL,
+    OLLAMA_EMBED_MODEL,
+    PLANNER_SERVICE_URL,
     postgres_dsn,
 )
+from app.infrastructure.clients.core_service import CoreServiceAuthClient
+from app.infrastructure.clients.ollama import OllamaClient
+from app.infrastructure.clients.planner_service import PlannerServiceClient
 from app.infrastructure.repositories.postgres import PostgresAiRepository
 
 
@@ -45,7 +54,22 @@ def initialize_storage() -> None:
     _wait_for_database_connection(dsn)
 
     repository = PostgresAiRepository(dsn=dsn, vector_dim=AI_VECTOR_DIM)
-    reindex_service = ReindexService(repository=repository)
+    reindex_service = ReindexService(
+        repository=repository,
+        core_service_client=CoreServiceAuthClient(
+            base_url=CORE_SERVICE_URL,
+            internal_service_token=INTERNAL_SERVICE_TOKEN,
+        ),
+        planner_service_client=PlannerServiceClient(
+            base_url=PLANNER_SERVICE_URL,
+            internal_service_token=INTERNAL_SERVICE_TOKEN,
+        ),
+        ollama_client=OllamaClient(
+            base_url=OLLAMA_BASE_URL,
+            chat_model=OLLAMA_CHAT_MODEL,
+            embed_model=OLLAMA_EMBED_MODEL,
+        ),
+    )
 
     try:
         repository.ensure_foundation()

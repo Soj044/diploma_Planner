@@ -2,7 +2,8 @@
 
 This module exposes the minimum embedding and generation interfaces that the
 current ai-layer cycle needs while keeping error handling stable for the next
-retrieval and prompt-building iteration.
+retrieval and prompt-building iteration. It supports batch embeddings and
+non-streaming structured chat output through Ollama's native `/api/chat`.
 """
 
 from collections.abc import Sequence
@@ -58,14 +59,14 @@ class OllamaClient:
         if isinstance(single_embedding, list):
             return [self._coerce_embedding(single_embedding)]
 
-        raise OllamaClientError(status_code=503, detail="ollama embedding payload is invalid")
+        raise OllamaClientError(status_code=502, detail="ollama embedding payload is invalid")
 
     def generate_explanation(
         self,
         *,
         system_prompt: str,
         user_prompt: str,
-        response_format: str = "json",
+        response_schema: dict[str, object] | str | None = None,
         temperature: float = 0.1,
     ) -> str:
         """Generate one non-streaming explanation response through Ollama chat."""
@@ -79,8 +80,8 @@ class OllamaClient:
             ],
             "options": {"temperature": temperature},
         }
-        if response_format == "json":
-            body["format"] = "json"
+        if response_schema is not None:
+            body["format"] = response_schema
 
         payload = self._request_json(
             path="/api/chat",
@@ -89,10 +90,10 @@ class OllamaClient:
         )
         message = payload.get("message")
         if not isinstance(message, dict):
-            raise OllamaClientError(status_code=503, detail="ollama generation payload is invalid")
+            raise OllamaClientError(status_code=502, detail="ollama generation payload is invalid")
         content = message.get("content")
         if not isinstance(content, str) or not content.strip():
-            raise OllamaClientError(status_code=503, detail="ollama generation payload is invalid")
+            raise OllamaClientError(status_code=502, detail="ollama generation payload is invalid")
         return content
 
     def _request_json(
@@ -120,9 +121,9 @@ class OllamaClient:
         try:
             payload = response.json()
         except ValueError as exc:
-            raise OllamaClientError(status_code=503, detail=unavailable_detail) from exc
+            raise OllamaClientError(status_code=502, detail=f"{path} returned invalid JSON payload") from exc
         if not isinstance(payload, dict):
-            raise OllamaClientError(status_code=503, detail=unavailable_detail)
+            raise OllamaClientError(status_code=502, detail=f"{path} returned invalid JSON payload")
         return payload
 
     def _coerce_embedding(self, raw_embedding: Sequence[object]) -> list[float]:
@@ -131,4 +132,4 @@ class OllamaClient:
         try:
             return [float(value) for value in raw_embedding]
         except (TypeError, ValueError) as exc:
-            raise OllamaClientError(status_code=503, detail="ollama embedding payload is invalid") from exc
+            raise OllamaClientError(status_code=502, detail="ollama embedding payload is invalid") from exc

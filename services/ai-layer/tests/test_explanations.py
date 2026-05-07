@@ -7,6 +7,7 @@ from app.api import explanations
 from app.application.explanations import (
     ExplanationIndexNotReadyError,
     ExplanationResult,
+    ExplanationServiceError,
     SimilarCase,
 )
 from app.infrastructure.clients.core_service import AuthenticatedUserContext
@@ -93,6 +94,29 @@ def test_assignment_rationale_route_returns_503_when_index_is_not_ready() -> Non
 
     assert exc_info.value.status_code == 503
     assert exc_info.value.detail == "AI retrieval index is not ready."
+
+
+def test_assignment_rationale_route_returns_502_for_upstream_payload_errors() -> None:
+    """Surface structured runtime payload failures as controlled HTTP 502 responses."""
+
+    with pytest.raises(HTTPException) as exc_info:
+        explanations.create_assignment_rationale(
+            request=explanations.AssignmentRationaleRequest(
+                task_id="task-1",
+                employee_id="employee-1",
+                plan_run_id="run-1",
+            ),
+            context=_manager_context(),
+            service=StubExplanationService(
+                error=ExplanationServiceError(
+                    status_code=502,
+                    detail="ollama returned invalid structured explanation payload",
+                ),
+            ),
+        )
+
+    assert exc_info.value.status_code == 502
+    assert exc_info.value.detail == "ollama returned invalid structured explanation payload"
 
 
 def test_assignment_rationale_route_returns_public_payload() -> None:

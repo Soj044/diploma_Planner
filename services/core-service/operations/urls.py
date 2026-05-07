@@ -9,7 +9,11 @@ helper endpoints.
 from django.urls import path
 from rest_framework.routers import DefaultRouter
 
-from .ai_views import InternalAiServiceBoundaryView
+from .ai_views import (
+    InternalAiAssignmentContextView,
+    InternalAiIndexFeedView,
+    InternalAiServiceBoundaryView,
+)
 from .views import (
     AssignmentChangeLogViewSet,
     AssignmentViewSet,
@@ -45,6 +49,16 @@ urlpatterns = [
         "internal/ai/service-boundary/",
         InternalAiServiceBoundaryView.as_view(),
         name="internal-ai-service-boundary",
+    ),
+    path(
+        "internal/ai/index-feed/",
+        InternalAiIndexFeedView.as_view(),
+        name="internal-ai-index-feed",
+    ),
+    path(
+        "internal/ai/tasks/<int:task_id>/assignment-context/",
+        InternalAiAssignmentContextView.as_view(),
+        name="internal-ai-assignment-context",
     ),
     path("planning-snapshot/", PlanningSnapshotView.as_view(), name="planning-snapshot"),
     *router.urls,
