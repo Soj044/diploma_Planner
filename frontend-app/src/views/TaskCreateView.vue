@@ -1,15 +1,31 @@
 <script setup lang="ts">
+/**
+ * Owns the /tasks/new create-and-assign wizard, including on-demand advisory
+ * explanation calls to the ai-layer for planner suggestions and unassigned fallbacks.
+ */
 import { computed, onMounted, reactive, ref } from "vue";
 import { useRouter } from "vue-router";
 
 import DialogModal from "../components/DialogModal.vue";
 import TaskRequirementsSection from "../components/tasks/TaskRequirementsSection.vue";
 import { useAuth } from "../composables/useAuth";
+import { aiService } from "../services/ai-service";
 import { coreService } from "../services/core-service";
 import { describeRequestError } from "../services/http";
 import { plannerService } from "../services/planner-service";
 import { setUiFlash } from "../services/ui-flash-service";
-import type { AssignmentProposal, Department, Employee, PlanResponse, Task, TaskInput } from "../types/api";
+import type {
+  AiExplanationPayload,
+  AssignmentProposal,
+  AssignmentRationaleRequest,
+  Department,
+  Employee,
+  PlanResponse,
+  Task,
+  TaskInput,
+  UnassignedTaskDiagnostic,
+  UnassignedTaskExplanationRequest,
+} from "../types/api";
 
 interface TaskFormState {
   department: string;
@@ -30,6 +46,13 @@ interface ManualAssignmentFormState {
 }
 
 type AssignmentMode = "suggestion" | "manual";
+type ManualReason = "planner-unassigned" | "suggestion-skipped";
+
+interface AiExplanationState {
+  isLoading: boolean;
+  errorMessage: string;
+  payload: AiExplanationPayload | null;
+}
 
 const statusOptions = [
   { label: "Draft", value: "draft" },
@@ -67,6 +90,19 @@ const assignmentMode = ref<AssignmentMode>("manual");
 const currentPlanRun = ref<PlanResponse | null>(null);
 const selectedProposal = ref<AssignmentProposal | null>(null);
 const assignmentContextMessage = ref("");
+const manualReason = ref<ManualReason | null>(null);
+const suggestionAiState = reactive<AiExplanationState>({
+  isLoading: false,
+  errorMessage: "",
+  payload: null,
+});
+const unassignedAiState = reactive<AiExplanationState>({
+  isLoading: false,
+  errorMessage: "",
+  payload: null,
+});
+const suggestionAiCache = reactive<Record<string, AiExplanationPayload>>({});
+const unassignedAiCache = reactive<Record<string, AiExplanationPayload>>({});
 
 const form = reactive<TaskFormState>({
   department: "",
@@ -111,6 +147,26 @@ const assignmentReadOnlyDates = computed(() => {
   };
 });
 
+const currentUnassignedDiagnostic = computed<UnassignedTaskDiagnostic | null>(() => {
+  if (!currentPlanRun.value || !currentTask.value) {
+    return null;
+  }
+
+  return (
+    currentPlanRun.value.unassigned.find((item) => item.task_id === String(currentTask.value?.id)) || null
+  );
+});
+
+const canExplainUnassigned = computed(() => {
+  return (
+    assignmentMode.value === "manual" &&
+    manualReason.value === "planner-unassigned" &&
+    Boolean(currentTask.value) &&
+    Boolean(currentPlanRun.value) &&
+    Boolean(currentUnassignedDiagnostic.value)
+  );
+});
+
 function buildTaskPayload(): TaskInput {
   return {
     department: form.department ? Number(form.department) : null,
@@ -143,6 +199,119 @@ function resetManualAssignmentForm() {
   manualAssignmentForm.employee = "";
   manualAssignmentForm.planned_hours = currentTask.value?.estimated_hours || form.estimated_hours || 1;
   manualAssignmentForm.notes = "";
+}
+
+/**
+ * Builds a stable cache key for one task/employee/proposal explanation context.
+ */
+function buildSuggestionAiCacheKey(taskId: number, employeeId: string, planRunId: string): string {
+  return `${taskId}:${employeeId}:${planRunId}`;
+}
+
+/**
+ * Builds a stable cache key for one task/unassigned diagnostic explanation context.
+ */
+function buildUnassignedAiCacheKey(taskId: number, planRunId: string): string {
+  return `${taskId}:${planRunId}`;
+}
+
+/**
+ * Resets a visible AI explanation panel without clearing its in-memory cache.
+ */
+function resetAiState(state: AiExplanationState) {
+  state.isLoading = false;
+  state.errorMessage = "";
+  state.payload = null;
+}
+
+/**
+ * Replaces the visible AI state with a cached explanation payload.
+ */
+function hydrateAiState(state: AiExplanationState, payload: AiExplanationPayload) {
+  state.isLoading = false;
+  state.errorMessage = "";
+  state.payload = payload;
+}
+
+/**
+ * Clears only the currently visible AI panels before a new planner launch.
+ */
+function clearVisibleAiStates() {
+  resetAiState(suggestionAiState);
+  resetAiState(unassignedAiState);
+}
+
+/**
+ * Builds the current suggestion explanation request when planner context is present.
+ */
+function getSuggestionExplanationRequest(): AssignmentRationaleRequest | null {
+  if (!currentTask.value || !currentPlanRun.value || !selectedProposal.value) {
+    return null;
+  }
+
+  return {
+    task_id: String(currentTask.value.id),
+    employee_id: selectedProposal.value.employee_id,
+    plan_run_id: currentPlanRun.value.summary.plan_run_id,
+  };
+}
+
+/**
+ * Builds the current unassigned explanation request when manual fallback came from planner diagnostics.
+ */
+function getUnassignedExplanationRequest(): UnassignedTaskExplanationRequest | null {
+  if (!canExplainUnassigned.value || !currentTask.value || !currentPlanRun.value) {
+    return null;
+  }
+
+  return {
+    task_id: String(currentTask.value.id),
+    plan_run_id: currentPlanRun.value.summary.plan_run_id,
+  };
+}
+
+/**
+ * Restores a cached suggestion explanation for the active modal context when present.
+ */
+function restoreSuggestionAiStateFromCache() {
+  const request = getSuggestionExplanationRequest();
+  if (!request) {
+    resetAiState(suggestionAiState);
+    return;
+  }
+
+  const cacheKey = buildSuggestionAiCacheKey(
+    Number(request.task_id),
+    request.employee_id,
+    request.plan_run_id,
+  );
+  const cachedPayload = suggestionAiCache[cacheKey];
+  if (cachedPayload) {
+    hydrateAiState(suggestionAiState, cachedPayload);
+    return;
+  }
+
+  resetAiState(suggestionAiState);
+}
+
+/**
+ * Restores a cached unassigned explanation for the active modal context when present.
+ */
+function restoreUnassignedAiStateFromCache() {
+  const request = getUnassignedExplanationRequest();
+  if (!request) {
+    resetAiState(unassignedAiState);
+    return;
+  }
+
+  const cacheKey = buildUnassignedAiCacheKey(Number(request.task_id), request.plan_run_id);
+  const cachedPayload = unassignedAiCache[cacheKey];
+  if (cachedPayload) {
+    hydrateAiState(unassignedAiState, cachedPayload);
+    return;
+  }
+
+  resetAiState(unassignedAiState);
 }
 
 async function loadCreateContext() {
@@ -205,11 +374,16 @@ async function handleSaveTask() {
   await router.push({ name: "tasks" });
 }
 
-function openManualMode(message: string) {
+/**
+ * Opens the manual assignment branch and keeps track of why the user reached it.
+ */
+function openManualMode(message: string, reason: ManualReason) {
   assignmentMode.value = "manual";
   assignmentContextMessage.value = message;
+  manualReason.value = reason;
   resetManualAssignmentForm();
   isAssignmentModalOpen.value = true;
+  restoreUnassignedAiStateFromCache();
 }
 
 async function handleSaveAndAssign() {
@@ -225,6 +399,7 @@ async function handleSaveAndAssign() {
 
   isLaunchingAssignment.value = true;
   assignmentErrorMessage.value = "";
+  clearVisibleAiStates();
 
   try {
     const launchedRun = await plannerService.createPlanRun({
@@ -243,21 +418,94 @@ async function handleSaveAndAssign() {
     if (selectedProposal.value) {
       assignmentMode.value = "suggestion";
       assignmentContextMessage.value = "Planner selected one candidate for this task.";
+      manualReason.value = null;
       manualAssignmentForm.employee = selectedProposal.value.employee_id;
       manualAssignmentForm.planned_hours = selectedProposal.value.planned_hours || task.estimated_hours;
       manualAssignmentForm.notes = "";
       isAssignmentModalOpen.value = true;
+      restoreSuggestionAiStateFromCache();
       return;
     }
 
     const diagnostic = currentPlanRun.value.unassigned.find((item) => item.task_id === String(task.id));
     openManualMode(
       diagnostic?.message || "Planner did not return a selected proposal for this task. You can assign manually.",
+      "planner-unassigned",
     );
   } catch (error: unknown) {
     assignmentErrorMessage.value = describeRequestError(error);
   } finally {
     isLaunchingAssignment.value = false;
+  }
+}
+
+/**
+ * Loads an on-demand AI explanation for the currently selected planner proposal.
+ */
+async function loadSuggestionAiExplanation() {
+  const request = getSuggestionExplanationRequest();
+  if (!request) {
+    suggestionAiState.errorMessage = "Planner suggestion context is missing.";
+    suggestionAiState.payload = null;
+    return;
+  }
+
+  const cacheKey = buildSuggestionAiCacheKey(
+    Number(request.task_id),
+    request.employee_id,
+    request.plan_run_id,
+  );
+  const cachedPayload = suggestionAiCache[cacheKey];
+  if (cachedPayload) {
+    hydrateAiState(suggestionAiState, cachedPayload);
+    return;
+  }
+
+  suggestionAiState.isLoading = true;
+  suggestionAiState.errorMessage = "";
+  suggestionAiState.payload = null;
+
+  try {
+    const payload = await aiService.getAssignmentRationale(request);
+    suggestionAiCache[cacheKey] = payload;
+    hydrateAiState(suggestionAiState, payload);
+  } catch (error: unknown) {
+    suggestionAiState.errorMessage = describeRequestError(error);
+  } finally {
+    suggestionAiState.isLoading = false;
+  }
+}
+
+/**
+ * Loads an on-demand AI explanation for planner-driven manual fallback.
+ */
+async function loadUnassignedAiExplanation() {
+  const request = getUnassignedExplanationRequest();
+  if (!request) {
+    unassignedAiState.errorMessage = "Planner diagnostic context is missing.";
+    unassignedAiState.payload = null;
+    return;
+  }
+
+  const cacheKey = buildUnassignedAiCacheKey(Number(request.task_id), request.plan_run_id);
+  const cachedPayload = unassignedAiCache[cacheKey];
+  if (cachedPayload) {
+    hydrateAiState(unassignedAiState, cachedPayload);
+    return;
+  }
+
+  unassignedAiState.isLoading = true;
+  unassignedAiState.errorMessage = "";
+  unassignedAiState.payload = null;
+
+  try {
+    const payload = await aiService.getUnassignedTaskExplanation(request);
+    unassignedAiCache[cacheKey] = payload;
+    hydrateAiState(unassignedAiState, payload);
+  } catch (error: unknown) {
+    unassignedAiState.errorMessage = describeRequestError(error);
+  } finally {
+    unassignedAiState.isLoading = false;
   }
 }
 
@@ -492,10 +740,71 @@ onMounted(loadCreateContext);
         </section>
 
         <section class="records-card">
-          <p class="section-caption">Planner explanation</p>
-          <p class="resource-copy">
-            {{ selectedProposal.explanation_text || "Planner did not return extra explanation text for this proposal." }}
+          <div class="editor-header">
+            <div>
+              <p class="section-caption">Planner explanation</p>
+              <p class="resource-copy">
+                {{ selectedProposal.explanation_text || "Planner did not return extra explanation text for this proposal." }}
+              </p>
+            </div>
+            <button
+              class="button-secondary"
+              type="button"
+              :disabled="suggestionAiState.isLoading"
+              @click="loadSuggestionAiExplanation"
+            >
+              {{ suggestionAiState.isLoading ? "Explaining..." : "Explain with AI" }}
+            </button>
+          </div>
+
+          <p v-if="suggestionAiState.errorMessage" class="status-banner is-error">
+            {{ suggestionAiState.errorMessage }}
           </p>
+          <div v-else-if="suggestionAiState.payload" class="section-stack">
+            <div>
+              <p class="section-caption">AI summary</p>
+              <p class="resource-copy">{{ suggestionAiState.payload.summary }}</p>
+            </div>
+            <div v-if="suggestionAiState.payload.reasons.length">
+              <p class="section-caption">Reasons</p>
+              <ul class="copy-list">
+                <li v-for="reason in suggestionAiState.payload.reasons" :key="reason">{{ reason }}</li>
+              </ul>
+            </div>
+            <div v-if="suggestionAiState.payload.risks.length">
+              <p class="section-caption">Risks</p>
+              <ul class="copy-list">
+                <li v-for="risk in suggestionAiState.payload.risks" :key="risk">{{ risk }}</li>
+              </ul>
+            </div>
+            <div v-if="suggestionAiState.payload.similar_cases.length">
+              <p class="section-caption">Similar cases</p>
+              <ul class="resource-list">
+                <li
+                  v-for="similarCase in suggestionAiState.payload.similar_cases"
+                  :key="`${similarCase.source_key}-${similarCase.headline}`"
+                  class="resource-item"
+                >
+                  <p class="resource-label">{{ similarCase.headline }}</p>
+                  <p class="item-meta">
+                    {{ similarCase.source_service }} · {{ similarCase.source_type }} · {{ similarCase.source_key }}
+                  </p>
+                  <p class="resource-copy">{{ similarCase.outcome_note }}</p>
+                </li>
+              </ul>
+            </div>
+            <div v-if="suggestionAiState.payload.recommended_actions.length">
+              <p class="section-caption">Recommended actions</p>
+              <ul class="copy-list">
+                <li v-for="action in suggestionAiState.payload.recommended_actions" :key="action">{{ action }}</li>
+              </ul>
+            </div>
+            <div class="notice">
+              {{ suggestionAiState.payload.advisory_note }}
+            </div>
+          </div>
+          <p v-else-if="suggestionAiState.isLoading" class="resource-copy">Loading AI explanation...</p>
+
           <div class="notice">
             Approval still goes through the persisted planner review handoff in `core-service`. The browser does not
             create final assignments directly from planner data.
@@ -504,6 +813,73 @@ onMounted(loadCreateContext);
       </div>
 
       <form v-else class="page-stack" @submit.prevent="createManualAssignment">
+        <section v-if="canExplainUnassigned" class="records-card">
+          <div class="editor-header">
+            <div>
+              <p class="section-caption">AI fallback explanation</p>
+              <p class="resource-copy">
+                Request an advisory explanation for why the planner did not return a selected assignee.
+              </p>
+            </div>
+            <button
+              class="button-secondary"
+              type="button"
+              :disabled="unassignedAiState.isLoading"
+              @click="loadUnassignedAiExplanation"
+            >
+              {{ unassignedAiState.isLoading ? "Explaining..." : "Explain why no assignee" }}
+            </button>
+          </div>
+
+          <p v-if="unassignedAiState.errorMessage" class="status-banner is-error">
+            {{ unassignedAiState.errorMessage }}
+          </p>
+          <div v-else-if="unassignedAiState.payload" class="section-stack">
+            <div>
+              <p class="section-caption">AI summary</p>
+              <p class="resource-copy">{{ unassignedAiState.payload.summary }}</p>
+            </div>
+            <div v-if="unassignedAiState.payload.reasons.length">
+              <p class="section-caption">Reasons</p>
+              <ul class="copy-list">
+                <li v-for="reason in unassignedAiState.payload.reasons" :key="reason">{{ reason }}</li>
+              </ul>
+            </div>
+            <div v-if="unassignedAiState.payload.risks.length">
+              <p class="section-caption">Risks</p>
+              <ul class="copy-list">
+                <li v-for="risk in unassignedAiState.payload.risks" :key="risk">{{ risk }}</li>
+              </ul>
+            </div>
+            <div v-if="unassignedAiState.payload.similar_cases.length">
+              <p class="section-caption">Similar cases</p>
+              <ul class="resource-list">
+                <li
+                  v-for="similarCase in unassignedAiState.payload.similar_cases"
+                  :key="`${similarCase.source_key}-${similarCase.headline}`"
+                  class="resource-item"
+                >
+                  <p class="resource-label">{{ similarCase.headline }}</p>
+                  <p class="item-meta">
+                    {{ similarCase.source_service }} · {{ similarCase.source_type }} · {{ similarCase.source_key }}
+                  </p>
+                  <p class="resource-copy">{{ similarCase.outcome_note }}</p>
+                </li>
+              </ul>
+            </div>
+            <div v-if="unassignedAiState.payload.recommended_actions.length">
+              <p class="section-caption">Recommended actions</p>
+              <ul class="copy-list">
+                <li v-for="action in unassignedAiState.payload.recommended_actions" :key="action">{{ action }}</li>
+              </ul>
+            </div>
+            <div class="notice">
+              {{ unassignedAiState.payload.advisory_note }}
+            </div>
+          </div>
+          <p v-else-if="unassignedAiState.isLoading" class="resource-copy">Loading AI explanation...</p>
+        </section>
+
         <section class="records-card">
           <p class="section-caption">Assignment window</p>
           <ul class="key-value-list">
@@ -554,7 +930,7 @@ onMounted(loadCreateContext);
           v-if="assignmentMode === 'suggestion' && selectedProposal"
           class="button-secondary"
           type="button"
-          @click="openManualMode('Planner suggestion was skipped. Complete the assignment manually.')"
+          @click="openManualMode('Planner suggestion was skipped. Complete the assignment manually.', 'suggestion-skipped')"
         >
           Use manual assignment
         </button>

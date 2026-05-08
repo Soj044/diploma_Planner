@@ -29,5 +29,5 @@ export const frontendAssumptions = {
   auth:
     "Frontend auth flow now targets token-based login, refresh, and me endpoints under /api/v1/auth/.",
   proxy:
-    "Vite proxies /api to core-service, /planner-api to planner-service, and reserves /ai-api for the future ai-layer during local development.",
+    "Vite proxies /api to core-service, /planner-api to planner-service, and /ai-api to the ai-layer during local development.",
 } as const;

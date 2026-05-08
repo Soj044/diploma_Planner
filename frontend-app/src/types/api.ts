@@ -317,3 +317,31 @@ export interface PlanResponse {
   unassigned: UnassignedTaskDiagnostic[];
   artifacts: PlanRunArtifacts;
 }
+
+export interface AiSimilarCase {
+  headline: string;
+  source_service: string;
+  source_type: string;
+  source_key: string;
+  outcome_note: string;
+}
+
+export interface AiExplanationPayload {
+  summary: string;
+  reasons: string[];
+  risks: string[];
+  recommended_actions: string[];
+  similar_cases: AiSimilarCase[];
+  advisory_note: string;
+}
+
+export interface AssignmentRationaleRequest {
+  task_id: string;
+  employee_id: string;
+  plan_run_id: string;
+}
+
+export interface UnassignedTaskExplanationRequest {
+  task_id: string;
+  plan_run_id: string;
+}
