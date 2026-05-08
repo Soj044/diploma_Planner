@@ -28,7 +28,7 @@
   - `core-service`: `service-boundary`, `index-feed`, `assignment-context`
   - `planner-service`: `service-boundary`, `index-feed`, `proposal-context`, `unassigned-context`
   - all accept only `X-Internal-Service-Token`
-- frontend-app: install dependencies, type-check the Vue shell, build production bundle, verify containerized Vite startup via `docker compose`, and manually verify token auth, guarded routing, employee canonical routes, manager/admin `/tasks/new` flow with on-demand AI advisory explanations, and hidden advanced routes
+- frontend-app: install dependencies, type-check the Vue shell, build production bundle, verify containerized Vite startup via `docker compose`, and manually verify token auth, guarded routing, employee canonical routes, manager/admin `/tasks/new` and `/planning` flows with on-demand AI advisory explanations, and hidden advanced routes
 - contracts: schema compatibility between services
 
 ## Suggested MVP Commands
@@ -158,6 +158,11 @@ docker compose up --build
 - Verify the planning launch summary shows the returned `plan_run_id`, status, assigned count, and unassigned count after `POST /api/v1/plan-runs`.
 - Verify entering a persisted `plan_run_id` reloads the run through `GET /api/v1/plan-runs/{plan_run_id}`.
 - Verify the persisted review screen still renders proposals, diagnostics, and solver statistics from planner-service.
+- On `/planning`, verify only selected proposal rows show `Explain with AI`.
+- On `/planning`, verify clicking `Explain with AI` for a selected proposal renders `summary`, `reasons`, `risks`, `similar cases`, `recommended actions`, and `advisory note` inline in the same row.
+- On `/planning`, verify each diagnostic row shows `Explain with AI` and renders the same structured advisory block inline after click.
+- On `/planning`, verify reopening the same selected proposal or diagnostic can reuse the component-local AI cache without a mandatory second request.
+- On `/planning`, verify `502/503` responses from `ai-layer` stay local to the affected row and do not block `Approve selected proposal`.
 - On `/tasks/new`, verify a selected proposal opens the planner suggestion modal, and no-candidate diagnostics open manual assignment mode.
 - On `/tasks/new`, verify `Explain with AI` appears in planner suggestion mode, loads only on click, and renders `summary`, `reasons`, `risks`, `similar cases`, `recommended actions`, and `advisory note`.
 - On `/tasks/new`, verify `Explain why no assignee` appears only when manual mode came from planner `unassigned` fallback, not after `Use manual assignment` from a suggestion.

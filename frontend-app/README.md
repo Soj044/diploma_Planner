@@ -123,6 +123,7 @@ npm run dev
 
 - reload persisted plan runs by `plan_run_id` from the same `Planning` screen;
 - render proposal list with task/employee labels, score, rank, selected marker, timing, and explanation text;
+- allow on-demand AI advisory explanations for selected proposals and diagnostics without mutating planner artifacts;
 - render unassigned task diagnostics and persisted solver statistics;
 - keep planner artifacts read-only even while enabling separate approval handoff.
 

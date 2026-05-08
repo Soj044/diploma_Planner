@@ -29,7 +29,7 @@ Use this note before any `frontend-app` task so the agent starts from current ba
   - requested leave review queue on `/leaves`
   - task-requirement CRUD
   - persisted plan-run launch
-  - persisted proposal review
+  - persisted proposal review with on-demand AI advisory explanations for selected proposals and diagnostics
   - planner proposal approval
   - manual assignment from the task creation wizard
   - read-only assignments screen
