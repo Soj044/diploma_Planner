@@ -166,6 +166,80 @@ function buildDiagnosticAiKey(taskId: string, planRunId: string): string {
   return `${taskId}:${planRunId}`;
 }
 
+/**
+ * Resolves the active AI key for one selected proposal row.
+ */
+function getProposalAiKey(proposal: AssignmentProposal): string | null {
+  if (!reviewedRun.value) {
+    return null;
+  }
+
+  return buildProposalAiKey(proposal.task_id, proposal.employee_id, reviewedRun.value.summary.plan_run_id);
+}
+
+/**
+ * Returns whether one selected proposal row is currently loading an advisory explanation.
+ */
+function isProposalAiLoading(proposal: AssignmentProposal): boolean {
+  const key = getProposalAiKey(proposal);
+  return key ? Boolean(proposalAiLoadingKeys[key]) : false;
+}
+
+/**
+ * Returns the row-local AI error message for one selected proposal.
+ */
+function getProposalAiError(proposal: AssignmentProposal): string {
+  const key = getProposalAiKey(proposal);
+  return key ? proposalAiErrors[key] || "" : "";
+}
+
+/**
+ * Returns the currently visible advisory explanation for one selected proposal.
+ */
+function getVisibleProposalAi(proposal: AssignmentProposal): AiExplanationPayload | null {
+  const key = getProposalAiKey(proposal);
+  return key ? visibleProposalAi[key] || null : null;
+}
+
+/**
+ * Loads or restores an advisory explanation for one selected persisted proposal.
+ */
+async function loadProposalAiExplanation(proposal: AssignmentProposal) {
+  if (!reviewedRun.value || !proposal.is_selected) {
+    return;
+  }
+
+  const key = getProposalAiKey(proposal);
+  if (!key) {
+    return;
+  }
+
+  proposalAiErrors[key] = "";
+
+  const cachedPayload = proposalAiCache[key];
+  if (cachedPayload) {
+    visibleProposalAi[key] = cachedPayload;
+    return;
+  }
+
+  proposalAiLoadingKeys[key] = true;
+  visibleProposalAi[key] = null;
+
+  try {
+    const payload = await aiService.getAssignmentRationale({
+      task_id: proposal.task_id,
+      employee_id: proposal.employee_id,
+      plan_run_id: reviewedRun.value.summary.plan_run_id,
+    });
+    proposalAiCache[key] = payload;
+    visibleProposalAi[key] = payload;
+  } catch (error: unknown) {
+    proposalAiErrors[key] = describeRequestError(error);
+  } finally {
+    delete proposalAiLoadingKeys[key];
+  }
+}
+
 function resetApprovalState() {
   approvingProposalKey.value = "";
   approvalErrorMessage.value = "";
@@ -655,6 +729,67 @@ onMounted(loadPlanningScope);
             </p>
             <p class="resource-copy">Status: {{ proposal.status }}</p>
             <p class="resource-copy">{{ proposal.explanation_text || "No explanation text." }}</p>
+            <div v-if="proposal.is_selected" class="action-row">
+              <button
+                class="button-secondary"
+                type="button"
+                :disabled="isProposalAiLoading(proposal)"
+                @click="loadProposalAiExplanation(proposal)"
+              >
+                {{ isProposalAiLoading(proposal) ? "Explaining..." : "Explain with AI" }}
+              </button>
+            </div>
+            <p v-if="getProposalAiError(proposal)" class="status-banner is-error">
+              {{ getProposalAiError(proposal) }}
+            </p>
+            <div v-if="getVisibleProposalAi(proposal)" class="section-stack">
+              <div>
+                <p class="section-caption">Assistant explanation</p>
+                <p class="resource-copy">{{ getVisibleProposalAi(proposal)?.summary }}</p>
+              </div>
+              <div v-if="getVisibleProposalAi(proposal)?.reasons.length">
+                <p class="section-caption">Reasons</p>
+                <ul class="copy-list">
+                  <li v-for="reason in getVisibleProposalAi(proposal)?.reasons" :key="reason">{{ reason }}</li>
+                </ul>
+              </div>
+              <div v-if="getVisibleProposalAi(proposal)?.risks.length">
+                <p class="section-caption">Risks</p>
+                <ul class="copy-list">
+                  <li v-for="risk in getVisibleProposalAi(proposal)?.risks" :key="risk">{{ risk }}</li>
+                </ul>
+              </div>
+              <div v-if="getVisibleProposalAi(proposal)?.similar_cases.length">
+                <p class="section-caption">Similar cases</p>
+                <ul class="resource-list">
+                  <li
+                    v-for="similarCase in getVisibleProposalAi(proposal)?.similar_cases"
+                    :key="`${similarCase.source_key}-${similarCase.headline}`"
+                    class="resource-item"
+                  >
+                    <p class="resource-label">{{ similarCase.headline }}</p>
+                    <p class="item-meta">
+                      {{ similarCase.source_service }} · {{ similarCase.source_type }} · {{ similarCase.source_key }}
+                    </p>
+                    <p class="resource-copy">{{ similarCase.outcome_note }}</p>
+                  </li>
+                </ul>
+              </div>
+              <div v-if="getVisibleProposalAi(proposal)?.recommended_actions.length">
+                <p class="section-caption">Recommended actions</p>
+                <ul class="copy-list">
+                  <li
+                    v-for="action in getVisibleProposalAi(proposal)?.recommended_actions"
+                    :key="action"
+                  >
+                    {{ action }}
+                  </li>
+                </ul>
+              </div>
+              <div class="notice">
+                {{ getVisibleProposalAi(proposal)?.advisory_note }}
+              </div>
+            </div>
             <div class="action-row">
               <button
                 v-if="canApproveProposal(proposal)"
