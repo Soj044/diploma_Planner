@@ -240,6 +240,79 @@ async function loadProposalAiExplanation(proposal: AssignmentProposal) {
   }
 }
 
+/**
+ * Resolves the active AI key for one unassigned diagnostic row.
+ */
+function getDiagnosticAiKey(diagnostic: UnassignedTaskDiagnostic): string | null {
+  if (!reviewedRun.value) {
+    return null;
+  }
+
+  return buildDiagnosticAiKey(diagnostic.task_id, reviewedRun.value.summary.plan_run_id);
+}
+
+/**
+ * Returns whether one diagnostic row is currently loading an advisory explanation.
+ */
+function isDiagnosticAiLoading(diagnostic: UnassignedTaskDiagnostic): boolean {
+  const key = getDiagnosticAiKey(diagnostic);
+  return key ? Boolean(diagnosticAiLoadingKeys[key]) : false;
+}
+
+/**
+ * Returns the row-local AI error message for one diagnostic.
+ */
+function getDiagnosticAiError(diagnostic: UnassignedTaskDiagnostic): string {
+  const key = getDiagnosticAiKey(diagnostic);
+  return key ? diagnosticAiErrors[key] || "" : "";
+}
+
+/**
+ * Returns the currently visible advisory explanation for one diagnostic.
+ */
+function getVisibleDiagnosticAi(diagnostic: UnassignedTaskDiagnostic): AiExplanationPayload | null {
+  const key = getDiagnosticAiKey(diagnostic);
+  return key ? visibleDiagnosticAi[key] || null : null;
+}
+
+/**
+ * Loads or restores an advisory explanation for one persisted unassigned diagnostic.
+ */
+async function loadDiagnosticAiExplanation(diagnostic: UnassignedTaskDiagnostic) {
+  if (!reviewedRun.value) {
+    return;
+  }
+
+  const key = getDiagnosticAiKey(diagnostic);
+  if (!key) {
+    return;
+  }
+
+  diagnosticAiErrors[key] = "";
+
+  const cachedPayload = diagnosticAiCache[key];
+  if (cachedPayload) {
+    visibleDiagnosticAi[key] = cachedPayload;
+    return;
+  }
+
+  diagnosticAiLoadingKeys[key] = true;
+  visibleDiagnosticAi[key] = null;
+
+  try {
+    const payload = await aiService.getUnassignedTaskExplanation({
+      task_id: diagnostic.task_id,
+      plan_run_id: reviewedRun.value.summary.plan_run_id,
+    });
+    diagnosticAiCache[key] = payload;
+    visibleDiagnosticAi[key] = payload;
+  } catch (error: unknown) {
+    diagnosticAiErrors[key] = describeRequestError(error);
+  } finally {
+    delete diagnosticAiLoadingKeys[key];
+  }
+}
+
 function resetApprovalState() {
   approvingProposalKey.value = "";
   approvalErrorMessage.value = "";
@@ -830,6 +903,67 @@ onMounted(loadPlanningScope);
             </div>
             <p class="resource-copy">{{ diagnostic.message }}</p>
             <p class="resource-copy">{{ diagnostic.reason_details }}</p>
+            <div class="action-row">
+              <button
+                class="button-secondary"
+                type="button"
+                :disabled="isDiagnosticAiLoading(diagnostic)"
+                @click="loadDiagnosticAiExplanation(diagnostic)"
+              >
+                {{ isDiagnosticAiLoading(diagnostic) ? "Explaining..." : "Explain with AI" }}
+              </button>
+            </div>
+            <p v-if="getDiagnosticAiError(diagnostic)" class="status-banner is-error">
+              {{ getDiagnosticAiError(diagnostic) }}
+            </p>
+            <div v-if="getVisibleDiagnosticAi(diagnostic)" class="section-stack">
+              <div>
+                <p class="section-caption">Assistant explanation</p>
+                <p class="resource-copy">{{ getVisibleDiagnosticAi(diagnostic)?.summary }}</p>
+              </div>
+              <div v-if="getVisibleDiagnosticAi(diagnostic)?.reasons.length">
+                <p class="section-caption">Reasons</p>
+                <ul class="copy-list">
+                  <li v-for="reason in getVisibleDiagnosticAi(diagnostic)?.reasons" :key="reason">{{ reason }}</li>
+                </ul>
+              </div>
+              <div v-if="getVisibleDiagnosticAi(diagnostic)?.risks.length">
+                <p class="section-caption">Risks</p>
+                <ul class="copy-list">
+                  <li v-for="risk in getVisibleDiagnosticAi(diagnostic)?.risks" :key="risk">{{ risk }}</li>
+                </ul>
+              </div>
+              <div v-if="getVisibleDiagnosticAi(diagnostic)?.similar_cases.length">
+                <p class="section-caption">Similar cases</p>
+                <ul class="resource-list">
+                  <li
+                    v-for="similarCase in getVisibleDiagnosticAi(diagnostic)?.similar_cases"
+                    :key="`${similarCase.source_key}-${similarCase.headline}`"
+                    class="resource-item"
+                  >
+                    <p class="resource-label">{{ similarCase.headline }}</p>
+                    <p class="item-meta">
+                      {{ similarCase.source_service }} · {{ similarCase.source_type }} · {{ similarCase.source_key }}
+                    </p>
+                    <p class="resource-copy">{{ similarCase.outcome_note }}</p>
+                  </li>
+                </ul>
+              </div>
+              <div v-if="getVisibleDiagnosticAi(diagnostic)?.recommended_actions.length">
+                <p class="section-caption">Recommended actions</p>
+                <ul class="copy-list">
+                  <li
+                    v-for="action in getVisibleDiagnosticAi(diagnostic)?.recommended_actions"
+                    :key="action"
+                  >
+                    {{ action }}
+                  </li>
+                </ul>
+              </div>
+              <div class="notice">
+                {{ getVisibleDiagnosticAi(diagnostic)?.advisory_note }}
+              </div>
+            </div>
           </li>
         </ul>
       </section>
