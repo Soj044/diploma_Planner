@@ -28,7 +28,7 @@
   - `core-service`: `service-boundary`, `index-feed`, `assignment-context`
   - `planner-service`: `service-boundary`, `index-feed`, `proposal-context`, `unassigned-context`
   - all accept only `X-Internal-Service-Token`
-- frontend-app: install dependencies, type-check the Vue shell, build production bundle, verify containerized Vite startup via `docker compose`, and manually verify token auth, guarded routing, employee canonical routes, manager/admin `/tasks/new` flow, and hidden advanced routes
+- frontend-app: install dependencies, type-check the Vue shell, build production bundle, verify containerized Vite startup via `docker compose`, and manually verify token auth, guarded routing, employee canonical routes, manager/admin `/tasks/new` flow with on-demand AI advisory explanations, and hidden advanced routes
 - contracts: schema compatibility between services
 
 ## Suggested MVP Commands
@@ -112,7 +112,7 @@ docker compose up --build
 - Preferred runtime: `docker compose up --build` from the repository root.
 - Optional alternative: start backend in Docker and run `frontend-app` on the host with `npm run dev`.
 - Start backend services and the frontend shell locally.
-- In the current cycle, optionally verify that `/ai-api` is reserved in Vite runtime even though no user-facing AI UI is wired yet.
+- Verify the Vite runtime proxies `/ai-api` to `ai-layer` so `/tasks/new` can request advisory explanations from the browser.
 - Verify `ai-layer` returns `401` without Bearer auth, `403` for `employee`, and `200` for `manager|admin` on `/api/v1/capabilities`.
 - Verify `ai-layer` explanation routes return `503` with `AI retrieval index is not ready.` until the retrieval index is populated.
 - Run `poetry run python -m app.cli.reindex --mode full` in `services/ai-layer`, then verify explanation routes can return `200`.
@@ -159,6 +159,10 @@ docker compose up --build
 - Verify entering a persisted `plan_run_id` reloads the run through `GET /api/v1/plan-runs/{plan_run_id}`.
 - Verify the persisted review screen still renders proposals, diagnostics, and solver statistics from planner-service.
 - On `/tasks/new`, verify a selected proposal opens the planner suggestion modal, and no-candidate diagnostics open manual assignment mode.
+- On `/tasks/new`, verify `Explain with AI` appears in planner suggestion mode, loads only on click, and renders `summary`, `reasons`, `risks`, `similar cases`, `recommended actions`, and `advisory note`.
+- On `/tasks/new`, verify `Explain why no assignee` appears only when manual mode came from planner `unassigned` fallback, not after `Use manual assignment` from a suggestion.
+- On `/tasks/new`, verify reopening the same suggestion or unassigned context can reuse the component-local AI cache without requiring a second request.
+- On `/tasks/new`, verify `502/503` responses from `ai-layer` stay in the AI advisory block and do not block `Approve suggestion` or `Create assignment`.
 - Verify planner suggestion approval sends only `task`, `employee`, and `source_plan_run_id` to `POST /api/v1/assignments/approve-proposal/`.
 - Verify manual assignment sends `task`, `employee`, `planned_hours`, and optional `notes` to `POST /api/v1/assignments/manual/`.
 - Verify the browser never invents assignment dates and always displays task-backed dates in manual mode.

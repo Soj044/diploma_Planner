@@ -17,12 +17,14 @@ Use this note before any `frontend-app` task so the agent starts from current ba
 - Refresh token lives only in the backend HttpOnly cookie on `/api/v1/auth/*`.
 - `core-service` is reached through `/api/v1/*`.
 - `planner-service` is reached through `/planner-api/api/v1/*`.
+- `ai-layer` is reached through `/ai-api/api/v1/*`.
 
 ## Current frontend milestone status
 
 - Manager/admin runtime already supports:
   - owned task workspace on `/tasks`
   - task create-and-assign wizard on `/tasks/new`
+  - on-demand AI advisory explanations inside the `/tasks/new` planner suggestion and unassigned fallback modal
   - employee schedule management workspace on `/schedule`
   - requested leave review queue on `/leaves`
   - task-requirement CRUD

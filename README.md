@@ -160,7 +160,7 @@ npm run dev
 Важно:
 
 - frontend больше не использует Basic auth workaround
-- при запуске через `docker compose` frontend автоматически проксирует `core-service`, `planner-service` и зарезервированный `ai-layer` runtime path по именам compose-сервисов
+- при запуске через `docker compose` frontend автоматически проксирует `core-service`, `planner-service` и `ai-layer` runtime path по именам compose-сервисов
 - при standalone-запуске frontend использует `localhost` proxy targets из `frontend-app/.env.example`
 - frontend-facing `ai-layer` routes повторяют auth pattern `planner-service`: Bearer token from browser -> core-service introspection through shared `INTERNAL_SERVICE_TOKEN` -> allow only `admin|manager`
 

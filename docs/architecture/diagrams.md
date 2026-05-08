@@ -109,7 +109,7 @@ browser
 ```
 
 `frontend-app` can also be run standalone on the host with `npm run dev`, but `docker compose up --build` is now the default full-stack dev runtime.
-`ai-layer` runtime is available in compose now with authenticated capability/explanation endpoints, token-protected internal feed/context reads, pgvector sync, and structured Ollama generation. Frontend UI for these explanations is still deferred.
+`ai-layer` runtime is available in compose now with authenticated capability/explanation endpoints, token-protected internal feed/context reads, pgvector sync, and structured Ollama generation. The first frontend integration now lives in `/tasks/new`, where manager/admin users can request on-demand advisory explanations for planner suggestions and unassigned manual fallbacks.
 
 ## Frontend-Useful Read Models (Stage 1)
 
@@ -145,6 +145,7 @@ frontend-app:
     services/auth-service.ts
     services/core-service.ts
     services/planner-service.ts
+    services/ai-service.ts
     services/http.ts
     composables/useAuth.ts
 
