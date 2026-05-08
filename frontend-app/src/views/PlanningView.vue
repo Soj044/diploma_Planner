@@ -1,12 +1,26 @@
 <script setup lang="ts">
+/**
+ * Owns the /planning launch and persisted review workspace, including on-demand
+ * advisory explanation calls to the ai-layer for selected proposals and diagnostics.
+ */
 import { computed, onMounted, reactive, ref, watch } from "vue";
 
 import SectionPlaceholder from "../components/SectionPlaceholder.vue";
 import { useAuth } from "../composables/useAuth";
+import { aiService } from "../services/ai-service";
 import { coreService } from "../services/core-service";
 import { describeRequestError } from "../services/http";
 import { plannerService, planRunRequestFields, plannerResources, planningWorkflow } from "../services/planner-service";
-import type { Assignment, AssignmentProposal, Department, Employee, PlanResponse, Task } from "../types/api";
+import type {
+  AiExplanationPayload,
+  Assignment,
+  AssignmentProposal,
+  Department,
+  Employee,
+  PlanResponse,
+  Task,
+  UnassignedTaskDiagnostic,
+} from "../types/api";
 
 interface PlanningFormState {
   planning_period_start: string;
@@ -21,6 +35,11 @@ interface ReviewFormState {
 interface ApprovalFormState {
   notes: string;
 }
+
+type AiExplanationMap = Record<string, AiExplanationPayload>;
+type VisibleAiExplanationMap = Record<string, AiExplanationPayload | null>;
+type AiErrorMap = Record<string, string>;
+type AiLoadingMap = Record<string, boolean>;
 
 const auth = useAuth();
 const departments = ref<Department[]>([]);
@@ -40,6 +59,14 @@ const reviewErrorMessage = ref("");
 const reviewSuccessMessage = ref("");
 const approvalErrorMessage = ref("");
 const approvalSuccessMessage = ref("");
+const proposalAiCache = reactive<AiExplanationMap>({});
+const diagnosticAiCache = reactive<AiExplanationMap>({});
+const visibleProposalAi = reactive<VisibleAiExplanationMap>({});
+const visibleDiagnosticAi = reactive<VisibleAiExplanationMap>({});
+const proposalAiLoadingKeys = reactive<AiLoadingMap>({});
+const diagnosticAiLoadingKeys = reactive<AiLoadingMap>({});
+const proposalAiErrors = reactive<AiErrorMap>({});
+const diagnosticAiErrors = reactive<AiErrorMap>({});
 
 const form = reactive<PlanningFormState>({
   planning_period_start: "",
@@ -104,6 +131,41 @@ function proposalKey(proposal: AssignmentProposal) {
   return `${proposal.task_id}-${proposal.employee_id}-${proposal.proposal_rank}`;
 }
 
+/**
+ * Clears every entry from a reactive record without replacing the reference.
+ */
+function clearReactiveRecord(record: Record<string, unknown>) {
+  for (const key of Object.keys(record)) {
+    delete record[key];
+  }
+}
+
+/**
+ * Resets only row-local AI visibility, loading, and error state for a new persisted review.
+ */
+function resetPlanningAiRowState() {
+  clearReactiveRecord(visibleProposalAi);
+  clearReactiveRecord(visibleDiagnosticAi);
+  clearReactiveRecord(proposalAiLoadingKeys);
+  clearReactiveRecord(diagnosticAiLoadingKeys);
+  clearReactiveRecord(proposalAiErrors);
+  clearReactiveRecord(diagnosticAiErrors);
+}
+
+/**
+ * Builds a stable cache key for one selected proposal explanation context.
+ */
+function buildProposalAiKey(taskId: string, employeeId: string, planRunId: string): string {
+  return `${taskId}:${employeeId}:${planRunId}`;
+}
+
+/**
+ * Builds a stable cache key for one unassigned diagnostic explanation context.
+ */
+function buildDiagnosticAiKey(taskId: string, planRunId: string): string {
+  return `${taskId}:${planRunId}`;
+}
+
 function resetApprovalState() {
   approvingProposalKey.value = "";
   approvalErrorMessage.value = "";
@@ -153,6 +215,7 @@ async function reviewPlanRun(planRunId = reviewForm.plan_run_id.trim()) {
   reviewErrorMessage.value = "";
   reviewSuccessMessage.value = "";
   resetApprovalState();
+  resetPlanningAiRowState();
 
   try {
     reviewedRun.value = await plannerService.getPlanRun(planRunId);
