@@ -151,6 +151,26 @@ def test_ollama_client_maps_runtime_unavailability() -> None:
     assert exc_info.value.detail == "ollama generation runtime is unavailable"
 
 
+def test_ollama_client_maps_generation_timeout_to_503() -> None:
+    """Surface Ollama read timeouts as controlled runtime-unavailable responses."""
+
+    def _raise_timeout(_: httpx.Request) -> httpx.Response:
+        raise httpx.ReadTimeout("timed out")
+
+    client = OllamaClient(
+        base_url="http://ollama.test",
+        chat_model="llama3.2:3b",
+        embed_model="bge-m3",
+        transport=httpx.MockTransport(_raise_timeout),
+    )
+
+    with pytest.raises(OllamaClientError) as exc_info:
+        client.generate_explanation(system_prompt="system", user_prompt="user")
+
+    assert exc_info.value.status_code == 503
+    assert exc_info.value.detail == "ollama generation runtime is unavailable"
+
+
 def test_ollama_client_rejects_invalid_generation_payload() -> None:
     """Map malformed non-streaming generation envelopes to controlled 502 errors."""
 

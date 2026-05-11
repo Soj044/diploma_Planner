@@ -19,6 +19,7 @@ from app.config import (
     OLLAMA_BASE_URL,
     OLLAMA_CHAT_MODEL,
     OLLAMA_EMBED_MODEL,
+    OLLAMA_TIMEOUT_SECONDS,
     PLANNER_SERVICE_URL,
     postgres_dsn,
 )
@@ -68,6 +69,7 @@ def initialize_storage() -> None:
             base_url=OLLAMA_BASE_URL,
             chat_model=OLLAMA_CHAT_MODEL,
             embed_model=OLLAMA_EMBED_MODEL,
+            timeout_seconds=OLLAMA_TIMEOUT_SECONDS,
         ),
     )
 
