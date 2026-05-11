@@ -39,10 +39,11 @@
 - shared PostgreSQL `pgvector` + `ai_layer` schema bootstrap
 - internal AI feeds/context between `core-service`, `planner-service`, and `ai-layer`
 - advisory backend explanation pipeline for `assignment-rationale` and `unassigned-task`
+- on-demand AI advisory UI in `/tasks/new` and `/planning`
 
 ## Что еще не реализовано
 
-- frontend UI wiring for AI explanations
+- task drafting hints and employee-facing AI UX
 - сложные уведомления, realtime и внешние интеграции
 
 ## Требования
@@ -61,6 +62,11 @@ cp .env.example .env
 ```
 
 Текущий `.env.example` уже достаточен для локального MVP запуска, включая foundation для `ai-layer`, `ollama` и shared `pgvector` storage.
+Локальный AI runtime по умолчанию настроен на:
+
+- `OLLAMA_CHAT_MODEL=llama3.2:3b`
+- `OLLAMA_EMBED_MODEL=bge-m3`
+- `OLLAMA_TIMEOUT_SECONDS=90`
 
 ### 2. Поднять весь dev runtime
 
@@ -78,6 +84,22 @@ docker compose up --build
 - `ai-layer capabilities`: `http://localhost:8002/api/v1/capabilities`
 - `ollama API`: `http://localhost:11434/api/tags`
 - `frontend-app`: `http://localhost:5173`
+
+Если `frontend-app` выглядит зависшим в браузере, сначала проверь runtime из терминала:
+
+```bash
+docker compose ps
+docker logs workestrator-frontend
+docker exec workestrator-frontend wget -qO- http://127.0.0.1:5173/ | head
+curl http://localhost:5173/
+curl http://localhost:5173/@vite/client
+```
+
+Если контейнер healthy и внутри контейнера `index.html` отдается, но хостовый браузер все еще висит:
+
+- пересоздай только `frontend-app` контейнер;
+- сделай hard refresh или открой страницу в incognito;
+- проверь, не блокирует ли published port `5173` локальный firewall/antivirus/другой dev runtime.
 
 Если `core-service` падает с `InconsistentMigrationHistory`, значит локальный `postgres_data` volume остался от более старой схемы. Для чистого MVP-старта:
 
@@ -179,6 +201,11 @@ npm run dev
 9. Открыть `http://localhost:5173/assignments` и проверить, что final `Assignment` появился в read-only списке
 
 `Planning` и `Assignments` сохранены как совместимые advanced routes, но после Stage 2 больше не показываются в основном верхнем меню.
+
+Важно для `/tasks/new -> Save + Assignment`:
+
+- manual mode открывается только когда planner реально вернул `unassigned`;
+- для date-based multi-day задач planner теперь считает eligibility по **сумме доступных часов** в окне задачи, а не требует один непрерывный availability slot на весь интервал.
 
 ### Employee flow
 

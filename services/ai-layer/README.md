@@ -39,10 +39,16 @@ Important env vars:
 - `OLLAMA_BASE_URL`
 - `OLLAMA_CHAT_MODEL`
 - `OLLAMA_EMBED_MODEL`
+- `OLLAMA_TIMEOUT_SECONDS`
 - `AI_VECTOR_DIM`
 - `AI_TOP_K`
 - `AI_SYNC_STALE_SECONDS`
 - `INTERNAL_SERVICE_TOKEN`
+
+Current local-runtime defaults:
+- `OLLAMA_CHAT_MODEL=llama3.2:3b`
+- `OLLAMA_EMBED_MODEL=bge-m3`
+- `OLLAMA_TIMEOUT_SECONDS=90`
 
 Current retrieval/index scope:
 - `assignment_case` uses current flattened successful-assignment state from `core-service`;
@@ -50,6 +56,7 @@ Current retrieval/index scope:
 - `employee/schedule/leave` stay out of the vector corpus and are used only as live context.
 
 Still out of scope in this cycle:
-- frontend UI wiring for AI explanations;
 - richer hybrid retrieval or document-based RAG;
+- task drafting hints;
+- employee-facing AI UX;
 - any LLM-driven replacement for optimization logic.

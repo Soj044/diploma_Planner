@@ -36,6 +36,19 @@ This starts the Vite dev server inside the `frontend-app` container and proxies:
 
 Frontend becomes available at `http://localhost:5173`.
 
+If the browser keeps loading indefinitely while the container looks healthy, check:
+
+```bash
+docker compose ps
+docker logs workestrator-frontend
+docker exec workestrator-frontend wget -qO- http://127.0.0.1:5173/ | head
+curl http://localhost:5173/
+curl http://localhost:5173/@vite/client
+```
+
+If the container serves `index.html` internally but the host still cannot open `:5173`, recreate only the
+frontend container or node_modules volume, hard-refresh the browser, and check host-level port blockers.
+
 ### Option 2: Standalone Vite on the host
 
 ```bash
@@ -53,7 +66,7 @@ npm run dev
 - `VITE_CORE_SERVICE_PROXY_TARGET` defaults to `http://localhost:8000`
 - `VITE_PLANNER_SERVICE_PROXY_TARGET` defaults to `http://localhost:8001`
 - `VITE_AI_SERVICE_PROXY_TARGET` defaults to `http://localhost:8002`
-- in `docker compose`, proxy targets are overridden to `http://core-service:8000` and `http://planner-service:8001`
+- in `docker compose`, proxy targets are overridden to `http://core-service:8000`, `http://planner-service:8001`, and `http://ai-layer:8002`
 
 ## Runtime routing
 

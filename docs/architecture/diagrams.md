@@ -28,8 +28,8 @@ ai-layer -> planner-service: GET /api/v1/internal/ai/index-feed + X-Internal-Ser
 ai-layer -> planner-service: GET /api/v1/internal/ai/plan-runs/{plan_run_id}/proposal-context?task_id=...&employee_id=... + X-Internal-Service-Token
 ai-layer -> planner-service: GET /api/v1/internal/ai/plan-runs/{plan_run_id}/unassigned-context?task_id=... + X-Internal-Service-Token
 ai-layer -> ollama: /api/embed for feed vectors and retrieval query vectors
-ai-layer -> ollama: /api/chat stream=false + JSON schema for structured explanations
-planner-service (CP-SAT): eligibility -> scoring -> optimization
+ai-layer -> ollama: /api/chat stream=false + JSON schema for structured explanations (default local chat model: llama3.2:3b)
+planner-service (CP-SAT): eligibility with cumulative availability hours in the task window -> scoring -> optimization
 planner-service -> planner artifact store: save run + snapshot + proposals + diagnostics
 planner-service -> frontend-app: assignment proposals + diagnostics
 frontend-app -> planner-service: GET /api/v1/plan-runs/{id}
@@ -110,6 +110,7 @@ browser
 
 `frontend-app` can also be run standalone on the host with `npm run dev`, but `docker compose up --build` is now the default full-stack dev runtime.
 `ai-layer` runtime is available in compose now with authenticated capability/explanation endpoints, token-protected internal feed/context reads, pgvector sync, and structured Ollama generation. The first frontend integrations now live in `/tasks/new` and `/planning`, where manager/admin users can request on-demand advisory explanations for planner suggestions, selected persisted proposals, and unassigned diagnostics.
+The compose `frontend-app` service now includes an HTTP healthcheck on `http://127.0.0.1:5173/` to make Vite readiness visible during local troubleshooting.
 
 ## Frontend-Useful Read Models (Stage 1)
 

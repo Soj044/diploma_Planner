@@ -61,8 +61,9 @@ services:
       PLANNER_SERVICE_URL: http://planner-service:8001
       AI_LAYER_URL: http://ai-layer:8002
       OLLAMA_BASE_URL: http://ollama:11434
-      OLLAMA_CHAT_MODEL: ${OLLAMA_CHAT_MODEL:-qwen3:4b}
+      OLLAMA_CHAT_MODEL: ${OLLAMA_CHAT_MODEL:-llama3.2:3b}
       OLLAMA_EMBED_MODEL: ${OLLAMA_EMBED_MODEL:-bge-m3}
+      OLLAMA_TIMEOUT_SECONDS: ${OLLAMA_TIMEOUT_SECONDS:-90}
       AI_VECTOR_DIM: ${AI_VECTOR_DIM:-1024}
       AI_TOP_K: ${AI_TOP_K:-5}
       AI_SYNC_STALE_SECONDS: ${AI_SYNC_STALE_SECONDS:-300}
@@ -111,6 +112,11 @@ services:
     volumes:
       - ./frontend-app:/app/frontend-app
       - frontend_node_modules:/app/frontend-app/node_modules
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:5173/"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
     command: >
       sh -c "npm install &&
              npm run dev"

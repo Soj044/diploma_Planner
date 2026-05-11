@@ -121,8 +121,15 @@ docker compose up --build
 - Verify `assignment-rationale` explanations use live task/employee context plus retrieved `assignment_case` history, while `unassigned-task` explanations use persisted diagnostic context plus retrieved `unassigned_case` history.
 - Verify stopping `ollama` causes explanation routes to degrade with controlled `503`, not broken approval/manual assignment flows.
 - Before planner-dependent checks, prepare two task datasets:
-  - a positive planner case with eligible employee skills and an availability slot that covers the whole date-based task window so `/tasks/new` can surface a selected proposal;
+  - a positive planner case with eligible employee skills and cumulative availability hours inside the date-based task window that meet `estimated_hours`, so `/tasks/new` can surface a selected proposal;
   - a manual fallback case with no eligible employee so `/tasks/new` opens manual assignment mode directly.
+- If `http://localhost:5173` looks stuck while compose is up, verify runtime health in this order:
+  - `docker compose ps`
+  - `docker logs workestrator-frontend`
+  - `docker exec workestrator-frontend wget -qO- http://127.0.0.1:5173/ | head`
+  - `curl http://localhost:5173/`
+  - `curl http://localhost:5173/@vite/client`
+- If the container is healthy and serves `index.html` internally, but the host browser still hangs, recreate only the frontend container or `frontend_node_modules` volume, hard-refresh the browser, and check host-level blockers on port `5173`.
 - Before manager/admin leave checks, ensure at least one employee has a `requested` leave record.
 - Before manager/admin schedule checks, ensure at least one employee exists for the `/schedule` workspace.
 - Open `http://localhost:5173`.
@@ -153,6 +160,7 @@ docker compose up --build
 - On `/tasks/new`, verify task create uses the authenticated user from `/auth/me` and no longer requires reading `/users/`.
 - On `/tasks/new`, verify `Save task` persists the task without planner launch.
 - On `/tasks/new`, verify `Save + Assignment` requires `status=planned`, `start_date`, and `due_date`.
+- On `/tasks/new`, verify manual mode opens only when planner actually returned `unassigned`, not because the frontend skipped planner execution.
 - On `Planning`, verify manager/admin can launch a plan run with period-only scope, optional department filter, and optional selected task subset.
 - For single-task planning UX, verify `/tasks/new` still uses `POST /api/v1/plan-runs` with `task_ids=[task.id]` instead of inventing a new planner route.
 - Verify the planning launch summary shows the returned `plan_run_id`, status, assigned count, and unassigned count after `POST /api/v1/plan-runs`.
