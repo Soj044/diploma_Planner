@@ -19,18 +19,28 @@ def _task_hours(task: TaskSnapshot) -> int:
     return max(1, int((seconds + 3599) // 3600))
 
 
+def _slot_available_hours(employee: EmployeeSnapshot, task: TaskSnapshot) -> float:
+    """Sum all available hours contributed by slots intersecting the task window."""
+
+    total_hours = 0.0
+    for slot in employee.availability:
+        overlap_start = max(slot.start_at, task.starts_at)
+        overlap_end = min(slot.end_at, task.ends_at)
+        if overlap_start >= overlap_end:
+            continue
+        if slot.available_hours is not None:
+            total_hours += slot.available_hours
+            continue
+        total_hours += (overlap_end - overlap_start).total_seconds() / 3600
+    return total_hours
+
+
 def _is_available(employee: EmployeeSnapshot, task: TaskSnapshot) -> bool:
-    """Require one availability slot that covers the whole task interval."""
+    """Allow employees whose intersecting availability covers task hours in total."""
 
     if not employee.availability:
         return False
-    for slot in employee.availability:
-        # The MVP planner treats partial overlap as unavailable; one slot must cover the full task window.
-        if slot.start_at <= task.starts_at and slot.end_at >= task.ends_at:
-            if slot.available_hours is not None and slot.available_hours < _task_hours(task):
-                continue
-            return True
-    return False
+    return _slot_available_hours(employee, task) >= _task_hours(task)
 
 
 def _meets_requirements(employee: EmployeeSnapshot, task: TaskSnapshot) -> bool:

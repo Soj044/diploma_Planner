@@ -9,6 +9,8 @@ from app.planning.scoring import calculate_scores
 
 
 def test_eligibility_filters_by_department_availability_and_skill() -> None:
+    """Keep department and required-skill filters intact for otherwise eligible employees."""
+
     task = TaskSnapshot(
         task_id="t1",
         department_id="dep-1",
@@ -49,7 +51,50 @@ def test_eligibility_filters_by_department_availability_and_skill() -> None:
     assert eligibility.by_task["t1"] == ["e-ok"]
 
 
-def test_eligibility_rejects_employee_with_partial_or_insufficient_availability() -> None:
+def test_eligibility_allows_cumulative_multi_slot_availability_within_task_window() -> None:
+    """Accept multi-day tasks when intersecting slots provide enough total hours."""
+
+    task = TaskSnapshot(
+        task_id="t1",
+        department_id="dep-1",
+        title="Task",
+        starts_at=datetime(2026, 5, 13, 0, 0, tzinfo=timezone.utc),
+        ends_at=datetime(2026, 5, 16, 0, 0, tzinfo=timezone.utc),
+        estimated_hours=8,
+    )
+
+    employees = [
+        EmployeeSnapshot(
+            employee_id="e-multi-day",
+            department_id="dep-1",
+            availability=[
+                EmployeeAvailability(
+                    start_at=datetime(2026, 5, 13, 9, 0, tzinfo=timezone.utc),
+                    end_at=datetime(2026, 5, 13, 18, 0, tzinfo=timezone.utc),
+                    available_hours=8,
+                ),
+                EmployeeAvailability(
+                    start_at=datetime(2026, 5, 14, 9, 0, tzinfo=timezone.utc),
+                    end_at=datetime(2026, 5, 14, 18, 0, tzinfo=timezone.utc),
+                    available_hours=8,
+                ),
+                EmployeeAvailability(
+                    start_at=datetime(2026, 5, 15, 9, 0, tzinfo=timezone.utc),
+                    end_at=datetime(2026, 5, 15, 18, 0, tzinfo=timezone.utc),
+                    available_hours=8,
+                ),
+            ],
+        )
+    ]
+
+    eligibility = evaluate_eligibility(employees, [task])
+
+    assert eligibility.by_task["t1"] == ["e-multi-day"]
+
+
+def test_eligibility_rejects_employee_with_insufficient_total_availability_hours() -> None:
+    """Reject employees when intersecting slots do not reach the task hour requirement."""
+
     task = TaskSnapshot(
         task_id="t1",
         department_id="dep-1",
@@ -58,30 +103,23 @@ def test_eligibility_rejects_employee_with_partial_or_insufficient_availability(
         ends_at=datetime(2026, 3, 23, 13, 0, tzinfo=timezone.utc),
         estimated_hours=4,
     )
-
     employees = [
-        EmployeeSnapshot(
-            employee_id="e-partial-slot",
-            department_id="dep-1",
-            availability=[
-                EmployeeAvailability(
-                    start_at=datetime(2026, 3, 23, 9, 0, tzinfo=timezone.utc),
-                    end_at=datetime(2026, 3, 23, 11, 0, tzinfo=timezone.utc),
-                    available_hours=4,
-                )
-            ],
-        ),
         EmployeeSnapshot(
             employee_id="e-insufficient-hours",
             department_id="dep-1",
             availability=[
                 EmployeeAvailability(
-                    start_at=datetime(2026, 3, 23, 8, 0, tzinfo=timezone.utc),
-                    end_at=datetime(2026, 3, 23, 18, 0, tzinfo=timezone.utc),
+                    start_at=datetime(2026, 3, 23, 9, 0, tzinfo=timezone.utc),
+                    end_at=datetime(2026, 3, 23, 11, 0, tzinfo=timezone.utc),
                     available_hours=2,
-                )
+                ),
+                EmployeeAvailability(
+                    start_at=datetime(2026, 3, 23, 11, 0, tzinfo=timezone.utc),
+                    end_at=datetime(2026, 3, 23, 12, 0, tzinfo=timezone.utc),
+                    available_hours=1,
+                ),
             ],
-        ),
+        )
     ]
 
     eligibility = evaluate_eligibility(employees, [task])
@@ -89,7 +127,40 @@ def test_eligibility_rejects_employee_with_partial_or_insufficient_availability(
     assert eligibility.by_task["t1"] == []
 
 
+def test_eligibility_uses_overlap_duration_when_slot_hours_are_missing() -> None:
+    """Fall back to overlap duration when the snapshot omits explicit available hours."""
+
+    task = TaskSnapshot(
+        task_id="t1",
+        department_id="dep-1",
+        title="Task",
+        starts_at=datetime(2026, 3, 23, 9, 0, tzinfo=timezone.utc),
+        ends_at=datetime(2026, 3, 23, 13, 0, tzinfo=timezone.utc),
+        estimated_hours=4,
+    )
+    employee = EmployeeSnapshot(
+        employee_id="e-derived-hours",
+        department_id="dep-1",
+        availability=[
+            EmployeeAvailability(
+                start_at=datetime(2026, 3, 23, 8, 0, tzinfo=timezone.utc),
+                end_at=datetime(2026, 3, 23, 11, 0, tzinfo=timezone.utc),
+            ),
+            EmployeeAvailability(
+                start_at=datetime(2026, 3, 23, 11, 0, tzinfo=timezone.utc),
+                end_at=datetime(2026, 3, 23, 14, 0, tzinfo=timezone.utc),
+            ),
+        ],
+    )
+
+    eligibility = evaluate_eligibility([employee], [task])
+
+    assert eligibility.by_task["t1"] == ["e-derived-hours"]
+
+
 def test_scoring_returns_positive_ratio() -> None:
+    """Keep score calculation positive for eligible candidates after availability changes."""
+
     task = TaskSnapshot(
         task_id="t1",
         department_id="dep-1",
@@ -116,6 +187,8 @@ def test_scoring_returns_positive_ratio() -> None:
 
 
 def test_scoring_uses_requirement_weights_and_caps_skill_bonus() -> None:
+    """Preserve weighted skill scoring after the availability rule change."""
+
     task = TaskSnapshot(
         task_id="t1",
         department_id="dep-1",
@@ -146,6 +219,8 @@ def test_scoring_uses_requirement_weights_and_caps_skill_bonus() -> None:
 
 
 def test_scoring_defaults_to_one_without_requirements() -> None:
+    """Preserve the neutral score for requirement-free tasks."""
+
     task = TaskSnapshot(
         task_id="t1",
         department_id="dep-1",
