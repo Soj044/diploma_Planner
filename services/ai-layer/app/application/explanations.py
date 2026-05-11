@@ -44,6 +44,9 @@ STRUCTURED_EXPLANATION_SCHEMA: dict[str, Any] = {
         "advisory_note",
     ],
 }
+MAX_PROMPT_TEXT_CHARS = 280
+MAX_PROMPT_SIMILAR_CASES = 3
+MAX_PROMPT_SCORES = 5
 OWNERSHIP_ADVISORY = (
     "Advisory response only: core-service remains the business truth, "
     "planner-service remains the proposals and diagnostics truth, and ai-layer "
@@ -275,20 +278,19 @@ class ExplanationService:
     ) -> list[RetrievedIndexItem]:
         """Retrieve similar indexed assignment cases for one proposal explanation."""
 
-        query_text = "\n".join(
-            [
-                f"task_id={task_id}",
-                f"employee_id={employee_id}",
-                f"task_title={live_context.task.get('title', '')}",
-                f"task_description={live_context.task.get('description', '')}",
-                f"requirements={self._dump_json(live_context.requirements)}",
-                f"employee={self._dump_json(live_context.employee)}",
-                f"employee_skills={self._dump_json(live_context.employee_skills)}",
-                f"availability={self._dump_json(live_context.availability)}",
-                f"proposal={self._dump_json(proposal_context.proposal)}",
-                f"eligibility={self._dump_json(proposal_context.eligibility)}",
-                f"scores={self._dump_json(proposal_context.score_map)}",
-            ]
+        query_text = self._dump_json(
+            {
+                "task_id": task_id,
+                "employee_id": employee_id,
+                "task_summary": self._task_summary(live_context.task),
+                "requirements": self._requirements_summary(live_context.requirements),
+                "employee_summary": self._employee_summary(live_context.employee),
+                "employee_skills": self._employee_skills_summary(live_context.employee_skills),
+                "availability_summary": self._availability_summary(live_context.availability),
+                "selected_proposal": self._proposal_summary(proposal_context.proposal),
+                "eligibility_summary": self._eligibility_summary(proposal_context.eligibility),
+                "score_summary": self._score_summary(proposal_context.score_map),
+            }
         )
         return self._search_similar_items(
             query_text=query_text,
@@ -306,15 +308,15 @@ class ExplanationService:
     ) -> list[RetrievedIndexItem]:
         """Retrieve similar indexed unassigned cases for one diagnostic explanation."""
 
-        query_text = "\n".join(
-            [
-                f"task_id={task_id}",
-                f"task_snapshot={self._dump_json(unassigned_context.task_snapshot)}",
-                f"diagnostic={self._dump_json(unassigned_context.diagnostic)}",
-                f"eligibility={self._dump_json(unassigned_context.eligibility)}",
-                f"scores={self._dump_json(unassigned_context.score_map)}",
-                f"solver={self._dump_json(unassigned_context.solver_summary)}",
-            ]
+        query_text = self._dump_json(
+            {
+                "task_id": task_id,
+                "task_summary": self._task_summary(unassigned_context.task_snapshot),
+                "diagnostic": self._diagnostic_summary(unassigned_context.diagnostic),
+                "eligibility_summary": self._eligibility_summary(unassigned_context.eligibility),
+                "score_summary": self._score_summary(unassigned_context.score_map),
+                "solver_summary": self._solver_summary(unassigned_context.solver_summary),
+            }
         )
         return self._search_similar_items(
             query_text=query_text,
@@ -410,9 +412,17 @@ class ExplanationService:
         return "\n\n".join(
             [
                 f"ownership_boundary={OWNERSHIP_ADVISORY}",
-                f"live_assignment_context={self._dump_json(live_context.model_dump(mode='json'))}",
-                f"proposal_context={self._dump_json(proposal_context.model_dump(mode='json'))}",
-                f"similar_cases={self._dump_json(self._retrieved_cases_payload(retrieved_items))}",
+                f"task_summary={self._dump_json(self._task_summary(live_context.task))}",
+                f"requirements={self._dump_json(self._requirements_summary(live_context.requirements))}",
+                f"employee_summary={self._dump_json(self._employee_summary(live_context.employee))}",
+                f"employee_skills={self._dump_json(self._employee_skills_summary(live_context.employee_skills))}",
+                f"availability_summary={self._dump_json(self._availability_summary(live_context.availability))}",
+                f"selected_proposal={self._dump_json(self._proposal_summary(proposal_context.proposal))}",
+                f"sibling_proposals={self._dump_json(self._sibling_proposals_summary(proposal_context.sibling_proposals))}",
+                f"eligibility_summary={self._dump_json(self._eligibility_summary(proposal_context.eligibility))}",
+                f"score_summary={self._dump_json(self._score_summary(proposal_context.score_map))}",
+                f"solver_summary={self._dump_json(self._solver_summary(proposal_context.solver_summary))}",
+                f"similar_cases={self._dump_json(self._retrieved_cases_prompt_payload(retrieved_items))}",
             ]
         )
 
@@ -427,26 +437,182 @@ class ExplanationService:
         return "\n\n".join(
             [
                 f"ownership_boundary={OWNERSHIP_ADVISORY}",
-                f"unassigned_context={self._dump_json(unassigned_context.model_dump(mode='json'))}",
-                f"similar_cases={self._dump_json(self._retrieved_cases_payload(retrieved_items))}",
+                f"task_summary={self._dump_json(self._task_summary(unassigned_context.task_snapshot))}",
+                f"diagnostic={self._dump_json(self._diagnostic_summary(unassigned_context.diagnostic))}",
+                f"eligibility_summary={self._dump_json(self._eligibility_summary(unassigned_context.eligibility))}",
+                f"score_summary={self._dump_json(self._score_summary(unassigned_context.score_map))}",
+                f"solver_summary={self._dump_json(self._solver_summary(unassigned_context.solver_summary))}",
+                f"similar_cases={self._dump_json(self._retrieved_cases_prompt_payload(retrieved_items))}",
             ]
         )
 
-    def _retrieved_cases_payload(self, retrieved_items: list[RetrievedIndexItem]) -> list[dict[str, Any]]:
-        """Serialize retrieved index rows into prompt-friendly case summaries."""
+    def _task_summary(self, task_payload: dict[str, Any]) -> dict[str, Any]:
+        """Project one task payload into a compact prompt-friendly summary."""
+
+        task_summary = self._pick_fields(
+            task_payload,
+            (
+                "id",
+                "task_id",
+                "title",
+                "priority",
+                "status",
+                "department_id",
+                "estimated_hours",
+                "start_date",
+                "due_date",
+                "starts_at",
+                "ends_at",
+            ),
+        )
+        description = task_payload.get("description")
+        if isinstance(description, str) and description.strip():
+            task_summary["description"] = self._compact_text(description)
+        return task_summary
+
+    def _requirements_summary(self, requirements: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Reduce task requirements to the fields useful for explanation prompts."""
 
         return [
-            {
-                "source_service": item.source_service,
-                "source_type": item.source_type,
-                "source_key": item.source_key,
-                "title": item.title,
-                "content": item.content,
-                "metadata": item.metadata_json,
-                "distance": item.distance,
-            }
-            for item in retrieved_items
+            self._pick_fields(requirement, ("skill_id", "skill_name", "min_level", "weight"))
+            for requirement in requirements
         ]
+
+    def _employee_summary(self, employee_payload: dict[str, Any]) -> dict[str, Any]:
+        """Project one employee payload into a compact prompt-friendly summary."""
+
+        return self._pick_fields(
+            employee_payload,
+            ("id", "employee_id", "full_name", "department_id", "position_name", "is_active"),
+        )
+
+    def _employee_skills_summary(self, employee_skills: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Reduce employee skill payloads to the fields needed by explanations."""
+
+        return [
+            self._pick_fields(skill_payload, ("skill_id", "skill_name", "level"))
+            for skill_payload in employee_skills
+        ]
+
+    def _availability_summary(self, availability_payload: dict[str, Any]) -> dict[str, Any]:
+        """Summarize live availability without sending every schedule row verbatim."""
+
+        schedule_days = availability_payload.get("schedule_days")
+        approved_leaves = availability_payload.get("approved_leaves")
+        availability_overrides = availability_payload.get("availability_overrides")
+        return {
+            "schedule_day_count": len(schedule_days) if isinstance(schedule_days, list) else 0,
+            "approved_leave_count": len(approved_leaves) if isinstance(approved_leaves, list) else 0,
+            "availability_override_count": len(availability_overrides)
+            if isinstance(availability_overrides, list)
+            else 0,
+            "approved_leave_dates": self._date_window_summary(approved_leaves),
+            "override_dates": self._date_window_summary(availability_overrides),
+        }
+
+    def _proposal_summary(self, proposal_payload: dict[str, Any]) -> dict[str, Any]:
+        """Reduce one selected proposal payload to compact planner facts."""
+
+        return self._pick_fields(
+            proposal_payload,
+            (
+                "task_id",
+                "employee_id",
+                "score",
+                "rank",
+                "planned_hours",
+                "status",
+                "start_date",
+                "end_date",
+                "is_selected",
+            ),
+        )
+
+    def _sibling_proposals_summary(self, proposals: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Keep only a short summary of competing proposals for the same task."""
+
+        return [
+            self._pick_fields(proposal, ("employee_id", "score", "rank", "status", "is_selected"))
+            for proposal in proposals[:MAX_PROMPT_SIMILAR_CASES]
+        ]
+
+    def _eligibility_summary(self, eligibility_payload: dict[str, Any]) -> dict[str, Any]:
+        """Reduce eligibility payloads to counts and a short employee sample."""
+
+        summary = self._pick_fields(eligibility_payload, ("eligible_count",))
+        employee_ids = eligibility_payload.get("employee_ids")
+        if isinstance(employee_ids, list):
+            summary["employee_ids"] = [str(employee_id) for employee_id in employee_ids[:MAX_PROMPT_SCORES]]
+        return summary
+
+    def _score_summary(self, score_map: dict[str, float]) -> list[dict[str, Any]]:
+        """Return the top planner scores in descending order for prompt compactness."""
+
+        score_items = sorted(score_map.items(), key=lambda item: item[1], reverse=True)
+        return [
+            {"employee_id": employee_id, "score": round(float(score), 4)}
+            for employee_id, score in score_items[:MAX_PROMPT_SCORES]
+        ]
+
+    def _solver_summary(self, solver_payload: dict[str, Any]) -> dict[str, Any]:
+        """Reduce solver payloads to stable top-level facts only."""
+
+        return self._pick_fields(
+            solver_payload,
+            ("status", "objective_value", "wall_time_seconds", "assigned_count", "unassigned_count"),
+        )
+
+    def _diagnostic_summary(self, diagnostic_payload: dict[str, Any]) -> dict[str, Any]:
+        """Reduce one unassigned diagnostic payload to the key explanation facts."""
+
+        summary = self._pick_fields(diagnostic_payload, ("task_id", "reason_code"))
+        message = diagnostic_payload.get("message")
+        if isinstance(message, str) and message.strip():
+            summary["message"] = self._compact_text(message)
+        reason_details = diagnostic_payload.get("reason_details")
+        if isinstance(reason_details, str) and reason_details.strip():
+            summary["reason_details"] = self._compact_text(reason_details)
+        return summary
+
+    def _retrieved_cases_prompt_payload(self, retrieved_items: list[RetrievedIndexItem]) -> list[dict[str, Any]]:
+        """Serialize retrieved rows into short prompt-friendly historical case summaries."""
+
+        prompt_cases: list[dict[str, Any]] = []
+        for item in retrieved_items[:MAX_PROMPT_SIMILAR_CASES]:
+            prompt_cases.append(
+                {
+                    "headline": item.title,
+                    "source_key": item.source_key,
+                    "distance": round(item.distance, 4),
+                    "summary_note": self._similar_case_outcome(item),
+                    "content_excerpt": self._compact_text(item.content, limit=180),
+                }
+            )
+        return prompt_cases
+
+    def _date_window_summary(self, rows: Any) -> list[dict[str, Any]]:
+        """Project date-like ranges into a short list for prompt summaries."""
+
+        if not isinstance(rows, list):
+            return []
+        return [
+            self._pick_fields(
+                row if isinstance(row, dict) else {},
+                ("date", "start_date", "end_date", "starts_at", "ends_at", "status"),
+            )
+            for row in rows[:MAX_PROMPT_SIMILAR_CASES]
+        ]
+
+    def _pick_fields(self, payload: dict[str, Any], fields: tuple[str, ...]) -> dict[str, Any]:
+        """Copy only non-empty fields that matter for AI prompt compactness."""
+
+        result: dict[str, Any] = {}
+        for field_name in fields:
+            value = payload.get(field_name)
+            if value in (None, "", [], {}):
+                continue
+            result[field_name] = value
+        return result
 
     def _finalize_result(
         self,
@@ -516,3 +682,11 @@ class ExplanationService:
         """Serialize one prompt payload into stable compact JSON text."""
 
         return json.dumps(payload, ensure_ascii=True, separators=(",", ":"), sort_keys=True)
+
+    def _compact_text(self, value: str, *, limit: int = MAX_PROMPT_TEXT_CHARS) -> str:
+        """Normalize whitespace and cap large text blocks before prompt serialization."""
+
+        normalized = " ".join(value.split())
+        if len(normalized) <= limit:
+            return normalized
+        return f"{normalized[: limit - 3].rstrip()}..."

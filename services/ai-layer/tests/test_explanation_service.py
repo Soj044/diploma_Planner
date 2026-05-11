@@ -306,6 +306,7 @@ def test_build_assignment_rationale_filters_retrieval_and_logs_request() -> None
 
     repository = FakeRepository(retrieved_items=[_retrieved_item()])
     reindex_service = FakeReindexService(ready=True)
+    ollama_client = FakeOllamaClient(embeddings=[_embedding()], generated_content=_generated_json())
     service = ExplanationService(
         repository=repository,
         reindex_service=reindex_service,
@@ -314,7 +315,7 @@ def test_build_assignment_rationale_filters_retrieval_and_logs_request() -> None
             proposal_context=_proposal_context(),
             unassigned_context=_unassigned_context(),
         ),
-        ollama_client=FakeOllamaClient(embeddings=[_embedding()], generated_content=_generated_json()),
+        ollama_client=ollama_client,
     )
 
     result = service.build_assignment_rationale(
@@ -343,6 +344,14 @@ def test_build_assignment_rationale_filters_retrieval_and_logs_request() -> None
         "source_service": "core-service",
         "source_type": "assignment_case",
     }
+    prompt = ollama_client.generate_requests[0]["user_prompt"]
+    assert isinstance(prompt, str)
+    assert "task_summary=" in prompt
+    assert "selected_proposal=" in prompt
+    assert "availability_summary=" in prompt
+    assert "live_assignment_context=" not in prompt
+    assert "proposal_context=" not in prompt
+    assert "content_excerpt" in prompt
 
 
 def test_build_assignment_rationale_appends_stale_note_when_refresh_fallback_is_used() -> None:
