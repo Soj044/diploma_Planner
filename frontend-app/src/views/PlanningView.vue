@@ -5,12 +5,12 @@
  */
 import { computed, onMounted, reactive, ref, watch } from "vue";
 
-import SectionPlaceholder from "../components/SectionPlaceholder.vue";
+import { priorityPillClass } from "../components/tasks/taskPriority";
 import { useAuth } from "../composables/useAuth";
 import { aiService } from "../services/ai-service";
 import { coreService } from "../services/core-service";
 import { describeRequestError } from "../services/http";
-import { plannerService, planRunRequestFields, plannerResources, planningWorkflow } from "../services/planner-service";
+import { plannerService } from "../services/planner-service";
 import type {
   AiExplanationPayload,
   Assignment,
@@ -453,7 +453,7 @@ async function approveProposal(proposal: AssignmentProposal) {
       source_plan_run_id: reviewedRun.value.summary.plan_run_id,
       notes: approvalForm.notes.trim() || undefined,
     });
-    approvalSuccessMessage.value = "Selected proposal was approved in core-service.";
+    approvalSuccessMessage.value = "Selected proposal was approved.";
   } catch (error: unknown) {
     approvalErrorMessage.value = describeRequestError(error);
   } finally {
@@ -467,15 +467,12 @@ onMounted(loadPlanningScope);
 <template>
   <div class="page-stack">
     <section class="page-card">
-      <p class="eyebrow">Planner-service</p>
+      <p class="eyebrow">Planning</p>
       <h3 class="page-title">Launch a persisted planning run</h3>
       <p class="page-description">
-        This screen now covers plan run launch, persisted review, and the final approval handoff. Browser code still
-        does not recalculate eligibility, scoring, or optimization, and `core-service` remains the authority for final
-        `Assignment` creation.
+        Launch the run, inspect the persisted result, and approve the selected proposal without leaving the same review flow.
       </p>
       <div class="pill-row">
-        <span class="pill">/plan-runs</span>
         <span class="pill is-warm">{{ auth.user.value ? `Initiator #${auth.user.value.id}` : "No auth context" }}</span>
         <span class="pill">{{ selectedTaskCount }} selected tasks</span>
       </div>
@@ -487,7 +484,7 @@ onMounted(loadPlanningScope);
           <div class="editor-header">
             <div>
               <p class="section-caption">Launch planning run</p>
-              <p class="resource-path">POST /api/v1/plan-runs</p>
+              <p class="resource-copy">Choose a planning window and optionally narrow the run to one department or a focused set of tasks.</p>
             </div>
             <div class="inline-actions">
               <button class="button-secondary" type="button" :disabled="isLoading" @click="loadPlanningScope">
@@ -557,7 +554,7 @@ onMounted(loadPlanningScope);
                   <input v-model="selectedTaskIds" class="check-input" type="checkbox" :value="String(task.id)" />
                   <p class="resource-label">{{ task.title }}</p>
                 </div>
-                <span class="pill is-warm">{{ task.priority }}</span>
+                <span class="pill" :class="priorityPillClass(task.priority)">{{ task.priority }}</span>
               </label>
               <p class="resource-copy">
                 Department:
@@ -577,8 +574,7 @@ onMounted(loadPlanningScope);
       <p class="eyebrow">Latest launch result</p>
       <h3 class="page-title">Plan run {{ latestRun.summary.plan_run_id }}</h3>
       <p class="page-description">
-        The run was persisted in planner-service. Use the persisted review section below to re-read the same run through
-        `GET /api/v1/plan-runs/{plan_run_id}`.
+        The run is ready for review below, including proposals, diagnostics, and solver output from the same saved run.
       </p>
       <div class="grid-two">
         <div class="records-card">
@@ -631,7 +627,7 @@ onMounted(loadPlanningScope);
           <div class="editor-header">
             <div>
               <p class="section-caption">Review persisted plan run</p>
-              <p class="resource-path">GET /api/v1/plan-runs/{plan_run_id}</p>
+              <p class="resource-copy">Paste a plan run ID to reopen a saved review and continue from persisted artifacts.</p>
             </div>
             <div class="inline-actions">
               <button
@@ -667,8 +663,7 @@ onMounted(loadPlanningScope);
             <div>
               <p class="section-caption">Review guide</p>
               <p class="resource-copy">
-                Review stays persisted and approval remains a thin handoff. The browser sends only `task`, `employee`,
-                `source_plan_run_id`, and optional notes back to `core-service`.
+                Reopen a saved run, review the result, and send back only the selected proposal reference plus optional approval notes.
               </p>
             </div>
             <span class="pill">{{ reviewedRun ? "Loaded" : "Waiting for run ID" }}</span>
@@ -677,7 +672,7 @@ onMounted(loadPlanningScope);
           <ul class="resource-list">
             <li class="resource-item">
               <p class="resource-label">What gets loaded</p>
-              <p class="resource-copy">Persisted summary, proposals, diagnostics, and solver statistics from planner-service.</p>
+              <p class="resource-copy">Saved summary, proposals, diagnostics, and solver statistics for the selected run.</p>
             </li>
             <li class="resource-item">
               <p class="resource-label">What does not happen here</p>
@@ -692,8 +687,7 @@ onMounted(loadPlanningScope);
       <p class="eyebrow">Persisted review</p>
       <h3 class="page-title">Reviewing plan run {{ reviewedRun.summary.plan_run_id }}</h3>
       <p class="page-description">
-        This data is reloaded from persisted planner artifacts. Manager approval below only hands back the selected
-        proposal identifiers so `core-service` can recreate the final assignment from persisted planner truth.
+        This view reopens the saved planning result so you can compare proposals, inspect diagnostics, and finalize one assignment.
       </p>
 
       <div class="grid-two">
@@ -753,8 +747,7 @@ onMounted(loadPlanningScope);
           <div>
             <p class="section-caption">Assignment proposals</p>
             <p class="resource-copy">
-              Selected proposal appears first. Only the selected proposal can be approved from this screen, and the
-              browser never sends timing or scoring back as manager-owned state.
+              Selected proposal appears first. Only the selected proposal can be approved from this screen.
             </p>
           </div>
           <div class="pill-row">
@@ -766,8 +759,7 @@ onMounted(loadPlanningScope);
         <div class="resource-item">
           <p class="resource-label">Approval handoff</p>
           <p class="resource-copy">
-            `core-service` re-reads the persisted proposal by `source_plan_run_id`, validates the selected
-            `task + employee` pair, and writes the final approved `Assignment`.
+            Approving a proposal finalizes the selected task and employee pairing from this saved plan run.
           </p>
           <label class="field-group">
             <span class="field-label">Approval notes</span>
@@ -1016,48 +1008,6 @@ onMounted(loadPlanningScope);
       </ul>
     </section>
 
-    <div class="grid-two">
-      <SectionPlaceholder
-        eyebrow="Endpoints"
-        title="Planning APIs"
-        description="Points 7 to 9 now cover launch, persisted review, and manager approval handoff."
-      >
-        <ul class="resource-list">
-          <li v-for="resource in plannerResources" :key="resource.key" class="resource-item">
-            <p class="resource-label">{{ resource.label }}</p>
-            <p class="resource-path">{{ resource.endpoint }}</p>
-            <p class="resource-copy">{{ resource.description }}</p>
-            <p class="resource-copy"><strong>Next:</strong> {{ resource.nextStep }}</p>
-          </li>
-        </ul>
-      </SectionPlaceholder>
-
-      <SectionPlaceholder
-        eyebrow="Request contract"
-        title="CreatePlanRunRequest fields"
-        description="These fields mirror the shared backend contract from `packages/contracts`."
-      >
-        <ul class="resource-list">
-          <li v-for="field in planRunRequestFields" :key="field.title" class="resource-item">
-            <p class="resource-label">{{ field.title }}</p>
-            <p class="resource-copy">{{ field.details }}</p>
-          </li>
-        </ul>
-      </SectionPlaceholder>
-    </div>
-
-    <SectionPlaceholder
-      eyebrow="Workflow"
-      title="Frontend role in planning"
-      description="The client only orchestrates manager/admin actions around persisted backend flow."
-    >
-      <ul class="resource-list">
-        <li v-for="step in planningWorkflow" :key="step.title" class="resource-item">
-          <p class="resource-label">{{ step.title }}</p>
-          <p class="resource-copy">{{ step.details }}</p>
-        </li>
-      </ul>
-    </SectionPlaceholder>
   </div>
 </template>
 

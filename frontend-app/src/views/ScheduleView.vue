@@ -411,11 +411,10 @@ onMounted(load);
         {{
           auth.role.value === "employee"
             ? "Employee schedule visibility is now read-only and stays aligned with backend self-scope rules."
-            : "Managers and admins can manage weekly schedules for any employee through the canonical /schedule route."
+            : "Managers and admins can manage weekly schedules for any employee from one shared workspace."
         }}
       </p>
       <div class="pill-row">
-        <span class="pill">/schedule</span>
         <span class="pill is-warm">{{ auth.role.value ?? "unknown role" }}</span>
       </div>
     </section>

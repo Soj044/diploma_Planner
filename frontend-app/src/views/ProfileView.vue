@@ -34,11 +34,9 @@ const roleBadgeLabel = computed(() => {
       <p class="eyebrow">Profile</p>
       <h3 class="page-title">Current user profile</h3>
       <p class="page-description">
-        This screen stays thin and reads only from the authenticated frontend session payload returned by
-        `core-service`.
+        Review the current account and the employee profile connected to your session.
       </p>
       <div class="pill-row">
-        <span class="pill">/profile</span>
         <span v-if="auth.role.value" class="pill is-warm">{{ roleBadgeLabel }}</span>
       </div>
     </section>

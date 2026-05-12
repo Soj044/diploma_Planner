@@ -9,6 +9,7 @@ import { useRouter } from "vue-router";
 import DialogModal from "../components/DialogModal.vue";
 import TaskRequirementsSection from "../components/tasks/TaskRequirementsSection.vue";
 import { normalizeOptionalNumericInput, type OptionalNumericInput } from "../components/tasks/taskFormNumbers";
+import { priorityPillClass } from "../components/tasks/taskPriority";
 import { useAuth } from "../composables/useAuth";
 import { aiService } from "../services/ai-service";
 import { coreService } from "../services/core-service";
@@ -156,6 +157,8 @@ const currentUnassignedDiagnostic = computed<UnassignedTaskDiagnostic | null>(()
     currentPlanRun.value.unassigned.find((item) => item.task_id === String(currentTask.value?.id)) || null
   );
 });
+
+const visiblePriority = computed(() => currentTask.value?.priority || form.priority);
 
 const canExplainUnassigned = computed(() => {
   return (
@@ -612,15 +615,12 @@ onMounted(loadCreateContext);
       <p class="eyebrow">Task creation</p>
       <h3 class="page-title">Create a planned task and continue into assignment</h3>
       <p class="page-description">
-        This flow keeps task creation in `core-service`, adds task requirements on the same page, and reuses the
-        existing persisted planner boundary for single-task assignment.
+        Save the task, shape its requirements, and move straight into assignment without leaving the workflow.
       </p>
       <div class="pill-row">
-        <span class="pill">/tasks/new</span>
-        <span class="pill">POST /api/v1/tasks/</span>
-        <span class="pill is-warm">
-          {{ currentTask ? `Task #${currentTask.id}` : "Unsaved task" }}
-        </span>
+        <span class="pill">{{ currentTask ? `Task #${currentTask.id}` : "Unsaved task" }}</span>
+        <span class="pill" :class="priorityPillClass(visiblePriority)">Priority {{ visiblePriority }}</span>
+        <span class="pill">{{ form.status }}</span>
       </div>
     </section>
 
@@ -629,8 +629,7 @@ onMounted(loadCreateContext);
         <div>
           <p class="section-caption">Task details</p>
           <p class="resource-copy">
-            Save the task first. The assignment flow is enabled only for a saved task with `status=planned`,
-            `start_date`, and `due_date`.
+            Save the task first. Assignment is enabled only after the task stays planned and both planning dates are filled in.
           </p>
         </div>
       </div>
@@ -692,10 +691,7 @@ onMounted(loadCreateContext);
           </label>
         </div>
 
-        <div class="notice">
-          Save + Assignment is available only when the task is already saved and stays in `planned` status with both
-          planning dates filled in.
-        </div>
+        <div class="notice">Save + Assignment becomes available only for a saved planned task with both planning dates.</div>
 
         <div class="action-row">
           <button class="button-secondary" type="button" :disabled="isSavingTask" @click="handleSaveTask">
@@ -716,17 +712,7 @@ onMounted(loadCreateContext);
       </form>
     </section>
 
-    <section v-if="currentTask" class="page-card">
-      <div class="editor-header">
-        <div>
-          <p class="section-caption">Task requirements</p>
-          <p class="resource-copy">Requirements attach to the saved task on the same route before assignment.</p>
-        </div>
-        <span class="pill">Task #{{ currentTask.id }}</span>
-      </div>
-
-      <TaskRequirementsSection :selected-task-id="currentTask.id" :reload-token="requirementReloadToken" />
-    </section>
+    <TaskRequirementsSection v-if="currentTask" :selected-task-id="currentTask.id" :reload-token="requirementReloadToken" />
 
     <DialogModal
       :open="isAssignmentModalOpen"
@@ -844,8 +830,7 @@ onMounted(loadCreateContext);
           <p v-else-if="suggestionAiState.isLoading" class="resource-copy">Loading AI explanation...</p>
 
           <div class="notice">
-            Approval still goes through the persisted planner review handoff in `core-service`. The browser does not
-            create final assignments directly from planner data.
+            Final approval still happens through the saved planning review flow. This screen does not write final assignments directly from planner output.
           </div>
         </section>
       </div>

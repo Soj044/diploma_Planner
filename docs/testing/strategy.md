@@ -158,6 +158,9 @@ docker compose up --build
 - Verify `/tasks/new` is reachable only for `manager` and `admin`.
 - On `/admin`, verify the reference-data workspace still loads, preserves role-aware CRUD gating, and exposes the admin-only users/roles workspace.
 - On `/departments`, verify the directory renders nested employee summaries and does not require employee email from `GET /api/v1/departments/`.
+- As `admin` and `manager`, verify employee names on `/departments` open read-only colleague profiles at `/employees/:id`.
+- As `employee`, verify names on `/departments` remain plain text and direct `/employees/:id` access is blocked by route role guards.
+- On `/employees/:id`, verify the screen renders employee department, position, employment type, weekly capacity, timezone, hire date, active flag, and skills with levels.
 - As employee, verify `/tasks` is assignment-first and shows deadline from `assignment.end_date`, plus title/description/department/status from joined task data.
 - As employee, verify `/schedule` is read-only and exposes no create/edit/delete controls.
 - As employee, verify `/leaves` shows all leave records, opens a create form without a writable `status` field, and exposes edit/delete only while status is `requested`.
@@ -168,10 +171,14 @@ docker compose up --build
 - As manager/admin, verify `/leaves` shows only requested records, resolves employee names/positions from `GET /api/v1/employees/`, and never exposes date/type/comment editing controls.
 - As manager/admin, verify `/leaves` `Approve` and `Reject` both call the status-only action and remove the decided record from the queue after reload.
 - On `/tasks`, verify `admin` sees all tasks, while `manager` sees creator-scoped tasks in v1.
+- On `/tasks`, verify the workspace is list-first: no permanent split edit pane, task cards are visually prominent, and `Edit` opens in a modal.
+- On `/tasks`, verify `Task board` shows selected-task emphasis and the requirements area stays scoped to the focused task.
 - On `/tasks/new`, verify task create uses the authenticated user from `/auth/me` and no longer requires reading `/users/`.
 - On `/tasks/new`, verify `Save task` persists the task without planner launch.
 - On `/tasks/new`, verify `Save + Assignment` requires `status=planned`, `start_date`, and `due_date`.
 - On `/tasks/new` and manager task edit forms, verify `estimated_hours` input is removed from manager UX and payloads keep `estimated_hours = null` unless introduced by legacy clients.
+- On `/tasks`, `/tasks/new`, and `/planning`, verify task priority pills use the shared color map: `low=blue`, `medium=yellow`, `high=orange`, `critical=red`.
+- On `/tasks`, `/tasks/new`, `/planning`, `/departments`, `/profile`, `/assignments`, `/schedule`, `/leaves`, and `/`, verify developer-facing contract/API hint blocks are no longer shown.
 - On manager task edit forms, verify `actual_hours` input appears only for `status=done`, and submit is blocked client-side when done has empty actual hours.
 - On `/schedule`, verify weekday rule save is blocked client-side when `end_time <= start_time`.
 - On `/schedule`, verify weekday rule save is blocked client-side when `capacity_hours` exceeds the selected time window duration.

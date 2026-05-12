@@ -133,6 +133,15 @@ export interface Employee {
   updated_at: string;
 }
 
+export interface EmployeeSkill {
+  id: number;
+  employee: number;
+  skill: number;
+  level: number;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface WorkScheduleInput {
   employee: number;
   name: string;

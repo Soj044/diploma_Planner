@@ -331,8 +331,7 @@ onMounted(async () => {
       <p class="eyebrow">Employee self-service</p>
       <h3 class="page-title">Own work schedules and weekdays</h3>
       <p class="page-description">
-        This screen writes only through `core-service`. Employee scope is anchored to `me.employee_id`, and backend
-        keeps the final self-scope validation.
+        Manage your own work schedule templates and weekday rules from one place.
       </p>
     </section>
 
@@ -349,7 +348,7 @@ onMounted(async () => {
                 <p class="section-caption">
                   {{ editingScheduleId === null ? "Create work schedule" : "Edit work schedule" }}
                 </p>
-                <p class="resource-path">/work-schedules/</p>
+                <p class="resource-copy">Create a reusable schedule and then add weekday rules for it below.</p>
               </div>
               <div class="inline-actions">
                 <button class="button-secondary" type="button" :disabled="isLoading" @click="load">Refresh</button>
@@ -435,7 +434,7 @@ onMounted(async () => {
                 <p class="section-caption">
                   {{ editingDayId === null ? "Create schedule day" : "Edit schedule day" }}
                 </p>
-                <p class="resource-path">/work-schedule-days/</p>
+                <p class="resource-copy">Add the weekday hours that belong to the schedule currently in focus.</p>
               </div>
               <div class="inline-actions">
                 <button

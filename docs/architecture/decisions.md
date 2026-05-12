@@ -603,3 +603,6 @@ MVP had two gaps:
 - Manager UX no longer asks for manual `estimated_hours` during task create/edit; planner estimation is now the default, while backend compatibility for nullable `Task.estimated_hours` remains intact.
 - Weekday-rule validation now enforces `end_time > start_time` and `capacity_hours <= (end_time - start_time)` when a time window is provided.
 - `/tasks` visibility for `admin` now includes all tasks (manager scope remains creator-based in v1).
+- Frontend operational routes no longer show contract/API hint blocks; those remain in docs and reference-data tooling instead of user-facing task/planning screens.
+- `Departments` now drills into a separate read-only colleague profile route (`/employees/:id`) for `admin|manager`, using existing employee and employee-skill APIs without adding new backend contracts.
+- `/tasks` now uses a list-first board with modal editing and shared priority-pill styling so task selection and requirement focus stay visible without a persistent split editor.

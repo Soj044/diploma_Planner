@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from "vue";
 
+import DialogModal from "../DialogModal.vue";
 import SectionPlaceholder from "../SectionPlaceholder.vue";
 import { useAuth } from "../../composables/useAuth";
 import { coreService } from "../../services/core-service";
@@ -28,6 +29,7 @@ const isLoading = ref(false);
 const isSaving = ref(false);
 const deletingId = ref<number | null>(null);
 const editingId = ref<number | null>(null);
+const isModalOpen = ref(false);
 const errorMessage = ref("");
 const successMessage = ref("");
 
@@ -42,24 +44,18 @@ const canManageRequirements = computed(() => {
   return auth.role.value === "admin" || auth.role.value === "manager";
 });
 
-const activeTaskId = computed(() => {
-  if (props.selectedTaskId !== null) {
-    return props.selectedTaskId;
-  }
+const activeTaskId = computed(() => props.selectedTaskId);
 
-  return form.task ? Number(form.task) : null;
+const activeTask = computed(() => {
+  return tasks.value.find((task) => task.id === activeTaskId.value) || null;
 });
 
 const requirementCountForActiveTask = computed(() => {
   if (activeTaskId.value === null) {
-    return requirements.value.length;
+    return 0;
   }
 
   return requirements.value.filter((requirement) => requirement.task === activeTaskId.value).length;
-});
-
-const taskNameById = computed(() => {
-  return new Map(tasks.value.map((task) => [task.id, task.title]));
 });
 
 const skillNameById = computed(() => {
@@ -68,7 +64,7 @@ const skillNameById = computed(() => {
 
 const filteredRequirements = computed(() => {
   if (activeTaskId.value === null) {
-    return requirements.value;
+    return [];
   }
 
   return requirements.value.filter((requirement) => requirement.task === activeTaskId.value);
@@ -90,24 +86,36 @@ const availableSkills = computed(() => {
   return skills.value.filter((skill) => !reservedSkills.has(skill.id));
 });
 
-function syncSelectedTask() {
-  if (props.selectedTaskId !== null) {
-    form.task = String(props.selectedTaskId);
-    return;
-  }
+const modalTitle = computed(() => {
+  return editingId.value === null ? "Add requirement" : "Edit requirement";
+});
 
-  if (!form.task && tasks.value.length > 0) {
-    form.task = String(tasks.value[0].id);
-  }
+function syncSelectedTask() {
+  form.task = props.selectedTaskId === null ? "" : String(props.selectedTaskId);
+}
+
+function closeModal() {
+  isModalOpen.value = false;
+  editingId.value = null;
 }
 
 function resetForm() {
   editingId.value = null;
-  form.task = props.selectedTaskId === null ? "" : String(props.selectedTaskId);
   form.skill = "";
   form.min_level = 1;
   form.weight = "1.00";
   syncSelectedTask();
+}
+
+function openCreateModal() {
+  if (!canManageRequirements.value || activeTaskId.value === null) {
+    return;
+  }
+
+  resetForm();
+  errorMessage.value = "";
+  successMessage.value = "";
+  isModalOpen.value = true;
 }
 
 function startEditing(requirement: TaskRequirement) {
@@ -122,6 +130,7 @@ function startEditing(requirement: TaskRequirement) {
   form.weight = requirement.weight;
   errorMessage.value = "";
   successMessage.value = "";
+  isModalOpen.value = true;
 }
 
 async function load() {
@@ -140,6 +149,7 @@ async function load() {
     syncSelectedTask();
 
     if (editingId.value !== null && !requirements.value.some((requirement) => requirement.id === editingId.value)) {
+      closeModal();
       resetForm();
     }
   } catch (error: unknown) {
@@ -174,6 +184,7 @@ async function save() {
       : coreService.updateTaskRequirement(editingId.value, payload));
 
     successMessage.value = editingId.value === null ? "Task requirement created." : "Task requirement updated.";
+    closeModal();
     resetForm();
     await load();
   } catch (error: unknown) {
@@ -196,6 +207,7 @@ async function remove(id: number) {
     await coreService.deleteTaskRequirement(id);
     successMessage.value = "Task requirement deleted.";
     if (editingId.value === id) {
+      closeModal();
       resetForm();
     }
     await load();
@@ -229,41 +241,82 @@ onMounted(async () => {
 <template>
   <SectionPlaceholder
     eyebrow="Task Requirements"
-    title="Skill requirements attach directly to one task"
-    description="This editor stays explicit: a requirement is just one `task + skill + min_level + weight` record in core-service. Employees can review but not mutate these records."
+    title="Skill requirements"
+    description="Select a task to review the skill expectations that planner will use for matching and scoring."
   >
-    <div class="data-layout" :class="{ 'data-layout-single': !canManageRequirements }">
-      <form v-if="canManageRequirements" class="editor-card" @submit.prevent="save">
-        <div class="editor-header">
-          <div>
-            <p class="section-caption">{{ editingId === null ? "Create task requirement" : "Edit task requirement" }}</p>
-            <p class="resource-path">/task-requirements/</p>
-          </div>
-          <div class="inline-actions">
-            <button class="button-secondary" type="button" :disabled="isLoading" @click="load">Refresh</button>
+    <div class="editor-header">
+      <div>
+        <p class="section-caption">
+          {{ activeTask ? `Requirements for ${activeTask.title}` : "Requirements focus" }}
+        </p>
+        <p class="resource-copy">
+          {{
+            activeTask
+              ? "This list is scoped to the task currently focused in the task board."
+              : "Choose a task in the board above to open its requirement set."
+          }}
+        </p>
+      </div>
+      <div class="inline-actions">
+        <span class="pill">{{ requirementCountForActiveTask }} requirements</span>
+        <button
+          v-if="canManageRequirements"
+          class="button-primary"
+          type="button"
+          :disabled="activeTaskId === null || skills.length === 0"
+          @click="openCreateModal"
+        >
+          Add requirement
+        </button>
+        <button class="button-secondary" type="button" :disabled="isLoading" @click="load">Refresh</button>
+      </div>
+    </div>
+
+    <p v-if="errorMessage" class="status-banner is-error">{{ errorMessage }}</p>
+    <p v-if="successMessage" class="status-banner is-success">{{ successMessage }}</p>
+
+    <div v-if="activeTaskId === null" class="notice">
+      Focus a task in the board first. Requirement editing stays intentionally scoped to one task at a time.
+    </div>
+    <p v-else-if="isLoading" class="resource-copy">Loading requirements and skills...</p>
+    <div v-else-if="skills.length === 0" class="notice">
+      Create at least one skill in Admin before adding requirements to this task.
+    </div>
+    <p v-else-if="filteredRequirements.length === 0" class="empty-state">No requirements have been added to this task yet.</p>
+    <ul v-else class="resource-list">
+      <li v-for="requirement in filteredRequirements" :key="requirement.id" class="resource-item">
+        <div class="resource-heading">
+          <p class="resource-label">{{ skillNameById.get(requirement.skill) || `Skill #${requirement.skill}` }}</p>
+          <div v-if="canManageRequirements" class="inline-actions">
+            <button class="button-secondary" type="button" @click="startEditing(requirement)">Edit</button>
             <button
-              v-if="editingId !== null"
-              class="button-secondary"
+              class="button-danger"
               type="button"
-              :disabled="isSaving"
-              @click="resetForm"
+              :disabled="deletingId === requirement.id"
+              @click="remove(requirement.id)"
             >
-              Cancel edit
+              {{ deletingId === requirement.id ? "Deleting..." : "Delete" }}
             </button>
           </div>
         </div>
-
-        <div v-if="tasks.length === 0" class="notice">
-          Create a task first. Requirements only make sense after a task exists.
+        <div class="pill-row">
+          <span class="pill">Level {{ requirement.min_level }}</span>
+          <span class="pill">Weight {{ requirement.weight }}</span>
         </div>
-        <div v-else-if="skills.length === 0" class="notice">
-          Create at least one skill in Reference Data before adding a task requirement.
-        </div>
+      </li>
+    </ul>
 
+    <DialogModal
+      :open="isModalOpen"
+      :title="modalTitle"
+      description="Requirement edits stay attached to the focused task and remain read-only for employees."
+      @close="closeModal"
+    >
+      <form class="page-stack" @submit.prevent="save">
         <div class="form-grid">
           <label class="field-group field-group-span-2">
             <span class="field-label">Task</span>
-            <select v-model="form.task" class="select-input" required>
+            <select v-model="form.task" class="select-input" :disabled="activeTaskId !== null" required>
               <option value="">Select task</option>
               <option v-for="task in tasks" :key="task.id" :value="String(task.id)">{{ task.title }}</option>
             </select>
@@ -298,65 +351,14 @@ onMounted(async () => {
             <input v-model.trim="form.weight" class="text-input" inputmode="decimal" required />
           </label>
         </div>
-
-        <div class="action-row">
-          <button
-            class="button-primary"
-            type="submit"
-            :disabled="isSaving || tasks.length === 0 || skills.length === 0"
-          >
-            {{ isSaving ? "Saving..." : editingId === null ? "Create requirement" : "Save requirement" }}
-          </button>
-        </div>
-
-        <p v-if="errorMessage" class="status-banner is-error">{{ errorMessage }}</p>
-        <p v-if="successMessage" class="status-banner is-success">{{ successMessage }}</p>
       </form>
 
-      <div class="records-card">
-        <div class="editor-header">
-          <div>
-            <p class="section-caption">
-              {{ activeTaskId === null ? "All task requirements" : `Requirements for ${taskNameById.get(activeTaskId)}` }}
-            </p>
-            <p class="resource-copy">
-              {{ activeTaskId === null ? "Select a task in the task list to focus this section." : "List is automatically filtered by the selected task." }}
-            </p>
-          </div>
-          <span class="pill">{{ requirementCountForActiveTask }} rows</span>
-        </div>
-
-        <div v-if="!canManageRequirements" class="notice">
-          Employee access is read-only here. Requirement editing remains a manager/admin responsibility.
-        </div>
-
-        <p v-if="isLoading" class="resource-copy">Loading...</p>
-        <p v-else-if="filteredRequirements.length === 0" class="empty-state">No requirements yet.</p>
-        <ul v-else class="resource-list">
-          <li v-for="requirement in filteredRequirements" :key="requirement.id" class="resource-item">
-            <div class="resource-heading">
-              <p class="resource-label">{{ skillNameById.get(requirement.skill) || `Skill #${requirement.skill}` }}</p>
-              <div v-if="canManageRequirements" class="inline-actions">
-                <button class="button-secondary" type="button" @click="startEditing(requirement)">Edit</button>
-                <button
-                  class="button-danger"
-                  type="button"
-                  :disabled="deletingId === requirement.id"
-                  @click="remove(requirement.id)"
-                >
-                  {{ deletingId === requirement.id ? "Deleting..." : "Delete" }}
-                </button>
-              </div>
-            </div>
-            <p class="resource-copy">
-              Task: {{ taskNameById.get(requirement.task) || `Task #${requirement.task}` }}
-              · Minimum level: {{ requirement.min_level }}
-              · Weight: {{ requirement.weight }}
-            </p>
-            <p class="item-meta">Requirement ID {{ requirement.id }}</p>
-          </li>
-        </ul>
-      </div>
-    </div>
+      <template #actions>
+        <button class="button-secondary" type="button" :disabled="isSaving" @click="closeModal">Cancel</button>
+        <button class="button-primary" type="button" :disabled="isSaving" @click="save">
+          {{ isSaving ? "Saving..." : editingId === null ? "Create requirement" : "Save requirement" }}
+        </button>
+      </template>
+    </DialogModal>
   </SectionPlaceholder>
 </template>

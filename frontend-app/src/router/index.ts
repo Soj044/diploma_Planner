@@ -5,6 +5,7 @@ import { bootstrapAuth, hasRole, isAuthenticated } from "../services/auth-servic
 import AdminView from "../views/AdminView.vue";
 import AssignmentsView from "../views/AssignmentsView.vue";
 import DepartmentsView from "../views/DepartmentsView.vue";
+import EmployeeProfileView from "../views/EmployeeProfileView.vue";
 import LeavesView from "../views/LeavesView.vue";
 import LoginView from "../views/LoginView.vue";
 import NotFoundView from "../views/NotFoundView.vue";
@@ -91,6 +92,16 @@ const routes = [
         meta: {
           title: "Departments",
           requiresAuth: true,
+        },
+      },
+      {
+        path: "employees/:id",
+        name: "employee-profile",
+        component: EmployeeProfileView,
+        meta: {
+          title: "Employee Profile",
+          requiresAuth: true,
+          allowedRoles: ["admin", "manager"],
         },
       },
       {

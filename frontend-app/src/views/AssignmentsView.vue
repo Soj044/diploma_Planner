@@ -1,9 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from "vue";
 
-import SectionPlaceholder from "../components/SectionPlaceholder.vue";
 import { useAuth } from "../composables/useAuth";
-import { assignmentResources, coreService } from "../services/core-service";
+import { coreService } from "../services/core-service";
 import { describeRequestError } from "../services/http";
 import type { Assignment, Employee, Task } from "../types/api";
 
@@ -114,14 +113,12 @@ onMounted(loadAssignmentsView);
 <template>
   <div class="page-stack">
     <section class="page-card">
-      <p class="eyebrow">Core-service</p>
+      <p class="eyebrow">Assignments</p>
       <h3 class="page-title">Read-only final assignments</h3>
       <p class="page-description">
-        This screen reads the final approved `Assignment` records directly from `core-service`. Planner artifacts remain
-        review data only, while final business truth stays in the core database.
+        Review the assignments that were finally approved and filter them locally without changing the underlying records.
       </p>
       <div class="pill-row">
-        <span class="pill">GET /api/v1/assignments/</span>
         <span class="pill is-warm">{{ auth.user.value ? auth.user.value.role : "No auth context" }}</span>
         <span class="pill">{{ filteredAssignments.length }} visible assignments</span>
       </div>
@@ -134,8 +131,7 @@ onMounted(loadAssignmentsView);
             <div>
               <p class="section-caption">Assignment filters</p>
               <p class="resource-copy">
-                Filters are local-only UX helpers. They do not create frontend-owned business state and do not replace
-                backend truth.
+                Filters help narrow the list in the browser and do not change the stored assignments.
               </p>
             </div>
             <div class="inline-actions">
@@ -199,8 +195,7 @@ onMounted(loadAssignmentsView);
           </ul>
 
           <div class="notice">
-            Dates and planned hours shown here already came from `core-service` persistence. The frontend does not
-            recompute or “fix” them.
+            Dates and planned hours shown here come from the saved assignment record. This screen does not recalculate them.
           </div>
         </div>
       </div>
@@ -211,8 +206,7 @@ onMounted(loadAssignmentsView);
         <div>
           <p class="section-caption">Assignments</p>
           <p class="resource-copy">
-            Use this route to audit what was finally approved, regardless of whether the assignment originally came from
-            planner-service or another backend flow.
+            Use this route to audit what was finally approved, whether it came from a planning run or a manual fallback.
           </p>
         </div>
         <span class="pill">{{ filteredAssignments.length }} records</span>
@@ -243,7 +237,7 @@ onMounted(loadAssignmentsView);
           </p>
           <p class="resource-copy">
             Source plan run:
-            {{ assignment.source_plan_run_id || "Not linked to planner-service" }}
+            {{ assignment.source_plan_run_id || "Not linked to a planning run" }}
           </p>
           <p class="resource-copy">
             Assigned by: {{ assignment.assigned_by_type }}
@@ -261,19 +255,5 @@ onMounted(loadAssignmentsView);
       </ul>
     </section>
 
-    <SectionPlaceholder
-      eyebrow="Endpoints"
-      title="Assignment APIs"
-      description="Point 10 now covers the manager/admin read-only visibility layer for final assignments."
-    >
-      <ul class="resource-list">
-        <li v-for="resource in assignmentResources" :key="resource.key" class="resource-item">
-          <p class="resource-label">{{ resource.label }}</p>
-          <p class="resource-path">{{ resource.endpoint }}</p>
-          <p class="resource-copy">{{ resource.description }}</p>
-          <p class="resource-copy"><strong>Next:</strong> {{ resource.nextStep }}</p>
-        </li>
-      </ul>
-    </SectionPlaceholder>
   </div>
 </template>
