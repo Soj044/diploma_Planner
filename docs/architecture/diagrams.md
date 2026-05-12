@@ -30,7 +30,9 @@ ai-layer -> planner-service: GET /api/v1/internal/ai/plan-runs/{plan_run_id}/una
 ai-layer -> ollama: /api/embed for feed vectors and retrieval query vectors
 ai-layer -> ollama: /api/chat stream=false + JSON schema for structured explanations (default local chat model: llama3.2:3b)
 planner-service (CP-SAT): eligibility with cumulative availability hours in the task window -> scoring -> optimization -> persisted candidate_analysis
+planner-service: build task_effort_map once (manual/history/blended/rules) and reuse effective_hours in eligibility + optimizer + diagnostics
 planner-service -> planner artifact store: save run + snapshot + proposals + diagnostics
+planner-service -> planner artifact store: save artifacts.time_estimates + expose source/effective hours for manager review
 planner-service -> frontend-app: assignment proposals + diagnostics
 frontend-app -> planner-service: GET /api/v1/plan-runs/{id}
 frontend-app -> core-service: POST /api/v1/assignments/approve-proposal/
@@ -41,6 +43,7 @@ ai-layer -> postgres: bootstrap vector extension + ai_layer schema for derived A
 ai-layer -> postgres: create index_items + sync_state + explanation_logs + HNSW cosine index
 ai-layer -> postgres: upsert/delete assignment_case and unassigned_case rows during full/incremental sync
 core-service -> core database: store final assignments, sync task status, and persist leave status changes
+core-service -> core database: enforce task completion invariants (`done` requires positive `actual_hours`, non-`done` requires null) and sync final assignment status on task lifecycle transitions
 ```
 
 ## Approval Handoff
@@ -62,6 +65,8 @@ core-service -> core database: create approved Assignment + AssignmentChangeLog
 
 manager/admin -> core-service: POST /api/v1/assignments/{id}/reject/
 core-service -> core database: mark Assignment rejected + write AssignmentChangeLog + reopen task.status to planned
+manager/admin -> core-service: PATCH /api/v1/tasks/{id}/ status=in_progress|done + actual_hours (via existing task form)
+core-service: sync final assignment approved->active on task in_progress, and approved|active->completed on task done
 ```
 
 ## Runtime Diagram (Docker)
@@ -239,6 +244,7 @@ planner-service:
   PlanRun, PlanInputSnapshot, CandidateEligibility,
   CandidateScore, AssignmentProposal, UnassignedTask,
   ConstraintViolation, SolverStatistics
+  + PlanRunArtifacts.time_estimates (source/effective_hours/manual_hours/rules/historical metadata)
 
 MVP runtime storage:
   SQLite-backed planner artifact repository

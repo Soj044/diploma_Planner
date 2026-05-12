@@ -554,3 +554,37 @@ The first AI-assisted `/tasks/new` smoke uncovered a planner mismatch for date-b
 - Плюсы: multi-day date-based tasks can now match employees with normal daily schedules, which aligns planner behavior with the browser UX and expected manager mental model.
 - Плюсы: no new core-service contracts or snapshot fields are required.
 - Минусы: cumulative availability is still an MVP approximation and does not by itself guarantee an optimal intra-day schedule; deeper time-slicing remains a future planner enhancement.
+
+## ADR-022: Two-Phase Task Completion Truth and Planner-Side Effort Estimation
+
+- Date: 2026-05-12
+- Status: accepted
+
+### Context
+MVP had two gaps:
+- `Task.estimated_hours` was mandatory, so planner could not run without manual effort input.
+- `Task.actual_hours` existed, but completion lifecycle did not enforce backend truth or synchronize final assignment status.
+
+### Decision
+- Keep `actual_hours` only on `Task` in v1 and treat it as business truth after completion.
+- Keep manager/admin completion inside existing task update flow (`TaskViewSet update/partial_update`), but move lifecycle invariants into explicit service-layer logic.
+- Make `Task.estimated_hours` nullable and let planner fill effort only when manual estimate is missing.
+- Enforce task lifecycle invariants:
+  - `task.status == done` requires `actual_hours > 0`
+  - `task.status != done` requires `actual_hours == null`
+  - `done` is terminal in v1
+  - `in_progress` requires final assignment in `approved|active`
+  - `done` requires final assignment in `approved|active|completed`
+  - `approved -> active` auto-sync on `task.status -> in_progress`
+  - `approved|active -> completed` auto-sync on `task.status -> done`
+- Extend `PlanningSnapshot` with bounded `historical_tasks` (completed tasks with non-null `actual_hours`, up to 200 rows, department-scoped when requested).
+- Add planner-side time estimation module and persisted `PlanRunArtifacts.time_estimates` with source transparency:
+  - `manual | history | blended | rules`
+- Reuse one `effective_hours` value everywhere in planner pipeline (eligibility, optimizer planned hours, diagnostics/candidate analysis, persisted artifacts).
+
+### Consequences
+- Плюсы: completion truth becomes consistent and auditable in `core-service`; manager flow stays minimal.
+- Плюсы: planner launch no longer blocks on manual `estimated_hours`; manager sees whether effort came from manual input or planner estimation.
+- Плюсы: approval flow remains intact, with assignment/task lifecycle synchronized by backend.
+- Минусы: history/rules estimation in v1 is heuristic and may need recalibration as data grows.
+- Минусы: planner persistence and internal AI contexts now carry additional artifact fields, increasing compatibility test surface.

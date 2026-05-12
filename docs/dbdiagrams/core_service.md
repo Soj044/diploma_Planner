@@ -236,7 +236,7 @@ Table tasks {
   description text
   status task_status [not null, default: 'draft']
   priority priority_level [not null, default: 'medium']
-  estimated_hours int [not null]
+  estimated_hours int [note: 'Опциональная ручная оценка; если null, planner рассчитывает estimate сам']
   actual_hours int [note: 'Заполняется после завершения задачи']
   start_date date
   due_date date [not null]
@@ -246,8 +246,12 @@ Table tasks {
 
   Note: '''
   Основная сущность задачи.
-  estimated_hours — плановая оценка,
-  actual_hours — фактическое время после выполнения.
+  estimated_hours — ручная плановая оценка (nullable в MVP v1),
+  actual_hours — фактическое время после выполнения (business truth для done).
+  Инварианты lifecycle:
+  - status=done => actual_hours > 0
+  - status!=done => actual_hours is null
+  - done считается terminal в v1
   '''
   
   Indexes {
