@@ -552,3 +552,72 @@ def test_time_estimation_does_not_cap_manual_estimate() -> None:
 
     assert effort.source == "manual"
     assert effort.effective_hours == 12
+
+
+def test_time_estimation_discounts_secondary_requirements_in_rules_baseline() -> None:
+    task = TaskSnapshot(
+        task_id="t-rules-discount",
+        department_id="dep-1",
+        title="Rules discount task",
+        priority="medium",
+        starts_at=datetime(2026, 3, 23, 9, 0, tzinfo=timezone.utc),
+        ends_at=datetime(2026, 3, 25, 17, 0, tzinfo=timezone.utc),
+        requirements=[
+            SkillRequirement(skill_id="skill-a", min_level=4, weight=1.0),
+            SkillRequirement(skill_id="skill-b", min_level=4, weight=1.0),
+            SkillRequirement(skill_id="skill-c", min_level=4, weight=1.0),
+        ],
+    )
+
+    effort = build_task_effort_map([task], [])["t-rules-discount"]
+
+    assert effort.source == "rules"
+    assert effort.rules_baseline_hours == 15
+    assert effort.effective_hours == 15
+
+
+def test_time_estimation_requires_shared_skill_for_pure_history_source() -> None:
+    task = TaskSnapshot(
+        task_id="t-history-needs-skill",
+        department_id="dep-1",
+        title="History strict skill task",
+        priority="medium",
+        starts_at=datetime(2026, 3, 23, 9, 0, tzinfo=timezone.utc),
+        ends_at=datetime(2026, 3, 23, 17, 0, tzinfo=timezone.utc),
+        requirements=[SkillRequirement(skill_id="skill-a", min_level=2)],
+    )
+    history = [
+        HistoricalTaskSummary(
+            task_id="h1",
+            department_id="dep-1",
+            priority="medium",
+            estimated_hours=8,
+            actual_hours=20,
+            requirements=[SkillRequirement(skill_id="skill-x", min_level=2)],
+            due_date=datetime(2026, 3, 20, 0, 0, tzinfo=timezone.utc).date(),
+        ),
+        HistoricalTaskSummary(
+            task_id="h2",
+            department_id="dep-1",
+            priority="medium",
+            estimated_hours=8,
+            actual_hours=22,
+            requirements=[SkillRequirement(skill_id="skill-y", min_level=2)],
+            due_date=datetime(2026, 3, 19, 0, 0, tzinfo=timezone.utc).date(),
+        ),
+        HistoricalTaskSummary(
+            task_id="h3",
+            department_id="dep-1",
+            priority="medium",
+            estimated_hours=8,
+            actual_hours=24,
+            requirements=[SkillRequirement(skill_id="skill-z", min_level=2)],
+            due_date=datetime(2026, 3, 18, 0, 0, tzinfo=timezone.utc).date(),
+        ),
+    ]
+
+    effort = build_task_effort_map([task], history)["t-history-needs-skill"]
+
+    assert effort.source == "blended"
+    assert effort.historical_median_hours == pytest.approx(22.0)
+    assert effort.historical_sample_size == 3

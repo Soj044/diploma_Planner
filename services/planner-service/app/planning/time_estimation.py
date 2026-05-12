@@ -53,6 +53,11 @@ def _estimate_task_effort(
 
     rules_baseline_hours = _rules_baseline_hours(task)
     top_matches = _top_history_matches(task=task, historical_tasks=historical_tasks)
+    skill_matches = [
+        history_task
+        for history_task in top_matches
+        if _shared_required_skill_ids(task=task, history_task=history_task)
+    ]
     historical_sample_size = len(top_matches)
     historical_median_hours = (
         float(median(match.actual_hours for match in top_matches))
@@ -71,14 +76,15 @@ def _estimate_task_effort(
             historical_sample_size=historical_sample_size,
         )
 
-    if historical_sample_size >= 3 and historical_median_hours is not None:
-        raw_effective_hours = max(1, _round_half_up(historical_median_hours))
+    if len(skill_matches) >= 3:
+        historical_skill_median_hours = float(median(match.actual_hours for match in skill_matches))
+        raw_effective_hours = max(1, _round_half_up(historical_skill_median_hours))
         return TaskTimeEstimate(
             source="history",
             effective_hours=_cap_auto_estimate(task=task, raw_effective_hours=raw_effective_hours),
             manual_hours=None,
             rules_baseline_hours=rules_baseline_hours,
-            historical_median_hours=historical_median_hours,
+            historical_median_hours=historical_skill_median_hours,
             historical_sample_size=historical_sample_size,
         )
 
@@ -110,9 +116,10 @@ def _rules_baseline_hours(task: TaskSnapshot) -> int:
     """Build the deterministic rules-only baseline for one task."""
 
     if task.requirements:
-        baseline_before_priority = ceil(
-            sum(requirement.min_level * requirement.weight for requirement in task.requirements) * 2
-        )
+        contributions = [requirement.min_level * requirement.weight for requirement in task.requirements]
+        primary_contribution = max(contributions)
+        secondary_contribution = sum(contributions) - primary_contribution
+        baseline_before_priority = ceil((primary_contribution + secondary_contribution * 0.4) * 2)
     else:
         baseline_before_priority = 8
 

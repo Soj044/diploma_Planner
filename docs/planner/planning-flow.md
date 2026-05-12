@@ -20,6 +20,8 @@
 - Planner-service fetches `PlanningSnapshot` from `core-service` truth before running eligibility, scoring, and optimization.
 - Snapshot now includes bounded `historical_tasks` (completed tasks with non-null `actual_hours`) for planner-side effort estimation.
 - Planner builds one `task_effort_map` (`manual|history|blended|rules`) before eligibility and reuses the same `effective_hours` across eligibility, optimization, proposals, and diagnostics.
+- Rules baseline now discounts secondary requirements (`primary + 40% of secondary`) before priority multiplier, so new tasks are less likely to inflate to weekly-cap values.
+- Pure `history` source now requires at least three top matches with shared required skills; department-only similarity can still influence `blended`, but no longer promotes to pure history by itself.
 - For non-manual estimates only, planner caps `effective_hours` by the inclusive weekday task window using a generic `8h` per weekday upper bound so task dates meaningfully constrain auto-estimation.
 - A full `PlanningSnapshot` payload remains acceptable only for internal planning tests and low-level pipeline checks.
 - The stable service boundary is `CreatePlanRunRequest` plus a snapshot built from `core-service` truth.
