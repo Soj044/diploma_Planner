@@ -11,7 +11,7 @@
 - planning constraints
 - planner artifact persistence and retrieval
 - final assignment flows (planner approval, manual assignment, rejection)
-- ai-layer runtime/bootstrap, retrieval sync, structured explanations, and shared pgvector foundation
+- ai-layer runtime/bootstrap, retrieval sync, hybrid structured explanations, and shared pgvector foundation
 - shared contracts validation for planning windows and proposal dates
 
 ## Basic checks
@@ -23,7 +23,7 @@
 - core-service approval flow: persisted planner proposal lookup, manual final assignment creation, assignment rejection, idempotent replay for the same `task + employee + source_plan_run_id`, rejection of missing or non-selected proposals, rejection of second non-rejected final assignment for one task, manual assignment defaults (`start_date=task.start_date`, `end_date=task.due_date`, `source_plan_run_id=null`), upstream planner failure handling, and internal-token reread of planner-service after planner auth gate
 - planner-service: unit and integration tests for planning pipeline, `CreatePlanRunRequest` boundary, snapshot client failure handling, SQLite persistence of run/snapshot/proposals/unassigned/solver stats, persisted run retrieval for manager review, overlap conflict diagnostics, and weighted score stability
 - planner-service auth gate: Bearer header validation, deny employee role, allow manager/admin role, and controlled `503` when core introspection is unavailable
-- ai-layer: containerized startup, `/health` probe, authenticated `/api/v1/capabilities`, authenticated explanation routes, PostgreSQL connectivity bootstrap, `CREATE EXTENSION vector`, isolated `ai_layer` schema creation without touching core/planner truth tables, repository creation of `index_items`/`sync_state`/`explanation_logs`, HNSW cosine index creation, full/incremental sync, delete-path handling, stale-index fallback, and structured Ollama output validation
+- ai-layer: containerized startup, `/health` probe, authenticated `/api/v1/capabilities`, authenticated explanation routes, PostgreSQL connectivity bootstrap, `CREATE EXTENSION vector`, isolated `ai_layer` schema creation without touching core/planner truth tables, repository creation of `index_items`/`sync_state`/`explanation_logs`, HNSW cosine index creation, full/incremental sync, delete-path handling, stale-index fallback, structured Ollama output validation, and deterministic comparison-reason enrichment when the LLM stays generic
 - internal AI helper routes:
   - `core-service`: `service-boundary`, `index-feed`, `assignment-context`
   - `planner-service`: `service-boundary`, `index-feed`, `proposal-context`, `unassigned-context`
@@ -117,8 +117,11 @@ docker compose up --build
 - Verify `ai-layer` explanation routes return `503` with `AI retrieval index is not ready.` until the retrieval index is populated.
 - Run `poetry run python -m app.cli.reindex --mode full` in `services/ai-layer`, then verify explanation routes can return `200`.
 - Verify `GET /api/v1/internal/ai/service-boundary/`, `GET /api/v1/internal/ai/index-feed/`, and `GET /api/v1/internal/ai/tasks/{task_id}/assignment-context/` in `core-service` reject missing internal token and accept the shared token.
+- Verify `assignment-context` accepts `comparison_employee_ids` and returns `comparison_employees[]` plus `availability_facts` for deterministic AI reasoning.
 - Verify `GET /api/v1/internal/ai/service-boundary`, `GET /api/v1/internal/ai/index-feed`, `GET /api/v1/internal/ai/plan-runs/{plan_run_id}/proposal-context`, and `GET /api/v1/internal/ai/plan-runs/{plan_run_id}/unassigned-context` in `planner-service` reject missing internal token and accept the shared token.
-- Verify `assignment-rationale` explanations use live task/employee context plus retrieved `assignment_case` history, while `unassigned-task` explanations use persisted diagnostic context plus retrieved `unassigned_case` history.
+- Verify `proposal-context` and `unassigned-context` expose persisted `candidate_analysis` rows with stable `outcome_code` values.
+- Verify `assignment-rationale` explanations use live task/employee comparison context plus retrieved `assignment_case` history, while `unassigned-task` explanations use persisted diagnostic context plus retrieved `unassigned_case` history.
+- Verify AI explanations mention at least one deterministic alternative-candidate reason when such a competitor exists, even if the LLM response is otherwise generic.
 - Verify stopping `ollama` causes explanation routes to degrade with controlled `503`, not broken approval/manual assignment flows.
 - Before planner-dependent checks, prepare two task datasets:
   - a positive planner case with eligible employee skills and cumulative availability hours inside the date-based task window that meet `estimated_hours`, so `/tasks/new` can surface a selected proposal;
@@ -168,11 +171,13 @@ docker compose up --build
 - Verify the persisted review screen still renders proposals, diagnostics, and solver statistics from planner-service.
 - On `/planning`, verify only selected proposal rows show `Explain with AI`.
 - On `/planning`, verify clicking `Explain with AI` for a selected proposal renders `summary`, `reasons`, `risks`, `similar cases`, `recommended actions`, and `advisory note` inline in the same row.
+- On `/planning`, verify selected-proposal explanations can explicitly mention why a competing candidate was not chosen when planner facts support that comparison.
 - On `/planning`, verify each diagnostic row shows `Explain with AI` and renders the same structured advisory block inline after click.
 - On `/planning`, verify reopening the same selected proposal or diagnostic can reuse the component-local AI cache without a mandatory second request.
 - On `/planning`, verify `502/503` responses from `ai-layer` stay local to the affected row and do not block `Approve selected proposal`.
 - On `/tasks/new`, verify a selected proposal opens the planner suggestion modal, and no-candidate diagnostics open manual assignment mode.
 - On `/tasks/new`, verify `Explain with AI` appears in planner suggestion mode, loads only on click, and renders `summary`, `reasons`, `risks`, `similar cases`, `recommended actions`, and `advisory note`.
+- On `/tasks/new`, verify proposal explanations can explicitly mention hard-filtered alternatives such as approved-leave overlap or lower persisted score when those facts exist.
 - On `/tasks/new`, verify `Explain why no assignee` appears only when manual mode came from planner `unassigned` fallback, not after `Use manual assignment` from a suggestion.
 - On `/tasks/new`, verify reopening the same suggestion or unassigned context can reuse the component-local AI cache without requiring a second request.
 - On `/tasks/new`, verify `502/503` responses from `ai-layer` stay in the AI advisory block and do not block `Approve suggestion` or `Create assignment`.
