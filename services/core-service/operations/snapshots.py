@@ -13,6 +13,7 @@ from contracts.schemas import (
     CreatePlanRunRequest,
     EmployeeAvailability,
     EmployeeSnapshot,
+    HistoricalTaskSummary,
     PlanningSnapshot,
     SkillRequirement,
     TaskSnapshot,
@@ -21,6 +22,7 @@ from contracts.schemas import (
 from .models import Assignment, Employee, EmployeeLeave, Task, WorkSchedule
 
 DEFAULT_SLOT_START = time.min
+HISTORICAL_TASK_LIMIT = 200
 
 
 def build_planning_snapshot(request: CreatePlanRunRequest) -> PlanningSnapshot:
@@ -28,7 +30,9 @@ def build_planning_snapshot(request: CreatePlanRunRequest) -> PlanningSnapshot:
 
     tasks = list(_get_tasks(request))
     employees = list(_get_employees(request))
+    historical_tasks = list(_get_historical_tasks(request))
     task_snapshots = [_build_task_snapshot(task) for task in tasks]
+    historical_task_summaries = [_build_historical_task_summary(task) for task in historical_tasks]
     employee_snapshots = [
         _build_employee_snapshot(employee, request.planning_period_start, request.planning_period_end)
         for employee in employees
@@ -43,6 +47,7 @@ def build_planning_snapshot(request: CreatePlanRunRequest) -> PlanningSnapshot:
         planning_period_end=max(requested_period_end, latest_task_end),
         employees=employee_snapshots,
         tasks=task_snapshots,
+        historical_tasks=historical_task_summaries,
     )
 
 
@@ -85,6 +90,20 @@ def _get_employees(request: CreatePlanRunRequest):
     return employees
 
 
+def _get_historical_tasks(request: CreatePlanRunRequest):
+    """Return a bounded slice of completed tasks with real actual-hours truth."""
+
+    tasks = (
+        Task.objects.select_related("department")
+        .prefetch_related("requirements")
+        .filter(status=Task.Status.DONE, actual_hours__isnull=False)
+        .order_by("-updated_at", "-id")
+    )
+    if request.department_id:
+        tasks = tasks.filter(department_id=request.department_id)
+    return tasks[:HISTORICAL_TASK_LIMIT]
+
+
 def _build_task_snapshot(task: Task) -> TaskSnapshot:
     """Translate a core task into the normalized planner task shape."""
 
@@ -94,18 +113,40 @@ def _build_task_snapshot(task: Task) -> TaskSnapshot:
         task_id=str(task.id),
         department_id=str(task.department_id) if task.department_id else None,
         title=task.title,
+        priority=task.priority,
         starts_at=starts_at,
         ends_at=ends_at,
         estimated_hours=task.estimated_hours,
-        requirements=[
-            SkillRequirement(
-                skill_id=str(requirement.skill_id),
-                min_level=requirement.min_level,
-                weight=float(requirement.weight),
-            )
-            for requirement in task.requirements.all()
-        ],
+        requirements=_build_skill_requirements(task),
     )
+
+
+def _build_historical_task_summary(task: Task) -> HistoricalTaskSummary:
+    """Translate one completed task into the bounded history slice used by planner estimates."""
+
+    return HistoricalTaskSummary(
+        task_id=str(task.id),
+        department_id=str(task.department_id) if task.department_id else None,
+        priority=task.priority,
+        estimated_hours=task.estimated_hours,
+        actual_hours=task.actual_hours or 0,
+        requirements=_build_skill_requirements(task),
+        start_date=task.start_date,
+        due_date=task.due_date,
+    )
+
+
+def _build_skill_requirements(task: Task) -> list[SkillRequirement]:
+    """Normalize task requirements so live tasks and historical tasks share one contract shape."""
+
+    return [
+        SkillRequirement(
+            skill_id=str(requirement.skill_id),
+            min_level=requirement.min_level,
+            weight=float(requirement.weight),
+        )
+        for requirement in task.requirements.all()
+    ]
 
 
 def _build_employee_snapshot(

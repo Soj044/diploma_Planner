@@ -1221,11 +1221,23 @@ class CoreApiSmokeTests(APITestCase):
             department=department,
             title="Move pallets",
             status=Task.Status.PLANNED,
-            estimated_hours=4,
+            estimated_hours=None,
             due_date=date(2026, 5, 2),
             created_by_user=manager,
         )
         task.requirements.create(skill=skill, min_level=2, weight=1.5)
+        historical_task = Task.objects.create(
+            department=department,
+            title="Completed route",
+            status=Task.Status.DONE,
+            priority=Task.Priority.HIGH,
+            estimated_hours=5,
+            actual_hours=7,
+            start_date=date(2026, 4, 20),
+            due_date=date(2026, 4, 21),
+            created_by_user=manager,
+        )
+        historical_task.requirements.create(skill=skill, min_level=3, weight=2.0)
 
         response = self.client.post(
             "/api/v1/planning-snapshot/",
@@ -1245,9 +1257,68 @@ class CoreApiSmokeTests(APITestCase):
         self.assertEqual(snapshot.tasks[0].task_id, str(task.id))
         self.assertEqual(snapshot.tasks[0].starts_at.isoformat(), "2026-05-02T00:00:00+00:00")
         self.assertEqual(snapshot.tasks[0].ends_at.isoformat(), "2026-05-03T00:00:00+00:00")
+        self.assertIsNone(snapshot.tasks[0].estimated_hours)
+        self.assertEqual(snapshot.tasks[0].priority, Task.Priority.MEDIUM)
         self.assertEqual(snapshot.employees[0].employee_id, str(employee.id))
         override_slot = next(slot for slot in snapshot.employees[0].availability if slot.start_at.date() == date(2026, 5, 2))
         self.assertEqual(override_slot.available_hours, 4)
+        self.assertEqual(snapshot.historical_tasks[0].task_id, str(historical_task.id))
+        self.assertEqual(snapshot.historical_tasks[0].priority, Task.Priority.HIGH)
+        self.assertEqual(snapshot.historical_tasks[0].actual_hours, 7)
+        self.assertEqual(snapshot.historical_tasks[0].requirements[0].min_level, 3)
+
+    @override_settings(INTERNAL_SERVICE_TOKEN="planner-service-secret")
+    def test_planning_snapshot_endpoint_limits_history_to_done_tasks_in_scope(self) -> None:
+        user_model = get_user_model()
+        manager = user_model.objects.create_user(
+            username="snapshot-history-manager",
+            email="snapshot-history-manager@example.com",
+            password="test-pass",
+        )
+        department = Department.objects.create(name="History scope")
+        other_department = Department.objects.create(name="Other history scope")
+        in_scope_task = Task.objects.create(
+            department=department,
+            title="In scope history",
+            status=Task.Status.DONE,
+            estimated_hours=4,
+            actual_hours=6,
+            due_date=date(2026, 4, 10),
+            created_by_user=manager,
+        )
+        Task.objects.create(
+            department=other_department,
+            title="Out of scope history",
+            status=Task.Status.DONE,
+            estimated_hours=3,
+            actual_hours=5,
+            due_date=date(2026, 4, 12),
+            created_by_user=manager,
+        )
+        Task.objects.create(
+            department=department,
+            title="Still planned",
+            status=Task.Status.PLANNED,
+            estimated_hours=2,
+            due_date=date(2026, 5, 2),
+            created_by_user=manager,
+        )
+
+        response = self.client.post(
+            "/api/v1/planning-snapshot/",
+            {
+                "planning_period_start": "2026-05-01",
+                "planning_period_end": "2026-05-02",
+                "initiated_by_user_id": str(manager.id),
+                "department_id": str(department.id),
+            },
+            format="json",
+            HTTP_X_INTERNAL_SERVICE_TOKEN="planner-service-secret",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        snapshot = PlanningSnapshot.model_validate(response.data)
+        self.assertEqual([row.task_id for row in snapshot.historical_tasks], [str(in_scope_task.id)])
 
     def test_planning_snapshot_endpoint_requires_internal_service_token(self) -> None:
         response = self.client.post(
