@@ -136,6 +136,62 @@ class CoreSerializerTests(TestCase):
         self.assertFalse(serializer.is_valid())
         self.assertIn("weekday", serializer.errors)
 
+    def test_weekday_validation_rejects_end_time_before_start_time(self) -> None:
+        user_model = get_user_model()
+        user = user_model.objects.create_user(
+            username="weekday-time-order-manager",
+            email="weekday-time-order-manager@example.com",
+            password="test-pass",
+            role=user_model.Role.MANAGER,
+        )
+        employee = Employee.objects.create(
+            user=user,
+            full_name="Weekday Time Order",
+            position_name="Operator",
+        )
+        schedule = WorkSchedule.objects.create(employee=employee, name="Default")
+        serializer = WorkScheduleDaySerializer(
+            data={
+                "schedule": schedule.id,
+                "weekday": 1,
+                "is_working_day": True,
+                "capacity_hours": 4,
+                "start_time": "12:00",
+                "end_time": "11:00",
+            }
+        )
+
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("end_time must be later than start_time.", str(serializer.errors))
+
+    def test_weekday_validation_rejects_capacity_outside_time_window(self) -> None:
+        user_model = get_user_model()
+        user = user_model.objects.create_user(
+            username="weekday-capacity-window-manager",
+            email="weekday-capacity-window-manager@example.com",
+            password="test-pass",
+            role=user_model.Role.MANAGER,
+        )
+        employee = Employee.objects.create(
+            user=user,
+            full_name="Weekday Capacity Window",
+            position_name="Operator",
+        )
+        schedule = WorkSchedule.objects.create(employee=employee, name="Default")
+        serializer = WorkScheduleDaySerializer(
+            data={
+                "schedule": schedule.id,
+                "weekday": 1,
+                "is_working_day": True,
+                "capacity_hours": 10,
+                "start_time": "11:00",
+                "end_time": "12:00",
+            }
+        )
+
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("capacity_hours cannot exceed the duration", str(serializer.errors))
+
 
 class CoreApiSmokeTests(APITestCase):
     def test_department_crud_endpoint_creates_department(self) -> None:

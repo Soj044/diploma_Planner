@@ -199,6 +199,24 @@ function buildDayPayload(): WorkScheduleDayInput | null {
     };
   }
 
+  if (dayForm.start_time && dayForm.end_time) {
+    const startMinutes = toMinutes(dayForm.start_time);
+    const endMinutes = toMinutes(dayForm.end_time);
+    if (startMinutes === null || endMinutes === null) {
+      errorMessage.value = "Start time and end time must be valid HH:MM values.";
+      return null;
+    }
+    if (endMinutes <= startMinutes) {
+      errorMessage.value = "End time must be later than start time.";
+      return null;
+    }
+    const windowHours = (endMinutes - startMinutes) / 60;
+    if (Number(dayForm.capacity_hours) > windowHours) {
+      errorMessage.value = "Capacity hours cannot exceed the selected time window.";
+      return null;
+    }
+  }
+
   return {
     schedule: selectedSchedule.value.id,
     weekday: dayForm.weekday,
@@ -207,6 +225,14 @@ function buildDayPayload(): WorkScheduleDayInput | null {
     start_time: dayForm.start_time || null,
     end_time: dayForm.end_time || null,
   };
+}
+
+function toMinutes(value: string): number | null {
+  const [hours, minutes] = value.split(":").map(Number);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) {
+    return null;
+  }
+  return hours * 60 + minutes;
 }
 
 function syncSelectionAfterLoad() {

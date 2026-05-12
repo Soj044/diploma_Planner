@@ -101,6 +101,31 @@ class WorkScheduleDaySerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Weekday must be in range 0..6.")
         return value
 
+    def validate(self, attrs: dict) -> dict:
+        is_working_day = attrs.get("is_working_day", getattr(self.instance, "is_working_day", True))
+        capacity_hours = attrs.get("capacity_hours", getattr(self.instance, "capacity_hours", 0))
+        start_time = attrs.get("start_time", getattr(self.instance, "start_time", None))
+        end_time = attrs.get("end_time", getattr(self.instance, "end_time", None))
+
+        if not is_working_day:
+            if capacity_hours != 0:
+                raise serializers.ValidationError("Non-working days must have capacity_hours equal to 0.")
+            if start_time is not None or end_time is not None:
+                raise serializers.ValidationError("Non-working days must not define start_time or end_time.")
+            return attrs
+
+        if start_time and end_time:
+            start_minutes = start_time.hour * 60 + start_time.minute
+            end_minutes = end_time.hour * 60 + end_time.minute
+            if end_minutes <= start_minutes:
+                raise serializers.ValidationError("end_time must be later than start_time.")
+            window_hours = (end_minutes - start_minutes) / 60
+            if capacity_hours > window_hours:
+                raise serializers.ValidationError(
+                    "capacity_hours cannot exceed the duration between start_time and end_time."
+                )
+        return attrs
+
 
 class EmployeeLeaveSerializer(serializers.ModelSerializer):
     class Meta:
