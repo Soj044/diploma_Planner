@@ -588,3 +588,7 @@ MVP had two gaps:
 - Плюсы: approval flow remains intact, with assignment/task lifecycle synchronized by backend.
 - Минусы: history/rules estimation in v1 is heuristic and may need recalibration as data grows.
 - Минусы: planner persistence and internal AI contexts now carry additional artifact fields, increasing compatibility test surface.
+
+### Update Note (2026-05-12)
+- Non-manual planner estimates are now capped by the inclusive weekday task window with a generic upper bound of `8h` per weekday.
+- Manual `Task.estimated_hours` is still trusted as-is and is not capped by task dates.

@@ -26,6 +26,7 @@
 - core-service task lifecycle: done requires positive `actual_hours`, non-done requires null `actual_hours`, done is terminal, and task status transitions sync final assignment status (`approved->active`, `approved|active->completed`) with required final-assignment presence checks
 - planner-service: unit and integration tests for planning pipeline, `CreatePlanRunRequest` boundary, snapshot client failure handling, SQLite persistence of run/snapshot/proposals/unassigned/solver stats, persisted run retrieval for manager review, overlap conflict diagnostics, and weighted score stability
 - planner-service effort estimation: one shared `task_effort_map` reused by eligibility/optimizer/candidate analysis/proposals, persisted `artifacts.time_estimates`, and backward-compatible load for older SQLite runs without `time_estimates_json`
+- planner-service auto-estimate cap: non-manual `effective_hours` must respect the inclusive weekday task window (`8h` per weekday), while manual `estimated_hours` remains uncapped
 - planner-service auth gate: Bearer header validation, deny employee role, allow manager/admin role, and controlled `503` when core introspection is unavailable
 - ai-layer: containerized startup, `/health` probe, authenticated `/api/v1/capabilities`, authenticated explanation routes, PostgreSQL connectivity bootstrap, `CREATE EXTENSION vector`, isolated `ai_layer` schema creation without touching core/planner truth tables, repository creation of `index_items`/`sync_state`/`explanation_logs`, HNSW cosine index creation, full/incremental sync, delete-path handling, stale-index fallback, structured Ollama output validation, and deterministic comparison-reason enrichment when the LLM stays generic
 - internal AI helper routes:
@@ -172,6 +173,7 @@ docker compose up --build
 - On `/tasks/new`, verify `Save + Assignment` requires `status=planned`, `start_date`, and `due_date`.
 - On `/tasks/new` and manager task edit forms, verify `estimated_hours` is optional and shows the helper copy about planner estimation fallback.
 - On manager task edit forms, verify `actual_hours` input appears only for `status=done`, and submit is blocked client-side when done has empty actual hours.
+- On `/tasks/new`, `/tasks`, and the shared task editor, verify entering a value into `Estimated hours` no longer throws `form.estimated_hours.trim is not a function`.
 - On `/tasks/new`, verify manual mode opens only when planner actually returned `unassigned`, not because the frontend skipped planner execution.
 - On `Planning`, verify manager/admin can launch a plan run with period-only scope, optional department filter, and optional selected task subset.
 - For single-task planning UX, verify `/tasks/new` still uses `POST /api/v1/plan-runs` with `task_ids=[task.id]` instead of inventing a new planner route.
@@ -187,6 +189,7 @@ docker compose up --build
 - On `/planning`, verify `502/503` responses from `ai-layer` stay local to the affected row and do not block `Approve selected proposal`.
 - On `/tasks/new`, verify a selected proposal opens the planner suggestion modal, and no-candidate diagnostics open manual assignment mode.
 - On `/tasks/new`, verify planner suggestion shows estimate source (`Manual/Historical/Blended/Rules-based`) and non-manual effective hours from persisted planner artifacts.
+- For planner-generated estimates, verify task dates now limit non-manual `effective_hours` to the weekday window upper bound (for example, 5 weekdays -> `40h`).
 - On `/tasks/new`, verify `Explain with AI` appears in planner suggestion mode, loads only on click, and renders `summary`, `reasons`, `risks`, `similar cases`, `recommended actions`, and `advisory note`.
 - On `/tasks/new`, verify proposal explanations can explicitly mention hard-filtered alternatives such as approved-leave overlap or lower persisted score when those facts exist.
 - On `/tasks/new`, verify `Explain why no assignee` appears only when manual mode came from planner `unassigned` fallback, not after `Use manual assignment` from a suggestion.
