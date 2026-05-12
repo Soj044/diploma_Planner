@@ -403,7 +403,7 @@ def test_time_estimation_blends_rules_with_small_history_sample() -> None:
     assert effort.source == "blended"
     assert effort.rules_baseline_hours == 8
     assert effort.historical_median_hours == pytest.approx(12.0)
-    assert effort.effective_hours == 10
+    assert effort.effective_hours == 8
 
 
 def test_time_estimation_falls_back_to_rules_without_matches() -> None:
@@ -433,3 +433,122 @@ def test_time_estimation_falls_back_to_rules_without_matches() -> None:
     assert effort.source == "rules"
     assert effort.effective_hours == 8
     assert effort.historical_sample_size == 0
+
+
+def test_time_estimation_caps_rules_estimate_by_weekday_window() -> None:
+    task = TaskSnapshot(
+        task_id="t-rules-cap",
+        department_id="dep-1",
+        title="Rules cap task",
+        priority="medium",
+        starts_at=datetime(2026, 3, 23, 9, 0, tzinfo=timezone.utc),
+        ends_at=datetime(2026, 3, 23, 17, 0, tzinfo=timezone.utc),
+        requirements=[SkillRequirement(skill_id="skill-a", min_level=5, weight=5.0)],
+    )
+
+    effort = build_task_effort_map([task], [])["t-rules-cap"]
+
+    assert effort.source == "rules"
+    assert effort.rules_baseline_hours == 50
+    assert effort.effective_hours == 8
+
+
+def test_time_estimation_caps_history_estimate_by_weekday_window() -> None:
+    task = TaskSnapshot(
+        task_id="t-history-cap",
+        department_id="dep-1",
+        title="History cap task",
+        priority="medium",
+        starts_at=datetime(2026, 3, 23, 9, 0, tzinfo=timezone.utc),
+        ends_at=datetime(2026, 3, 23, 17, 0, tzinfo=timezone.utc),
+        requirements=[SkillRequirement(skill_id="skill-a", min_level=2)],
+    )
+    history = [
+        HistoricalTaskSummary(
+            task_id="h1",
+            department_id="dep-1",
+            priority="medium",
+            estimated_hours=8,
+            actual_hours=10,
+            requirements=[SkillRequirement(skill_id="skill-a", min_level=2)],
+            due_date=datetime(2026, 3, 20, 0, 0, tzinfo=timezone.utc).date(),
+        ),
+        HistoricalTaskSummary(
+            task_id="h2",
+            department_id="dep-1",
+            priority="medium",
+            estimated_hours=8,
+            actual_hours=12,
+            requirements=[SkillRequirement(skill_id="skill-a", min_level=2)],
+            due_date=datetime(2026, 3, 19, 0, 0, tzinfo=timezone.utc).date(),
+        ),
+        HistoricalTaskSummary(
+            task_id="h3",
+            department_id="dep-1",
+            priority="medium",
+            estimated_hours=8,
+            actual_hours=14,
+            requirements=[SkillRequirement(skill_id="skill-a", min_level=2)],
+            due_date=datetime(2026, 3, 18, 0, 0, tzinfo=timezone.utc).date(),
+        ),
+    ]
+
+    effort = build_task_effort_map([task], history)["t-history-cap"]
+
+    assert effort.source == "history"
+    assert effort.historical_median_hours == pytest.approx(12.0)
+    assert effort.effective_hours == 8
+
+
+def test_time_estimation_caps_blended_estimate_by_weekday_window() -> None:
+    task = TaskSnapshot(
+        task_id="t-blended-cap",
+        department_id="dep-1",
+        title="Blended cap task",
+        priority="medium",
+        starts_at=datetime(2026, 3, 23, 9, 0, tzinfo=timezone.utc),
+        ends_at=datetime(2026, 3, 23, 17, 0, tzinfo=timezone.utc),
+    )
+    history = [
+        HistoricalTaskSummary(
+            task_id="h1",
+            department_id="dep-1",
+            priority="medium",
+            estimated_hours=8,
+            actual_hours=10,
+            requirements=[],
+            due_date=datetime(2026, 3, 20, 0, 0, tzinfo=timezone.utc).date(),
+        ),
+        HistoricalTaskSummary(
+            task_id="h2",
+            department_id="dep-1",
+            priority="medium",
+            estimated_hours=8,
+            actual_hours=14,
+            requirements=[],
+            due_date=datetime(2026, 3, 19, 0, 0, tzinfo=timezone.utc).date(),
+        ),
+    ]
+
+    effort = build_task_effort_map([task], history)["t-blended-cap"]
+
+    assert effort.source == "blended"
+    assert effort.historical_median_hours == pytest.approx(12.0)
+    assert effort.effective_hours == 8
+
+
+def test_time_estimation_does_not_cap_manual_estimate() -> None:
+    task = TaskSnapshot(
+        task_id="t-manual-cap",
+        department_id="dep-1",
+        title="Manual uncapped task",
+        priority="medium",
+        starts_at=datetime(2026, 3, 23, 9, 0, tzinfo=timezone.utc),
+        ends_at=datetime(2026, 3, 23, 17, 0, tzinfo=timezone.utc),
+        estimated_hours=12,
+    )
+
+    effort = build_task_effort_map([task], [])["t-manual-cap"]
+
+    assert effort.source == "manual"
+    assert effort.effective_hours == 12

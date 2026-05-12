@@ -7,6 +7,7 @@ import { coreService } from "../../services/core-service";
 import { describeRequestError } from "../../services/http";
 import { consumeUiFlash } from "../../services/ui-flash-service";
 import type { Department, Task, TaskInput } from "../../types/api";
+import { normalizeOptionalNumericInput, type OptionalNumericInput } from "./taskFormNumbers";
 
 const emit = defineEmits<{
   "selected-task-change": [taskId: number | null];
@@ -19,8 +20,8 @@ interface TaskFormState {
   description: string;
   status: string;
   priority: string;
-  estimated_hours: string;
-  actual_hours: string;
+  estimated_hours: OptionalNumericInput;
+  actual_hours: OptionalNumericInput;
   start_date: string;
   due_date: string;
 }
@@ -113,8 +114,8 @@ function startEditing(task: Task) {
 }
 
 function buildPayload(): TaskInput {
-  const estimatedHours = form.estimated_hours.trim() ? Number(form.estimated_hours) : null;
-  const actualHours = form.actual_hours.trim() ? Number(form.actual_hours) : null;
+  const estimatedHours = normalizeOptionalNumericInput(form.estimated_hours);
+  const actualHours = normalizeOptionalNumericInput(form.actual_hours);
 
   return {
     department: form.department ? Number(form.department) : null,
@@ -165,11 +166,12 @@ async function save() {
   if (editingId.value === null) {
     return;
   }
-  if (isDoneStatus.value && !form.actual_hours.trim()) {
+  const actualHours = normalizeOptionalNumericInput(form.actual_hours);
+  if (isDoneStatus.value && actualHours === null) {
     errorMessage.value = "Done tasks require actual_hours before saving.";
     return;
   }
-  if (!isDoneStatus.value && form.actual_hours.trim()) {
+  if (!isDoneStatus.value && actualHours !== null) {
     errorMessage.value = "Actual hours are allowed only when status is done.";
     return;
   }

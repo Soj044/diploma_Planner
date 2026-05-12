@@ -7,6 +7,7 @@ where planned hours came from.
 
 from __future__ import annotations
 
+from datetime import timedelta
 from math import ceil, floor
 from statistics import median
 
@@ -71,9 +72,10 @@ def _estimate_task_effort(
         )
 
     if historical_sample_size >= 3 and historical_median_hours is not None:
+        raw_effective_hours = max(1, _round_half_up(historical_median_hours))
         return TaskTimeEstimate(
             source="history",
-            effective_hours=max(1, _round_half_up(historical_median_hours)),
+            effective_hours=_cap_auto_estimate(task=task, raw_effective_hours=raw_effective_hours),
             manual_hours=None,
             rules_baseline_hours=rules_baseline_hours,
             historical_median_hours=historical_median_hours,
@@ -81,12 +83,13 @@ def _estimate_task_effort(
         )
 
     if historical_sample_size >= 1 and historical_median_hours is not None:
+        raw_effective_hours = max(
+            1,
+            _round_half_up((rules_baseline_hours + historical_median_hours) / 2),
+        )
         return TaskTimeEstimate(
             source="blended",
-            effective_hours=max(
-                1,
-                _round_half_up((rules_baseline_hours + historical_median_hours) / 2),
-            ),
+            effective_hours=_cap_auto_estimate(task=task, raw_effective_hours=raw_effective_hours),
             manual_hours=None,
             rules_baseline_hours=rules_baseline_hours,
             historical_median_hours=historical_median_hours,
@@ -95,7 +98,7 @@ def _estimate_task_effort(
 
     return TaskTimeEstimate(
         source="rules",
-        effective_hours=rules_baseline_hours,
+        effective_hours=_cap_auto_estimate(task=task, raw_effective_hours=rules_baseline_hours),
         manual_hours=None,
         rules_baseline_hours=rules_baseline_hours,
         historical_median_hours=None,
@@ -172,3 +175,22 @@ def _round_half_up(value: float) -> int:
     """Avoid Python banker rounding for user-facing hour values."""
 
     return int(floor(value + 0.5))
+
+
+def _cap_auto_estimate(*, task: TaskSnapshot, raw_effective_hours: int) -> int:
+    """Cap non-manual estimates by the inclusive weekday task window."""
+
+    return min(raw_effective_hours, _window_business_hours(task))
+
+
+def _window_business_hours(task: TaskSnapshot) -> int:
+    """Approximate the task window as 8 hours per weekday, inclusive of due date."""
+
+    business_days = 0
+    current_date = task.starts_at.date()
+    last_date = (task.ends_at - timedelta(microseconds=1)).date()
+    while current_date <= last_date:
+        if current_date.weekday() < 5:
+            business_days += 1
+        current_date += timedelta(days=1)
+    return max(1, business_days) * 8

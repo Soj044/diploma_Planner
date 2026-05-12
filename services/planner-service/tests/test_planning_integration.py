@@ -411,3 +411,66 @@ def test_history_based_effort_is_used_when_manual_hours_are_missing() -> None:
     assert estimate.source == "history"
     assert estimate.effective_hours == 6
     assert response.proposals[0].planned_hours == 6
+
+
+def test_auto_estimate_is_capped_by_five_day_work_window() -> None:
+    snapshot = PlanningSnapshot(
+        planning_period_start=datetime(2026, 5, 11, 0, 0, tzinfo=timezone.utc),
+        planning_period_end=datetime(2026, 5, 16, 0, 0, tzinfo=timezone.utc),
+        employees=[
+            EmployeeSnapshot(
+                employee_id="e1",
+                department_id="dep-1",
+                skill_levels={"skill-a": 5},
+                availability=[
+                    EmployeeAvailability(
+                        start_at=datetime(2026, 5, 11, 9, 0, tzinfo=timezone.utc),
+                        end_at=datetime(2026, 5, 11, 18, 0, tzinfo=timezone.utc),
+                        available_hours=8,
+                    ),
+                    EmployeeAvailability(
+                        start_at=datetime(2026, 5, 12, 9, 0, tzinfo=timezone.utc),
+                        end_at=datetime(2026, 5, 12, 18, 0, tzinfo=timezone.utc),
+                        available_hours=8,
+                    ),
+                    EmployeeAvailability(
+                        start_at=datetime(2026, 5, 13, 9, 0, tzinfo=timezone.utc),
+                        end_at=datetime(2026, 5, 13, 18, 0, tzinfo=timezone.utc),
+                        available_hours=8,
+                    ),
+                    EmployeeAvailability(
+                        start_at=datetime(2026, 5, 14, 9, 0, tzinfo=timezone.utc),
+                        end_at=datetime(2026, 5, 14, 18, 0, tzinfo=timezone.utc),
+                        available_hours=8,
+                    ),
+                    EmployeeAvailability(
+                        start_at=datetime(2026, 5, 15, 9, 0, tzinfo=timezone.utc),
+                        end_at=datetime(2026, 5, 15, 18, 0, tzinfo=timezone.utc),
+                        available_hours=8,
+                    ),
+                ],
+            )
+        ],
+        tasks=[
+            TaskSnapshot(
+                task_id="t-five-days",
+                department_id="dep-1",
+                title="Five day capped task",
+                priority="medium",
+                starts_at=datetime(2026, 5, 11, 0, 0, tzinfo=timezone.utc),
+                ends_at=datetime(2026, 5, 16, 0, 0, tzinfo=timezone.utc),
+                requirements=[SkillRequirement(skill_id="skill-a", min_level=5, weight=5.0)],
+            )
+        ],
+    )
+
+    response = run_planning(snapshot)
+
+    estimate = response.artifacts.time_estimates["t-five-days"]
+    analysis = response.artifacts.candidate_analysis["t-five-days"][0]
+    assert estimate.source == "rules"
+    assert estimate.rules_baseline_hours == 50
+    assert estimate.effective_hours == 40
+    assert response.summary.assigned_count == 1
+    assert response.proposals[0].planned_hours == 40
+    assert analysis.required_hours == 40

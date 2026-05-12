@@ -8,6 +8,7 @@ import { useRouter } from "vue-router";
 
 import DialogModal from "../components/DialogModal.vue";
 import TaskRequirementsSection from "../components/tasks/TaskRequirementsSection.vue";
+import { normalizeOptionalNumericInput, type OptionalNumericInput } from "../components/tasks/taskFormNumbers";
 import { useAuth } from "../composables/useAuth";
 import { aiService } from "../services/ai-service";
 import { coreService } from "../services/core-service";
@@ -33,8 +34,8 @@ interface TaskFormState {
   description: string;
   status: string;
   priority: string;
-  estimated_hours: string;
-  actual_hours: string;
+  estimated_hours: OptionalNumericInput;
+  actual_hours: OptionalNumericInput;
   start_date: string;
   due_date: string;
 }
@@ -169,8 +170,8 @@ const canExplainUnassigned = computed(() => {
 });
 
 function buildTaskPayload(): TaskInput {
-  const estimatedHours = form.estimated_hours.trim() ? Number(form.estimated_hours) : null;
-  const actualHours = form.actual_hours.trim() ? Number(form.actual_hours) : null;
+  const estimatedHours = normalizeOptionalNumericInput(form.estimated_hours);
+  const actualHours = normalizeOptionalNumericInput(form.actual_hours);
   return {
     department: form.department ? Number(form.department) : null,
     title: form.title.trim(),
@@ -363,11 +364,12 @@ async function persistTask(): Promise<Task | null> {
     errorMessage.value = "Authenticated manager/admin context is missing.";
     return null;
   }
-  if (isDoneStatus.value && !form.actual_hours.trim()) {
+  const actualHours = normalizeOptionalNumericInput(form.actual_hours);
+  if (isDoneStatus.value && actualHours === null) {
     errorMessage.value = "Done tasks require actual_hours before saving.";
     return null;
   }
-  if (!isDoneStatus.value && form.actual_hours.trim()) {
+  if (!isDoneStatus.value && actualHours !== null) {
     errorMessage.value = "Actual hours are allowed only when status is done.";
     return null;
   }
