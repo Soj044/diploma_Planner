@@ -9,7 +9,9 @@ from contracts.schemas import (
     PlanResponse,
     PlanRunArtifacts,
     PlanRunSummary,
+    SkillRequirement,
     PlanningSnapshot,
+    TaskTimeEstimate,
 )
 
 
@@ -44,6 +46,7 @@ def test_planning_snapshot_rejects_task_outside_planning_period() -> None:
                 {
                     "task_id": "task-1",
                     "title": "Outside period",
+                    "priority": "medium",
                     "starts_at": datetime(2026, 3, 22, 23, 0, tzinfo=timezone.utc),
                     "ends_at": datetime(2026, 3, 23, 1, 0, tzinfo=timezone.utc),
                 }
@@ -80,6 +83,16 @@ def test_plan_response_roundtrip_preserves_core_approval_fields() -> None:
             eligibility={"task-1": ["emp-1"]},
             scores={"task-1": {"emp-1": 1.25}},
             solver_statistics={"status": "OPTIMAL"},
+            time_estimates={
+                "task-1": TaskTimeEstimate(
+                    source="manual",
+                    effective_hours=3,
+                    manual_hours=3,
+                    rules_baseline_hours=2,
+                    historical_median_hours=None,
+                    historical_sample_size=0,
+                )
+            },
         ),
     )
 
@@ -90,3 +103,29 @@ def test_plan_response_roundtrip_preserves_core_approval_fields() -> None:
     assert roundtrip.proposals[0].planned_hours == 3
     assert roundtrip.proposals[0].start_date == date(2026, 3, 23)
     assert roundtrip.proposals[0].end_date == date(2026, 3, 23)
+    assert roundtrip.artifacts.time_estimates["task-1"].source == "manual"
+    assert roundtrip.artifacts.time_estimates["task-1"].effective_hours == 3
+
+
+def test_planning_snapshot_accepts_historical_tasks_outside_live_period() -> None:
+    snapshot = PlanningSnapshot(
+        planning_period_start=datetime(2026, 3, 23, 0, 0, tzinfo=timezone.utc),
+        planning_period_end=datetime(2026, 3, 24, 0, 0, tzinfo=timezone.utc),
+        employees=[],
+        tasks=[],
+        historical_tasks=[
+            {
+                "task_id": "hist-1",
+                "department_id": "dep-1",
+                "priority": "high",
+                "estimated_hours": 4,
+                "actual_hours": 5,
+                "requirements": [SkillRequirement(skill_id="skill-a", min_level=2).model_dump(mode="json")],
+                "start_date": date(2026, 3, 20),
+                "due_date": date(2026, 3, 21),
+            }
+        ],
+    )
+
+    assert snapshot.historical_tasks[0].task_id == "hist-1"
+    assert snapshot.historical_tasks[0].actual_hours == 5

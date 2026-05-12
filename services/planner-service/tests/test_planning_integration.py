@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from contracts.schemas import (
     EmployeeAvailability,
     EmployeeSnapshot,
+    HistoricalTaskSummary,
     PlanningSnapshot,
     SkillRequirement,
     TaskSnapshot,
@@ -37,6 +38,7 @@ def test_snapshot_to_proposals_and_unassigned_diagnostics() -> None:
                 title="Task ok",
                 starts_at=datetime(2026, 3, 23, 9, 0, tzinfo=timezone.utc),
                 ends_at=datetime(2026, 3, 23, 10, 0, tzinfo=timezone.utc),
+                estimated_hours=1,
                 requirements=[SkillRequirement(skill_id="skill-a", min_level=1)],
             ),
             TaskSnapshot(
@@ -45,6 +47,7 @@ def test_snapshot_to_proposals_and_unassigned_diagnostics() -> None:
                 title="Task no eligible",
                 starts_at=datetime(2026, 3, 23, 11, 0, tzinfo=timezone.utc),
                 ends_at=datetime(2026, 3, 23, 12, 0, tzinfo=timezone.utc),
+                estimated_hours=1,
                 requirements=[SkillRequirement(skill_id="skill-b", min_level=1)],
             ),
         ],
@@ -302,3 +305,109 @@ def test_candidate_analysis_marks_capacity_conflict_for_unassigned_task() -> Non
     conflict_analysis = response.artifacts.candidate_analysis[unassigned_task_id]
 
     assert any(row.outcome_code == "eligible_not_selected_capacity_or_conflict" for row in conflict_analysis)
+
+
+def test_rules_based_effort_is_reused_across_proposal_and_candidate_analysis() -> None:
+    snapshot = PlanningSnapshot(
+        planning_period_start=datetime(2026, 3, 23, 0, 0, tzinfo=timezone.utc),
+        planning_period_end=datetime(2026, 3, 24, 0, 0, tzinfo=timezone.utc),
+        employees=[
+            EmployeeSnapshot(
+                employee_id="e1",
+                department_id="dep-1",
+                availability=[
+                    EmployeeAvailability(
+                        start_at=datetime(2026, 3, 23, 8, 0, tzinfo=timezone.utc),
+                        end_at=datetime(2026, 3, 23, 18, 0, tzinfo=timezone.utc),
+                        available_hours=8,
+                    )
+                ],
+            )
+        ],
+        tasks=[
+            TaskSnapshot(
+                task_id="t-rules",
+                department_id="dep-1",
+                title="Rules effort task",
+                starts_at=datetime(2026, 3, 23, 9, 0, tzinfo=timezone.utc),
+                ends_at=datetime(2026, 3, 23, 17, 0, tzinfo=timezone.utc),
+            )
+        ],
+    )
+
+    response = run_planning(snapshot)
+
+    estimate = response.artifacts.time_estimates["t-rules"]
+    analysis = response.artifacts.candidate_analysis["t-rules"][0]
+    assert estimate.source == "rules"
+    assert estimate.effective_hours == 8
+    assert response.proposals[0].planned_hours == 8
+    assert analysis.required_hours == 8
+
+
+def test_history_based_effort_is_used_when_manual_hours_are_missing() -> None:
+    snapshot = PlanningSnapshot(
+        planning_period_start=datetime(2026, 3, 23, 0, 0, tzinfo=timezone.utc),
+        planning_period_end=datetime(2026, 3, 24, 0, 0, tzinfo=timezone.utc),
+        employees=[
+            EmployeeSnapshot(
+                employee_id="e1",
+                department_id="dep-1",
+                skill_levels={"skill-a": 3},
+                availability=[
+                    EmployeeAvailability(
+                        start_at=datetime(2026, 3, 23, 8, 0, tzinfo=timezone.utc),
+                        end_at=datetime(2026, 3, 23, 18, 0, tzinfo=timezone.utc),
+                        available_hours=8,
+                    )
+                ],
+            )
+        ],
+        tasks=[
+            TaskSnapshot(
+                task_id="t-history",
+                department_id="dep-1",
+                title="History effort task",
+                priority="medium",
+                starts_at=datetime(2026, 3, 23, 9, 0, tzinfo=timezone.utc),
+                ends_at=datetime(2026, 3, 23, 17, 0, tzinfo=timezone.utc),
+                requirements=[SkillRequirement(skill_id="skill-a", min_level=2)],
+            )
+        ],
+        historical_tasks=[
+            HistoricalTaskSummary(
+                task_id="h1",
+                department_id="dep-1",
+                priority="medium",
+                estimated_hours=4,
+                actual_hours=5,
+                requirements=[SkillRequirement(skill_id="skill-a", min_level=2)],
+                due_date=datetime(2026, 3, 20, 0, 0, tzinfo=timezone.utc).date(),
+            ),
+            HistoricalTaskSummary(
+                task_id="h2",
+                department_id="dep-1",
+                priority="medium",
+                estimated_hours=4,
+                actual_hours=6,
+                requirements=[SkillRequirement(skill_id="skill-a", min_level=2)],
+                due_date=datetime(2026, 3, 19, 0, 0, tzinfo=timezone.utc).date(),
+            ),
+            HistoricalTaskSummary(
+                task_id="h3",
+                department_id="dep-1",
+                priority="medium",
+                estimated_hours=4,
+                actual_hours=7,
+                requirements=[SkillRequirement(skill_id="skill-a", min_level=2)],
+                due_date=datetime(2026, 3, 18, 0, 0, tzinfo=timezone.utc).date(),
+            ),
+        ],
+    )
+
+    response = run_planning(snapshot)
+
+    estimate = response.artifacts.time_estimates["t-history"]
+    assert estimate.source == "history"
+    assert estimate.effective_hours == 6
+    assert response.proposals[0].planned_hours == 6

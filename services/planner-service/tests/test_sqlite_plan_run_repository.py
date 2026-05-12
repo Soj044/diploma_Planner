@@ -136,3 +136,87 @@ def test_sqlite_repository_roundtrip_preserves_full_artifact_slice(tmp_path) -> 
     assert loaded_response.artifacts.scores
     assert loaded_response.artifacts.solver_statistics
     assert loaded_response.artifacts.candidate_analysis
+    assert loaded_response.artifacts.time_estimates
+    assert loaded_response.artifacts.time_estimates["task-1"].source == "manual"
+    assert loaded_response.artifacts.time_estimates["task-2"].source == "manual"
+
+
+def test_sqlite_repository_upgrades_existing_plan_runs_without_time_estimates_column(tmp_path) -> None:
+    db_path = tmp_path / "planner-legacy.sqlite3"
+    with sqlite3.connect(db_path) as connection:
+        connection.executescript(
+            """
+            CREATE TABLE plan_runs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                external_uuid TEXT NOT NULL UNIQUE,
+                initiated_by_user_id TEXT NOT NULL,
+                department_id TEXT,
+                task_ids_json TEXT NOT NULL,
+                period_start TEXT NOT NULL,
+                period_end TEXT NOT NULL,
+                status TEXT NOT NULL,
+                algorithm_name TEXT NOT NULL,
+                algorithm_version TEXT NOT NULL,
+                objective_summary TEXT,
+                eligibility_json TEXT NOT NULL,
+                scores_json TEXT NOT NULL,
+                candidate_analysis_json TEXT NOT NULL DEFAULT '{}',
+                assigned_count INTEGER NOT NULL,
+                unassigned_count INTEGER NOT NULL,
+                created_at TEXT NOT NULL,
+                started_at TEXT,
+                finished_at TEXT
+            );
+            CREATE TABLE plan_input_snapshots (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                plan_run_id INTEGER NOT NULL REFERENCES plan_runs(id) ON DELETE CASCADE,
+                source_hash TEXT NOT NULL,
+                snapshot_json TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+            CREATE TABLE assignment_proposals (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                plan_run_id INTEGER NOT NULL REFERENCES plan_runs(id) ON DELETE CASCADE,
+                external_task_id TEXT NOT NULL,
+                external_employee_id TEXT NOT NULL,
+                proposal_rank INTEGER NOT NULL,
+                is_selected INTEGER NOT NULL,
+                planned_hours INTEGER,
+                start_date TEXT,
+                end_date TEXT,
+                score REAL NOT NULL,
+                explanation_text TEXT,
+                status TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+            CREATE TABLE unassigned_tasks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                plan_run_id INTEGER NOT NULL REFERENCES plan_runs(id) ON DELETE CASCADE,
+                external_task_id TEXT NOT NULL,
+                reason_code TEXT NOT NULL,
+                message TEXT NOT NULL,
+                reason_details TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+            CREATE TABLE solver_statistics (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                plan_run_id INTEGER NOT NULL UNIQUE REFERENCES plan_runs(id) ON DELETE CASCADE,
+                solver_status TEXT NOT NULL,
+                objective_value REAL,
+                wall_time_ms INTEGER,
+                stats_json TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+            """
+        )
+
+    repository = SqlitePlanRunRepository(db_path=db_path)
+    command = build_command()
+    snapshot = build_snapshot()
+    response = run_planning(snapshot)
+
+    repository.save(command=command, snapshot=snapshot, response=response)
+    loaded_response = repository.get(response.summary.plan_run_id)
+
+    assert loaded_response is not None
+    assert loaded_response.artifacts.time_estimates["task-1"].effective_hours == 3

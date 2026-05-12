@@ -7,16 +7,8 @@ optimizer и diagnostics внутри planning pipeline.
 
 from contracts.schemas import EmployeeSnapshot, TaskSnapshot
 
+from .time_estimation import TaskEffortMap, effective_task_hours
 from .types import CandidateEligibilityTrace, EligibilityResult
-
-
-def _task_hours(task: TaskSnapshot) -> int:
-    """Normalize task duration to whole planning hours for capacity checks."""
-
-    if task.estimated_hours:
-        return task.estimated_hours
-    seconds = (task.ends_at - task.starts_at).total_seconds()
-    return max(1, int((seconds + 3599) // 3600))
 
 
 def _slot_available_hours(employee: EmployeeSnapshot, task: TaskSnapshot) -> float:
@@ -45,10 +37,14 @@ def _missing_skill_ids(employee: EmployeeSnapshot, task: TaskSnapshot) -> list[s
     ]
 
 
-def _candidate_trace(employee: EmployeeSnapshot, task: TaskSnapshot) -> CandidateEligibilityTrace:
+def _candidate_trace(
+    employee: EmployeeSnapshot,
+    task: TaskSnapshot,
+    task_effort_map: TaskEffortMap,
+) -> CandidateEligibilityTrace:
     """Build one hard-filter trace that planner can later reuse for explanations."""
 
-    required_hours = _task_hours(task)
+    required_hours = effective_task_hours(task.task_id, task_effort_map)
     available_hours = _slot_available_hours(employee, task) if employee.availability else 0.0
     missing_skill_ids = _missing_skill_ids(employee, task)
     matched_department = not task.department_id or employee.department_id == task.department_id
@@ -69,7 +65,11 @@ def _candidate_trace(employee: EmployeeSnapshot, task: TaskSnapshot) -> Candidat
     )
 
 
-def evaluate_eligibility(employees: list[EmployeeSnapshot], tasks: list[TaskSnapshot]) -> EligibilityResult:
+def evaluate_eligibility(
+    employees: list[EmployeeSnapshot],
+    tasks: list[TaskSnapshot],
+    task_effort_map: TaskEffortMap,
+) -> EligibilityResult:
     """Apply hard business filters before scoring or optimization starts."""
 
     result: dict[str, list[str]] = {}
@@ -79,7 +79,7 @@ def evaluate_eligibility(employees: list[EmployeeSnapshot], tasks: list[TaskSnap
         eligible: list[str] = []
         task_traces: list[CandidateEligibilityTrace] = []
         for employee in employees:
-            trace = _candidate_trace(employee, task)
+            trace = _candidate_trace(employee, task, task_effort_map)
             task_traces.append(trace)
             if trace.eligible:
                 eligible.append(employee.employee_id)
