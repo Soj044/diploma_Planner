@@ -201,3 +201,104 @@ def test_optimizer_keeps_inclusive_end_date_for_date_based_tasks() -> None:
     assert len(response.proposals) == 1
     assert response.proposals[0].start_date.isoformat() == "2026-03-23"
     assert response.proposals[0].end_date.isoformat() == "2026-03-23"
+
+
+def test_candidate_analysis_marks_lower_score_outcome_for_unselected_eligible_candidate() -> None:
+    """Persist a lower-score comparison fact when one task has multiple eligible candidates."""
+
+    snapshot = PlanningSnapshot(
+        planning_period_start=datetime(2026, 3, 23, 0, 0, tzinfo=timezone.utc),
+        planning_period_end=datetime(2026, 3, 24, 0, 0, tzinfo=timezone.utc),
+        employees=[
+            EmployeeSnapshot(
+                employee_id="e-top",
+                department_id="dep-1",
+                skill_levels={"skill-a": 4},
+                availability=[
+                    EmployeeAvailability(
+                        start_at=datetime(2026, 3, 23, 8, 0, tzinfo=timezone.utc),
+                        end_at=datetime(2026, 3, 23, 18, 0, tzinfo=timezone.utc),
+                        available_hours=8,
+                    )
+                ],
+            ),
+            EmployeeSnapshot(
+                employee_id="e-alt",
+                department_id="dep-1",
+                skill_levels={"skill-a": 3},
+                availability=[
+                    EmployeeAvailability(
+                        start_at=datetime(2026, 3, 23, 8, 0, tzinfo=timezone.utc),
+                        end_at=datetime(2026, 3, 23, 18, 0, tzinfo=timezone.utc),
+                        available_hours=8,
+                    )
+                ],
+            ),
+        ],
+            tasks=[
+                TaskSnapshot(
+                    task_id="t-primary",
+                    department_id="dep-1",
+                    title="Primary task",
+                    starts_at=datetime(2026, 3, 23, 9, 0, tzinfo=timezone.utc),
+                    ends_at=datetime(2026, 3, 23, 12, 0, tzinfo=timezone.utc),
+                    estimated_hours=3,
+                    requirements=[SkillRequirement(skill_id="skill-a", min_level=2)],
+                )
+            ],
+        )
+
+    response = run_planning(snapshot)
+
+    primary_analysis = response.artifacts.candidate_analysis["t-primary"]
+    assert any(row.outcome_code == "selected" for row in primary_analysis)
+    assert any(row.outcome_code == "eligible_not_selected_lower_score" for row in primary_analysis)
+
+
+def test_candidate_analysis_marks_capacity_conflict_for_unassigned_task() -> None:
+    """Persist a conflict-driven comparison fact when eligible candidates remain unassigned."""
+
+    snapshot = PlanningSnapshot(
+        planning_period_start=datetime(2026, 3, 23, 0, 0, tzinfo=timezone.utc),
+        planning_period_end=datetime(2026, 3, 24, 0, 0, tzinfo=timezone.utc),
+        employees=[
+            EmployeeSnapshot(
+                employee_id="e-top",
+                department_id="dep-1",
+                skill_levels={"skill-a": 4},
+                availability=[
+                    EmployeeAvailability(
+                        start_at=datetime(2026, 3, 23, 8, 0, tzinfo=timezone.utc),
+                        end_at=datetime(2026, 3, 23, 18, 0, tzinfo=timezone.utc),
+                        available_hours=8,
+                    )
+                ],
+            )
+        ],
+        tasks=[
+            TaskSnapshot(
+                task_id="t-first",
+                department_id="dep-1",
+                title="First task",
+                starts_at=datetime(2026, 3, 23, 9, 0, tzinfo=timezone.utc),
+                ends_at=datetime(2026, 3, 23, 12, 0, tzinfo=timezone.utc),
+                estimated_hours=3,
+                requirements=[SkillRequirement(skill_id="skill-a", min_level=2)],
+            ),
+            TaskSnapshot(
+                task_id="t-overlap",
+                department_id="dep-1",
+                title="Overlap task",
+                starts_at=datetime(2026, 3, 23, 11, 0, tzinfo=timezone.utc),
+                ends_at=datetime(2026, 3, 23, 14, 0, tzinfo=timezone.utc),
+                estimated_hours=3,
+                requirements=[SkillRequirement(skill_id="skill-a", min_level=2)],
+            ),
+        ],
+    )
+
+    response = run_planning(snapshot)
+    unassigned_task_id = response.unassigned[0].task_id
+    conflict_analysis = response.artifacts.candidate_analysis[unassigned_task_id]
+
+    assert any(row.outcome_code == "eligible_not_selected_capacity_or_conflict" for row in conflict_analysis)

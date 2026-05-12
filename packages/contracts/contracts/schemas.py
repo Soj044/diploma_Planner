@@ -14,6 +14,15 @@ from pydantic import BaseModel, Field, model_validator
 
 PlanRunStatus = Literal["created", "running", "completed", "failed"]
 ProposalStatus = Literal["proposed", "approved", "rejected", "applied"]
+CandidateOutcomeCode = Literal[
+    "selected",
+    "eligible_not_selected_lower_score",
+    "eligible_not_selected_capacity_or_conflict",
+    "rejected_inactive_employee",
+    "rejected_department_mismatch",
+    "rejected_missing_required_skill",
+    "rejected_insufficient_available_hours",
+]
 
 
 class SkillRequirement(BaseModel):
@@ -130,10 +139,26 @@ class PlanRunSummary(BaseModel):
     unassigned_count: int
 
 
+class CandidateAnalysisRow(BaseModel):
+    """Persisted planner-side explanation facts for one task/employee comparison."""
+
+    employee_id: str
+    outcome_code: CandidateOutcomeCode
+    eligible: bool
+    score: float | None = None
+    selected: bool = False
+    available_hours_in_window: float | None = Field(default=None, ge=0)
+    required_hours: int | None = Field(default=None, ge=1)
+    missing_skill_ids: list[str] = Field(default_factory=list)
+    missing_skill_names: list[str] = Field(default_factory=list)
+    matched_department: bool = True
+
+
 class PlanRunArtifacts(BaseModel):
     eligibility: dict[str, list[str]] = Field(default_factory=dict)
     scores: dict[str, dict[str, float]] = Field(default_factory=dict)
     solver_statistics: dict[str, int | float | str] = Field(default_factory=dict)
+    candidate_analysis: dict[str, list[CandidateAnalysisRow]] = Field(default_factory=dict)
 
 
 class PlanResponse(BaseModel):

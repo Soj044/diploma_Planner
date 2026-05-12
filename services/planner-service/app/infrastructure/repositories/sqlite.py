@@ -74,13 +74,14 @@ class SqlitePlanRunRepository:
                     objective_summary,
                     eligibility_json,
                     scores_json,
+                    candidate_analysis_json,
                     assigned_count,
                     unassigned_count,
                     created_at,
                     started_at,
                     finished_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(external_uuid) DO UPDATE SET
                     initiated_by_user_id = excluded.initiated_by_user_id,
                     department_id = excluded.department_id,
@@ -93,6 +94,7 @@ class SqlitePlanRunRepository:
                     objective_summary = excluded.objective_summary,
                     eligibility_json = excluded.eligibility_json,
                     scores_json = excluded.scores_json,
+                    candidate_analysis_json = excluded.candidate_analysis_json,
                     assigned_count = excluded.assigned_count,
                     unassigned_count = excluded.unassigned_count,
                     created_at = excluded.created_at,
@@ -112,6 +114,13 @@ class SqlitePlanRunRepository:
                     OBJECTIVE_SUMMARY,
                     json.dumps(response.artifacts.eligibility, sort_keys=True),
                     json.dumps(response.artifacts.scores, sort_keys=True),
+                    json.dumps(
+                        {
+                            task_id: [row.model_dump(mode="json") for row in rows]
+                            for task_id, rows in response.artifacts.candidate_analysis.items()
+                        },
+                        sort_keys=True,
+                    ),
                     response.summary.assigned_count,
                     response.summary.unassigned_count,
                     created_at,
@@ -358,6 +367,9 @@ class SqlitePlanRunRepository:
                 eligibility=json.loads(plan_run["eligibility_json"]),
                 scores=json.loads(plan_run["scores_json"]),
                 solver_statistics=json.loads(solver_row["stats_json"]) if solver_row else {},
+                candidate_analysis=json.loads(plan_run["candidate_analysis_json"])
+                if plan_run["candidate_analysis_json"]
+                else {},
             ),
         )
         return PersistedPlanRunRecord(
@@ -391,6 +403,7 @@ class SqlitePlanRunRepository:
                     objective_summary TEXT,
                     eligibility_json TEXT NOT NULL,
                     scores_json TEXT NOT NULL,
+                    candidate_analysis_json TEXT NOT NULL DEFAULT '{}',
                     assigned_count INTEGER NOT NULL,
                     unassigned_count INTEGER NOT NULL,
                     created_at TEXT NOT NULL,
@@ -452,6 +465,11 @@ class SqlitePlanRunRepository:
                 );
                 """
             )
+            self._ensure_plan_runs_column(
+                connection,
+                column_name="candidate_analysis_json",
+                column_definition="TEXT NOT NULL DEFAULT '{}'",
+            )
 
     def _source_hash(self, snapshot: PlanningSnapshot) -> str:
         """Hash the snapshot payload so the persisted run can be reproduced and compared."""
@@ -465,3 +483,18 @@ class SqlitePlanRunRepository:
         if wall_time_seconds is None:
             return None
         return int(float(wall_time_seconds) * 1000)
+
+    def _ensure_plan_runs_column(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        column_name: str,
+        column_definition: str,
+    ) -> None:
+        """Add one missing `plan_runs` column for backward-compatible local upgrades."""
+
+        rows = connection.execute("PRAGMA table_info(plan_runs)").fetchall()
+        existing_columns = {row["name"] for row in rows}
+        if column_name in existing_columns:
+            return
+        connection.execute(f"ALTER TABLE plan_runs ADD COLUMN {column_name} {column_definition}")

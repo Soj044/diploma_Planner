@@ -11,7 +11,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from contracts.schemas import AssignmentProposal, TaskSnapshot, UnassignedTaskDiagnostic
+from contracts.schemas import AssignmentProposal, CandidateAnalysisRow, TaskSnapshot, UnassignedTaskDiagnostic
 
 from app.infrastructure.repositories.sqlite import PersistedPlanRunRecord, SqlitePlanRunRepository
 
@@ -33,6 +33,7 @@ def build_unassigned_index_feed(
                 employee_id: float(score)
                 for employee_id, score in record.response.artifacts.scores.get(diagnostic.task_id, {}).items()
             }
+            candidate_analysis = list(record.response.artifacts.candidate_analysis.get(diagnostic.task_id, []))
             items.append(
                 {
                     "source_type": "unassigned_case",
@@ -45,6 +46,7 @@ def build_unassigned_index_feed(
                         diagnostic=diagnostic,
                         eligibility=eligibility,
                         score_map=score_map,
+                        candidate_analysis=candidate_analysis,
                     ),
                     "metadata": {
                         "plan_run_id": record.plan_run_id,
@@ -53,6 +55,7 @@ def build_unassigned_index_feed(
                         "eligible_employee_ids": eligibility,
                         "eligible_count": len(eligibility),
                         "score_map": score_map,
+                        **_candidate_analysis_breakdown(candidate_analysis),
                     },
                     "source_updated_at": record.created_at.isoformat(),
                 }
@@ -95,6 +98,7 @@ def build_proposal_context(
         candidate_id: float(score)
         for candidate_id, score in record.response.artifacts.scores.get(task_id, {}).items()
     }
+    candidate_analysis = list(record.response.artifacts.candidate_analysis.get(task_id, []))
     return {
         "plan_run_summary": _plan_run_summary_payload(record),
         "task_snapshot": _task_snapshot_payload(task_snapshot),
@@ -105,6 +109,9 @@ def build_proposal_context(
             "eligible_count": len(eligibility),
         },
         "score_map": score_map,
+        "candidate_analysis": [_candidate_analysis_payload(row) for row in candidate_analysis],
+        "selected_employee_id": target_proposal.employee_id,
+        "selected_score": float(target_proposal.score),
         "solver_summary": record.response.artifacts.solver_statistics,
     }
 
@@ -128,6 +135,7 @@ def build_unassigned_context(
         candidate_id: float(score)
         for candidate_id, score in record.response.artifacts.scores.get(task_id, {}).items()
     }
+    candidate_analysis = list(record.response.artifacts.candidate_analysis.get(task_id, []))
     return {
         "plan_run_summary": _plan_run_summary_payload(record),
         "task_snapshot": _task_snapshot_payload(task_snapshot),
@@ -137,6 +145,7 @@ def build_unassigned_context(
             "eligible_count": len(eligibility),
         },
         "score_map": score_map,
+        "candidate_analysis": [_candidate_analysis_payload(row) for row in candidate_analysis],
         "solver_summary": record.response.artifacts.solver_statistics,
     }
 
@@ -230,6 +239,12 @@ def _proposal_payload(proposal: AssignmentProposal) -> dict[str, Any]:
     }
 
 
+def _candidate_analysis_payload(row: CandidateAnalysisRow) -> dict[str, Any]:
+    """Serialize one persisted candidate comparison row for internal AI readers."""
+
+    return row.model_dump(mode="json")
+
+
 def _diagnostic_payload(diagnostic: UnassignedTaskDiagnostic) -> dict[str, Any]:
     """Serialize one persisted unassigned diagnostic for internal AI context routes."""
 
@@ -254,6 +269,7 @@ def _unassigned_case_content(
     diagnostic: UnassignedTaskDiagnostic,
     eligibility: list[str],
     score_map: dict[str, float],
+    candidate_analysis: list[CandidateAnalysisRow],
 ) -> str:
     """Build a flattened retrieval body for one persisted unassigned case."""
 
@@ -263,6 +279,7 @@ def _unassigned_case_content(
     ]
     score_lines = [f"- {employee_id}: {score:.4f}" for employee_id, score in score_map.items()]
     solver_status = record.response.artifacts.solver_statistics.get("status", "unknown")
+    breakdown = _candidate_analysis_breakdown(candidate_analysis)
     return "\n".join(
         [
             f"Plan run id: {record.plan_run_id}",
@@ -276,8 +293,36 @@ def _unassigned_case_content(
             f"Diagnostic message: {diagnostic.message}",
             f"Diagnostic details: {diagnostic.reason_details or 'n/a'}",
             f"Eligible employee ids ({len(eligibility)}): {', '.join(eligibility) if eligibility else 'none'}",
+            (
+                "Candidate analysis breakdown: "
+                f"availability_rejections={breakdown['rejected_insufficient_availability_count']}, "
+                f"skill_rejections={breakdown['rejected_missing_skill_count']}, "
+                f"eligible_conflicts={breakdown['eligible_conflict_count']}, "
+                f"lower_score_alternatives={breakdown['eligible_lower_score_count']}"
+            ),
             "Score map:",
             *(score_lines or ["- none"]),
             f"Solver status: {solver_status}",
         ]
     )
+
+
+def _candidate_analysis_breakdown(candidate_analysis: list[CandidateAnalysisRow]) -> dict[str, int]:
+    """Summarize candidate outcomes into short retrieval-friendly counters."""
+
+    breakdown = {
+        "rejected_missing_skill_count": 0,
+        "rejected_insufficient_availability_count": 0,
+        "eligible_conflict_count": 0,
+        "eligible_lower_score_count": 0,
+    }
+    for row in candidate_analysis:
+        if row.outcome_code == "rejected_missing_required_skill":
+            breakdown["rejected_missing_skill_count"] += 1
+        elif row.outcome_code == "rejected_insufficient_available_hours":
+            breakdown["rejected_insufficient_availability_count"] += 1
+        elif row.outcome_code == "eligible_not_selected_capacity_or_conflict":
+            breakdown["eligible_conflict_count"] += 1
+        elif row.outcome_code == "eligible_not_selected_lower_score":
+            breakdown["eligible_lower_score_count"] += 1
+    return breakdown

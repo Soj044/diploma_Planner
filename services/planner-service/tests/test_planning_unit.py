@@ -49,6 +49,11 @@ def test_eligibility_filters_by_department_availability_and_skill() -> None:
 
     eligibility = evaluate_eligibility(employees, [task])
     assert eligibility.by_task["t1"] == ["e-ok"]
+    trace_by_employee = {
+        trace.employee_id: trace
+        for trace in eligibility.traces_by_task["t1"]
+    }
+    assert trace_by_employee["e-wrong-dep"].matched_department is False
 
 
 def test_eligibility_allows_cumulative_multi_slot_availability_within_task_window() -> None:
@@ -125,6 +130,38 @@ def test_eligibility_rejects_employee_with_insufficient_total_availability_hours
     eligibility = evaluate_eligibility(employees, [task])
 
     assert eligibility.by_task["t1"] == []
+    assert eligibility.traces_by_task["t1"][0].available_hours_in_window == 3
+
+
+def test_eligibility_traces_missing_skills_for_candidate_analysis() -> None:
+    """Record missing required skill ids so AI explanations can reuse hard-filter facts."""
+
+    task = TaskSnapshot(
+        task_id="t1",
+        department_id="dep-1",
+        title="Task",
+        starts_at=datetime(2026, 3, 23, 9, 0, tzinfo=timezone.utc),
+        ends_at=datetime(2026, 3, 23, 13, 0, tzinfo=timezone.utc),
+        estimated_hours=4,
+        requirements=[SkillRequirement(skill_id="skill-a", min_level=3)],
+    )
+    employee = EmployeeSnapshot(
+        employee_id="e-missing-skill",
+        department_id="dep-1",
+        skill_levels={"skill-a": 1},
+        availability=[
+            EmployeeAvailability(
+                start_at=datetime(2026, 3, 23, 9, 0, tzinfo=timezone.utc),
+                end_at=datetime(2026, 3, 23, 17, 0, tzinfo=timezone.utc),
+                available_hours=8,
+            )
+        ],
+    )
+
+    eligibility = evaluate_eligibility([employee], [task])
+
+    assert eligibility.by_task["t1"] == []
+    assert eligibility.traces_by_task["t1"][0].missing_skill_ids == ["skill-a"]
 
 
 def test_eligibility_uses_overlap_duration_when_slot_hours_are_missing() -> None:

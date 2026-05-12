@@ -9,6 +9,7 @@ from uuid import uuid4
 
 from contracts.schemas import PlanResponse, PlanRunArtifacts, PlanRunSummary, PlanningSnapshot
 
+from .analysis import build_candidate_analysis
 from .diagnostics import build_unassigned_diagnostics
 from .eligibility import evaluate_eligibility
 from .optimizer import build_plan
@@ -23,6 +24,7 @@ def run_planning(snapshot: PlanningSnapshot) -> PlanResponse:
     scores = calculate_scores(snapshot.employees, snapshot.tasks, eligibility)
     proposals, solver_stats = build_plan(snapshot.tasks, snapshot.employees, eligibility, scores)
     diagnostics = build_unassigned_diagnostics(snapshot.tasks, proposals, eligibility)
+    candidate_analysis = build_candidate_analysis(snapshot.tasks, eligibility, scores, proposals)
 
     return PlanResponse(
         summary=PlanRunSummary(
@@ -40,5 +42,6 @@ def run_planning(snapshot: PlanningSnapshot) -> PlanResponse:
             eligibility=eligibility.by_task,
             scores=scores.by_task,
             solver_statistics=solver_stats,
+            candidate_analysis=candidate_analysis,
         ),
     )

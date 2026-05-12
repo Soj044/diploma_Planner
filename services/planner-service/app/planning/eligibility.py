@@ -7,7 +7,7 @@ optimizer и diagnostics внутри planning pipeline.
 
 from contracts.schemas import EmployeeSnapshot, TaskSnapshot
 
-from .types import EligibilityResult
+from .types import CandidateEligibilityTrace, EligibilityResult
 
 
 def _task_hours(task: TaskSnapshot) -> int:
@@ -35,39 +35,55 @@ def _slot_available_hours(employee: EmployeeSnapshot, task: TaskSnapshot) -> flo
     return total_hours
 
 
-def _is_available(employee: EmployeeSnapshot, task: TaskSnapshot) -> bool:
-    """Allow employees whose intersecting availability covers task hours in total."""
+def _missing_skill_ids(employee: EmployeeSnapshot, task: TaskSnapshot) -> list[str]:
+    """Return every required skill the employee fails to satisfy."""
 
-    if not employee.availability:
-        return False
-    return _slot_available_hours(employee, task) >= _task_hours(task)
+    return [
+        requirement.skill_id
+        for requirement in task.requirements
+        if employee.skill_levels.get(requirement.skill_id, 0) < requirement.min_level
+    ]
 
 
-def _meets_requirements(employee: EmployeeSnapshot, task: TaskSnapshot) -> bool:
-    """Check that the employee meets every required skill threshold."""
+def _candidate_trace(employee: EmployeeSnapshot, task: TaskSnapshot) -> CandidateEligibilityTrace:
+    """Build one hard-filter trace that planner can later reuse for explanations."""
 
-    for requirement in task.requirements:
-        if employee.skill_levels.get(requirement.skill_id, 0) < requirement.min_level:
-            return False
-    return True
+    required_hours = _task_hours(task)
+    available_hours = _slot_available_hours(employee, task) if employee.availability else 0.0
+    missing_skill_ids = _missing_skill_ids(employee, task)
+    matched_department = not task.department_id or employee.department_id == task.department_id
+    eligible = (
+        employee.is_active
+        and matched_department
+        and available_hours >= required_hours
+        and not missing_skill_ids
+    )
+    return CandidateEligibilityTrace(
+        employee_id=employee.employee_id,
+        is_active=employee.is_active,
+        matched_department=matched_department,
+        eligible=eligible,
+        available_hours_in_window=available_hours,
+        required_hours=required_hours,
+        missing_skill_ids=missing_skill_ids,
+    )
 
 
 def evaluate_eligibility(employees: list[EmployeeSnapshot], tasks: list[TaskSnapshot]) -> EligibilityResult:
     """Apply hard business filters before scoring or optimization starts."""
 
     result: dict[str, list[str]] = {}
-    active_employees = [employee for employee in employees if employee.is_active]
+    traces_by_task: dict[str, list[CandidateEligibilityTrace]] = {}
 
     for task in tasks:
         eligible: list[str] = []
-        for employee in active_employees:
-            if task.department_id and employee.department_id != task.department_id:
-                continue
-            if not _is_available(employee, task):
-                continue
-            if not _meets_requirements(employee, task):
-                continue
-            eligible.append(employee.employee_id)
+        task_traces: list[CandidateEligibilityTrace] = []
+        for employee in employees:
+            trace = _candidate_trace(employee, task)
+            task_traces.append(trace)
+            if trace.eligible:
+                eligible.append(employee.employee_id)
         result[task.task_id] = eligible
+        traces_by_task[task.task_id] = task_traces
 
-    return EligibilityResult(by_task=result)
+    return EligibilityResult(by_task=result, traces_by_task=traces_by_task)

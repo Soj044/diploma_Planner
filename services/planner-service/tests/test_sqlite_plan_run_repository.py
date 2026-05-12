@@ -135,3 +135,4 @@ def test_sqlite_repository_roundtrip_preserves_full_artifact_slice(tmp_path) -> 
     assert loaded_response.artifacts.eligibility
     assert loaded_response.artifacts.scores
     assert loaded_response.artifacts.solver_statistics
+    assert loaded_response.artifacts.candidate_analysis
