@@ -137,7 +137,13 @@ class CoreServiceAuthClient:
         )
         return self._parse_index_feed_payload(payload)
 
-    def get_assignment_context(self, *, task_id: str, employee_id: str) -> AssignmentLiveContext:
+    def get_assignment_context(
+        self,
+        *,
+        task_id: str,
+        employee_id: str,
+        comparison_employee_ids: list[str] | None = None,
+    ) -> AssignmentLiveContext:
         """Read one live task-plus-employee assignment explanation context."""
 
         if not self._internal_service_token:
@@ -146,7 +152,14 @@ class CoreServiceAuthClient:
         payload = self._request_json(
             method="GET",
             path=f"/api/v1/internal/ai/tasks/{task_id}/assignment-context/",
-            query_params={"employee_id": employee_id},
+            query_params={
+                "employee_id": employee_id,
+                **(
+                    {"comparison_employee_ids": ",".join(comparison_employee_ids)}
+                    if comparison_employee_ids
+                    else {}
+                ),
+            },
             error_cls=CoreServiceAiReadError,
             unavailable_detail="core-service internal AI assignment context is unavailable",
             passthrough_status_codes={401, 403, 404},

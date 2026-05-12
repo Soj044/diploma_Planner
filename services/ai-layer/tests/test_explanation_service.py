@@ -96,11 +96,19 @@ class FakeCoreServiceClient:
 
         self.assignment_context = assignment_context
 
-    def get_assignment_context(self, *, task_id: str, employee_id: str) -> AssignmentLiveContext:
+    def get_assignment_context(
+        self,
+        *,
+        task_id: str,
+        employee_id: str,
+        comparison_employee_ids: list[str] | None = None,
+    ) -> AssignmentLiveContext:
         """Return the configured live assignment context."""
 
         assert task_id
         assert employee_id
+        if comparison_employee_ids is not None:
+            assert isinstance(comparison_employee_ids, list)
         return self.assignment_context
 
 
@@ -224,6 +232,21 @@ def _assignment_context() -> AssignmentLiveContext:
             "employee": {"id": "employee-1", "full_name": "Alice Worker"},
             "employee_skills": [{"skill_id": "skill-1", "skill_name": "Python", "level": 4}],
             "availability": {"schedule_days": [], "approved_leaves": [], "availability_overrides": []},
+            "availability_facts": {"available_hours_in_window": 8, "required_hours": 4},
+            "comparison_employees": [
+                {
+                    "employee": {"id": "employee-2", "full_name": "Bob Backup"},
+                    "employee_skills": [{"skill_id": "skill-1", "skill_name": "Python", "level": 4}],
+                    "availability": {"schedule_days": [], "approved_leaves": [], "availability_overrides": []},
+                    "availability_facts": {
+                        "available_hours_in_window": 0,
+                        "required_hours": 4,
+                        "approved_leave_overlap": True,
+                        "approved_leave_overlap_ranges": [{"start_date": "2026-03-23", "end_date": "2026-03-23"}],
+                        "has_insufficient_available_hours": True,
+                    },
+                }
+            ],
         }
     )
 
@@ -239,6 +262,34 @@ def _proposal_context() -> ProposalContext:
             "sibling_proposals": [{"task_id": "task-1", "employee_id": "employee-2", "score": 74.0}],
             "eligibility": {"employee_ids": ["employee-1", "employee-2"], "eligible_count": 2},
             "score_map": {"employee-1": 95.0, "employee-2": 74.0},
+            "candidate_analysis": [
+                {
+                    "employee_id": "employee-1",
+                    "outcome_code": "selected",
+                    "eligible": True,
+                    "score": 95.0,
+                    "selected": True,
+                    "available_hours_in_window": 8,
+                    "required_hours": 4,
+                    "missing_skill_ids": [],
+                    "missing_skill_names": [],
+                    "matched_department": True,
+                },
+                {
+                    "employee_id": "employee-2",
+                    "outcome_code": "rejected_insufficient_available_hours",
+                    "eligible": False,
+                    "score": None,
+                    "selected": False,
+                    "available_hours_in_window": 0,
+                    "required_hours": 4,
+                    "missing_skill_ids": [],
+                    "missing_skill_names": [],
+                    "matched_department": True,
+                },
+            ],
+            "selected_employee_id": "employee-1",
+            "selected_score": 95.0,
             "solver_summary": {"status": "OPTIMAL"},
         }
     )
@@ -259,6 +310,32 @@ def _unassigned_context() -> UnassignedContext:
             },
             "eligibility": {"employee_ids": ["employee-1"], "eligible_count": 1},
             "score_map": {"employee-1": 65.0},
+            "candidate_analysis": [
+                {
+                    "employee_id": "employee-1",
+                    "outcome_code": "eligible_not_selected_capacity_or_conflict",
+                    "eligible": True,
+                    "score": 65.0,
+                    "selected": False,
+                    "available_hours_in_window": 8,
+                    "required_hours": 4,
+                    "missing_skill_ids": [],
+                    "missing_skill_names": [],
+                    "matched_department": True,
+                },
+                {
+                    "employee_id": "employee-2",
+                    "outcome_code": "rejected_missing_required_skill",
+                    "eligible": False,
+                    "score": None,
+                    "selected": False,
+                    "available_hours_in_window": 8,
+                    "required_hours": 4,
+                    "missing_skill_ids": ["skill-2"],
+                    "missing_skill_names": [],
+                    "matched_department": True,
+                },
+            ],
             "solver_summary": {"status": "OPTIMAL"},
         }
     )
@@ -325,7 +402,7 @@ def test_build_assignment_rationale_filters_retrieval_and_logs_request() -> None
         user_context=_manager_context(),
     )
 
-    assert result.summary == "Candidate looks compatible with prior assignments."
+    assert result.summary.startswith("Candidate looks compatible with prior assignments.")
     assert repository.search_calls[0]["top_k"] == 5
     filters = repository.search_calls[0]["filters"]
     assert isinstance(filters, IndexSearchFilters)
@@ -346,12 +423,13 @@ def test_build_assignment_rationale_filters_retrieval_and_logs_request() -> None
     }
     prompt = ollama_client.generate_requests[0]["user_prompt"]
     assert isinstance(prompt, str)
-    assert "task_summary=" in prompt
-    assert "selected_proposal=" in prompt
-    assert "availability_summary=" in prompt
+    assert "selected_candidate_facts=" in prompt
+    assert "top_alternative_candidates=" in prompt
+    assert "top_score_comparison=" in prompt
     assert "live_assignment_context=" not in prompt
     assert "proposal_context=" not in prompt
     assert "content_excerpt" in prompt
+    assert any("approved leave overlapped the task window" in reason for reason in result.reasons)
 
 
 def test_build_assignment_rationale_appends_stale_note_when_refresh_fallback_is_used() -> None:
@@ -402,3 +480,26 @@ def test_build_unassigned_explanation_raises_502_for_invalid_structured_payload(
 
     assert exc_info.value.status_code == 502
     assert exc_info.value.detail == "ollama returned invalid structured explanation payload"
+
+
+def test_build_unassigned_explanation_adds_candidate_breakdown_reason() -> None:
+    """Append deterministic candidate-analysis facts even when LLM output stays generic."""
+
+    service = ExplanationService(
+        repository=FakeRepository(retrieved_items=[_retrieved_item()]),
+        reindex_service=FakeReindexService(ready=True),
+        core_service_client=FakeCoreServiceClient(_assignment_context()),
+        planner_service_client=FakePlannerServiceClient(
+            proposal_context=_proposal_context(),
+            unassigned_context=_unassigned_context(),
+        ),
+        ollama_client=FakeOllamaClient(embeddings=[_embedding()], generated_content=_generated_json()),
+    )
+
+    result = service.build_unassigned_explanation(
+        task_id="task-2",
+        plan_run_id="run-1",
+        user_context=_manager_context(),
+    )
+
+    assert any("eligible candidate(s) passed hard filters" in reason for reason in result.reasons)

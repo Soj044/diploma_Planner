@@ -21,6 +21,7 @@ Current scope:
   - task + employee assignment explanation context from `core-service`
   - persisted proposal/unassigned context from `planner-service`;
 - structured explanation generation through `Ollama /api/chat` with JSON-schema output;
+- hybrid explanation enrichment that appends deterministic comparison reasons from planner/core facts when the LLM response stays generic;
 - CLI full reindex entrypoint: `poetry run python -m app.cli.reindex --mode full`.
 
 Current service boundary:
@@ -54,6 +55,10 @@ Current retrieval/index scope:
 - `assignment_case` uses current flattened successful-assignment state from `core-service`;
 - `unassigned_case` uses completed persisted diagnostics from `planner-service`;
 - `employee/schedule/leave` stay out of the vector corpus and are used only as live context.
+- proposal explanations compare the selected employee against up to three relevant alternatives using:
+  - planner `candidate_analysis`
+  - live `comparison_employees`
+  - deterministic availability facts such as approved-leave overlap and insufficient available hours
 
 Still out of scope in this cycle:
 - richer hybrid retrieval or document-based RAG;

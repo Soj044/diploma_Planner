@@ -43,6 +43,8 @@ class AssignmentLiveContext(BaseModel):
     employee: dict[str, Any]
     employee_skills: list[dict[str, Any]] = Field(default_factory=list)
     availability: dict[str, Any]
+    availability_facts: dict[str, Any] = Field(default_factory=dict)
+    comparison_employees: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class ProposalContext(BaseModel):
@@ -54,6 +56,9 @@ class ProposalContext(BaseModel):
     sibling_proposals: list[dict[str, Any]] = Field(default_factory=list)
     eligibility: dict[str, Any]
     score_map: dict[str, float] = Field(default_factory=dict)
+    candidate_analysis: list[dict[str, Any]] = Field(default_factory=list)
+    selected_employee_id: str | None = None
+    selected_score: float | None = None
     solver_summary: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -65,6 +70,7 @@ class UnassignedContext(BaseModel):
     diagnostic: dict[str, Any]
     eligibility: dict[str, Any]
     score_map: dict[str, float] = Field(default_factory=dict)
+    candidate_analysis: list[dict[str, Any]] = Field(default_factory=list)
     solver_summary: dict[str, Any] = Field(default_factory=dict)
 
 

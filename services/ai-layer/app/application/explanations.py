@@ -142,15 +142,24 @@ class ExplanationService:
         ):
             raise ExplanationIndexNotReadyError()
 
-        live_context = self._read_assignment_live_context(task_id=task_id, employee_id=employee_id)
         proposal_context = self._read_proposal_context(
             plan_run_id=plan_run_id,
             task_id=task_id,
             employee_id=employee_id,
         )
+        comparison_employee_ids = self._assignment_comparison_employee_ids(proposal_context)
+        live_context = self._read_assignment_live_context(
+            task_id=task_id,
+            employee_id=employee_id,
+            comparison_employee_ids=comparison_employee_ids,
+        )
         retrieved_items = self._retrieve_similar_assignment_cases(
             task_id=task_id,
             employee_id=employee_id,
+            live_context=live_context,
+            proposal_context=proposal_context,
+        )
+        deterministic_reasons = self._deterministic_assignment_reasons(
             live_context=live_context,
             proposal_context=proposal_context,
         )
@@ -169,6 +178,11 @@ class ExplanationService:
             structured_output=structured_output,
             retrieved_items=retrieved_items,
             stale_sources=stale_sources,
+            extra_reasons=deterministic_reasons,
+            summary_suffix=self._assignment_summary_suffix(
+                live_context=live_context,
+                proposal_context=proposal_context,
+            ),
         )
 
     def build_unassigned_explanation(
@@ -199,6 +213,7 @@ class ExplanationService:
             task_id=task_id,
             unassigned_context=unassigned_context,
         )
+        deterministic_reasons = self._deterministic_unassigned_reasons(unassigned_context)
         structured_output = self._generate_structured_output(
             system_prompt=self._unassigned_system_prompt(),
             user_prompt=self._unassigned_user_prompt(
@@ -213,6 +228,7 @@ class ExplanationService:
             structured_output=structured_output,
             retrieved_items=retrieved_items,
             stale_sources=stale_sources,
+            extra_reasons=deterministic_reasons,
         )
 
     def _refresh_retrieval_slice(self, source_services: list[str]) -> set[str]:
@@ -223,13 +239,20 @@ class ExplanationService:
         except ReindexServiceError as exc:
             raise ExplanationServiceError(status_code=exc.status_code, detail=exc.detail) from exc
 
-    def _read_assignment_live_context(self, *, task_id: str, employee_id: str) -> AssignmentLiveContext:
+    def _read_assignment_live_context(
+        self,
+        *,
+        task_id: str,
+        employee_id: str,
+        comparison_employee_ids: list[str] | None = None,
+    ) -> AssignmentLiveContext:
         """Read the live core-service assignment context used in assignment prompts."""
 
         try:
             return self._core_service_client.get_assignment_context(
                 task_id=task_id,
                 employee_id=employee_id,
+                comparison_employee_ids=comparison_employee_ids,
             )
         except CoreServiceAiReadError as exc:
             raise ExplanationServiceError(status_code=exc.status_code, detail=exc.detail) from exc
@@ -282,14 +305,19 @@ class ExplanationService:
             {
                 "task_id": task_id,
                 "employee_id": employee_id,
-                "task_summary": self._task_summary(live_context.task),
-                "requirements": self._requirements_summary(live_context.requirements),
-                "employee_summary": self._employee_summary(live_context.employee),
-                "employee_skills": self._employee_skills_summary(live_context.employee_skills),
-                "availability_summary": self._availability_summary(live_context.availability),
-                "selected_proposal": self._proposal_summary(proposal_context.proposal),
-                "eligibility_summary": self._eligibility_summary(proposal_context.eligibility),
-                "score_summary": self._score_summary(proposal_context.score_map),
+                "selected_candidate_facts": self._assignment_selected_candidate_facts(
+                    live_context=live_context,
+                    proposal_context=proposal_context,
+                ),
+                "top_alternative_candidates": self._assignment_prompt_alternatives(
+                    live_context=live_context,
+                    proposal_context=proposal_context,
+                ),
+                "hard_filter_rejections": self._assignment_hard_filter_rejections(
+                    live_context=live_context,
+                    proposal_context=proposal_context,
+                ),
+                "top_score_comparison": self._top_score_comparison(proposal_context),
             }
         )
         return self._search_similar_items(
@@ -315,6 +343,9 @@ class ExplanationService:
                 "diagnostic": self._diagnostic_summary(unassigned_context.diagnostic),
                 "eligibility_summary": self._eligibility_summary(unassigned_context.eligibility),
                 "score_summary": self._score_summary(unassigned_context.score_map),
+                "candidate_analysis_breakdown": self._candidate_analysis_breakdown(
+                    unassigned_context.candidate_analysis
+                ),
                 "solver_summary": self._solver_summary(unassigned_context.solver_summary),
             }
         )
@@ -385,8 +416,10 @@ class ExplanationService:
 
         return (
             "You explain planner assignment proposals for managers. "
-            "Use only the provided live context, persisted planner context, and historical similar cases. "
-            "Do not invent missing facts, do not override planner decisions, and keep the answer advisory. "
+            "Use only the provided selected-candidate facts, alternative-candidate facts, persisted planner context, "
+            "and historical similar cases. Explicitly explain why the selected candidate was kept and why the main "
+            "alternatives were not selected. Do not invent missing facts, do not override planner decisions, and keep "
+            "the answer advisory. "
             "Return strict JSON that matches the provided schema."
         )
 
@@ -395,7 +428,8 @@ class ExplanationService:
 
         return (
             "You explain why a planner run left a task unassigned. "
-            "Use only the provided persisted planner context and historical similar cases. "
+            "Use only the provided persisted planner context, candidate outcome breakdowns, and historical similar cases. "
+            "Call out whether the task failed at hard filters or later scheduling conflicts. "
             "Do not invent missing facts, do not replace solver logic, and keep the answer advisory. "
             "Return strict JSON that matches the provided schema."
         )
@@ -412,15 +446,10 @@ class ExplanationService:
         return "\n\n".join(
             [
                 f"ownership_boundary={OWNERSHIP_ADVISORY}",
-                f"task_summary={self._dump_json(self._task_summary(live_context.task))}",
-                f"requirements={self._dump_json(self._requirements_summary(live_context.requirements))}",
-                f"employee_summary={self._dump_json(self._employee_summary(live_context.employee))}",
-                f"employee_skills={self._dump_json(self._employee_skills_summary(live_context.employee_skills))}",
-                f"availability_summary={self._dump_json(self._availability_summary(live_context.availability))}",
-                f"selected_proposal={self._dump_json(self._proposal_summary(proposal_context.proposal))}",
-                f"sibling_proposals={self._dump_json(self._sibling_proposals_summary(proposal_context.sibling_proposals))}",
-                f"eligibility_summary={self._dump_json(self._eligibility_summary(proposal_context.eligibility))}",
-                f"score_summary={self._dump_json(self._score_summary(proposal_context.score_map))}",
+                f"selected_candidate_facts={self._dump_json(self._assignment_selected_candidate_facts(live_context=live_context, proposal_context=proposal_context))}",
+                f"top_alternative_candidates={self._dump_json(self._assignment_prompt_alternatives(live_context=live_context, proposal_context=proposal_context))}",
+                f"hard_filter_rejections={self._dump_json(self._assignment_hard_filter_rejections(live_context=live_context, proposal_context=proposal_context))}",
+                f"top_score_comparison={self._dump_json(self._top_score_comparison(proposal_context))}",
                 f"solver_summary={self._dump_json(self._solver_summary(proposal_context.solver_summary))}",
                 f"similar_cases={self._dump_json(self._retrieved_cases_prompt_payload(retrieved_items))}",
             ]
@@ -441,6 +470,8 @@ class ExplanationService:
                 f"diagnostic={self._dump_json(self._diagnostic_summary(unassigned_context.diagnostic))}",
                 f"eligibility_summary={self._dump_json(self._eligibility_summary(unassigned_context.eligibility))}",
                 f"score_summary={self._dump_json(self._score_summary(unassigned_context.score_map))}",
+                f"candidate_analysis_breakdown={self._dump_json(self._candidate_analysis_breakdown(unassigned_context.candidate_analysis))}",
+                f"top_candidate_outcomes={self._dump_json(self._top_candidate_outcomes(unassigned_context.candidate_analysis))}",
                 f"solver_summary={self._dump_json(self._solver_summary(unassigned_context.solver_summary))}",
                 f"similar_cases={self._dump_json(self._retrieved_cases_prompt_payload(retrieved_items))}",
             ]
@@ -519,7 +550,7 @@ class ExplanationService:
                 "task_id",
                 "employee_id",
                 "score",
-                "rank",
+                "proposal_rank",
                 "planned_hours",
                 "status",
                 "start_date",
@@ -532,7 +563,7 @@ class ExplanationService:
         """Keep only a short summary of competing proposals for the same task."""
 
         return [
-            self._pick_fields(proposal, ("employee_id", "score", "rank", "status", "is_selected"))
+            self._pick_fields(proposal, ("employee_id", "score", "proposal_rank", "status", "is_selected"))
             for proposal in proposals[:MAX_PROMPT_SIMILAR_CASES]
         ]
 
@@ -552,6 +583,58 @@ class ExplanationService:
         return [
             {"employee_id": employee_id, "score": round(float(score), 4)}
             for employee_id, score in score_items[:MAX_PROMPT_SCORES]
+        ]
+
+    def _candidate_analysis_breakdown(self, candidate_analysis: list[dict[str, Any]]) -> dict[str, int]:
+        """Reduce candidate outcomes to short histogram counts for prompts and reasoning."""
+
+        breakdown = {
+            "selected_count": 0,
+            "eligible_lower_score_count": 0,
+            "eligible_conflict_count": 0,
+            "rejected_insufficient_availability_count": 0,
+            "rejected_missing_skill_count": 0,
+            "rejected_department_count": 0,
+            "rejected_inactive_count": 0,
+        }
+        for row in candidate_analysis:
+            outcome_code = row.get("outcome_code")
+            if outcome_code == "selected":
+                breakdown["selected_count"] += 1
+            elif outcome_code == "eligible_not_selected_lower_score":
+                breakdown["eligible_lower_score_count"] += 1
+            elif outcome_code == "eligible_not_selected_capacity_or_conflict":
+                breakdown["eligible_conflict_count"] += 1
+            elif outcome_code == "rejected_insufficient_available_hours":
+                breakdown["rejected_insufficient_availability_count"] += 1
+            elif outcome_code == "rejected_missing_required_skill":
+                breakdown["rejected_missing_skill_count"] += 1
+            elif outcome_code == "rejected_department_mismatch":
+                breakdown["rejected_department_count"] += 1
+            elif outcome_code == "rejected_inactive_employee":
+                breakdown["rejected_inactive_count"] += 1
+        return breakdown
+
+    def _top_candidate_outcomes(self, candidate_analysis: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Return the most explanation-relevant candidate outcome rows for prompts."""
+
+        rows = sorted(candidate_analysis, key=self._candidate_outcome_sort_key)
+        return [
+            self._pick_fields(
+                row,
+                (
+                    "employee_id",
+                    "outcome_code",
+                    "eligible",
+                    "score",
+                    "selected",
+                    "available_hours_in_window",
+                    "required_hours",
+                    "missing_skill_ids",
+                    "missing_skill_names",
+                ),
+            )
+            for row in rows[:MAX_PROMPT_SIMILAR_CASES]
         ]
 
     def _solver_summary(self, solver_payload: dict[str, Any]) -> dict[str, Any]:
@@ -614,6 +697,291 @@ class ExplanationService:
             result[field_name] = value
         return result
 
+    def _assignment_comparison_employee_ids(self, proposal_context: ProposalContext) -> list[str]:
+        """Pick a small stable set of alternative employees for live comparison reads."""
+
+        rows = sorted(proposal_context.candidate_analysis, key=self._candidate_outcome_sort_key)
+        selected_employee_id = proposal_context.selected_employee_id or str(
+            proposal_context.proposal.get("employee_id", "")
+        )
+        return [
+            str(row.get("employee_id"))
+            for row in rows
+            if str(row.get("employee_id")) != selected_employee_id
+        ][:MAX_PROMPT_SIMILAR_CASES]
+
+    def _assignment_selected_candidate_facts(
+        self,
+        *,
+        live_context: AssignmentLiveContext,
+        proposal_context: ProposalContext,
+    ) -> dict[str, Any]:
+        """Build the compact selected-candidate fact block sent to the LLM."""
+
+        return {
+            "task_summary": self._task_summary(live_context.task),
+            "requirements": self._requirements_summary(live_context.requirements),
+            "employee_summary": self._employee_summary(live_context.employee),
+            "employee_skills": self._employee_skills_summary(live_context.employee_skills),
+            "availability_facts": self._pick_fields(
+                live_context.availability_facts,
+                (
+                    "available_hours_in_window",
+                    "required_hours",
+                    "schedule_hours_in_window",
+                    "approved_leave_overlap",
+                    "availability_override_overlap",
+                    "has_insufficient_available_hours",
+                ),
+            ),
+            "selected_proposal": self._proposal_summary(proposal_context.proposal),
+        }
+
+    def _assignment_prompt_alternatives(
+        self,
+        *,
+        live_context: AssignmentLiveContext,
+        proposal_context: ProposalContext,
+    ) -> list[dict[str, Any]]:
+        """Build compact comparison facts for top alternative candidates."""
+
+        comparison_by_id = self._comparison_employee_lookup(live_context)
+        rows = sorted(proposal_context.candidate_analysis, key=self._candidate_outcome_sort_key)
+        selected_employee_id = proposal_context.selected_employee_id or str(
+            proposal_context.proposal.get("employee_id", "")
+        )
+        alternatives: list[dict[str, Any]] = []
+        for row in rows:
+            employee_id = str(row.get("employee_id"))
+            if employee_id == selected_employee_id:
+                continue
+            comparison_payload = comparison_by_id.get(employee_id, {})
+            alternatives.append(
+                {
+                    "employee_id": employee_id,
+                    "employee_name": comparison_payload.get("employee", {}).get("full_name"),
+                    "outcome_code": row.get("outcome_code"),
+                    "score": row.get("score"),
+                    "available_hours_in_window": row.get("available_hours_in_window"),
+                    "required_hours": row.get("required_hours"),
+                    "missing_skill_ids": list(row.get("missing_skill_ids", [])),
+                    "missing_skill_names": list(row.get("missing_skill_names", [])),
+                    "availability_facts": self._pick_fields(
+                        comparison_payload.get("availability_facts", {}),
+                        (
+                            "available_hours_in_window",
+                            "required_hours",
+                            "approved_leave_overlap",
+                            "approved_leave_overlap_ranges",
+                            "availability_override_overlap",
+                            "availability_override_ranges",
+                            "has_insufficient_available_hours",
+                        ),
+                    ),
+                }
+            )
+            if len(alternatives) >= MAX_PROMPT_SIMILAR_CASES:
+                break
+        return alternatives
+
+    def _assignment_hard_filter_rejections(
+        self,
+        *,
+        live_context: AssignmentLiveContext,
+        proposal_context: ProposalContext,
+    ) -> list[dict[str, Any]]:
+        """Keep only hard-filter rejection facts that are useful for prompt comparison."""
+
+        return [
+            alternative
+            for alternative in self._assignment_prompt_alternatives(
+                live_context=live_context,
+                proposal_context=proposal_context,
+            )
+            if str(alternative.get("outcome_code", "")).startswith("rejected_")
+        ]
+
+    def _top_score_comparison(self, proposal_context: ProposalContext) -> dict[str, Any]:
+        """Expose the selected score and competing eligible scores in a compact prompt shape."""
+
+        selected_employee_id = proposal_context.selected_employee_id or str(
+            proposal_context.proposal.get("employee_id", "")
+        )
+        selected_score = proposal_context.selected_score
+        alternatives = [
+            {
+                "employee_id": str(row.get("employee_id")),
+                "score": row.get("score"),
+                "outcome_code": row.get("outcome_code"),
+            }
+            for row in sorted(proposal_context.candidate_analysis, key=self._candidate_outcome_sort_key)
+            if str(row.get("employee_id")) != selected_employee_id and row.get("eligible") is True
+        ][:MAX_PROMPT_SCORES]
+        return {
+            "selected_employee_id": selected_employee_id,
+            "selected_score": round(float(selected_score), 4) if selected_score is not None else None,
+            "alternatives": alternatives,
+        }
+
+    def _comparison_employee_lookup(self, live_context: AssignmentLiveContext) -> dict[str, dict[str, Any]]:
+        """Index live comparison employee payloads by employee identifier."""
+
+        return {
+            str(row.get("employee", {}).get("id")): row
+            for row in live_context.comparison_employees
+            if isinstance(row, dict)
+        }
+
+    def _candidate_outcome_sort_key(self, row: dict[str, Any]) -> tuple[int, float, str]:
+        """Keep candidate outcome rows in a stable explanation-friendly priority order."""
+
+        priority_map = {
+            "selected": 0,
+            "eligible_not_selected_lower_score": 1,
+            "eligible_not_selected_capacity_or_conflict": 2,
+            "rejected_insufficient_available_hours": 3,
+            "rejected_missing_required_skill": 4,
+            "rejected_department_mismatch": 5,
+            "rejected_inactive_employee": 6,
+        }
+        score = float(row.get("score", -1.0) or -1.0)
+        employee_id = str(row.get("employee_id", ""))
+        return (priority_map.get(str(row.get("outcome_code")), 99), -score, employee_id)
+
+    def _assignment_summary_suffix(
+        self,
+        *,
+        live_context: AssignmentLiveContext,
+        proposal_context: ProposalContext,
+    ) -> str:
+        """Build one short deterministic comparison sentence for the summary when possible."""
+
+        alternatives = self._assignment_prompt_alternatives(
+            live_context=live_context,
+            proposal_context=proposal_context,
+        )
+        if not alternatives:
+            return "No other candidate survived hard filters for this task."
+        lower_score_count = len(
+            [row for row in alternatives if row.get("outcome_code") == "eligible_not_selected_lower_score"]
+        )
+        availability_count = len(
+            [row for row in alternatives if row.get("outcome_code") == "rejected_insufficient_available_hours"]
+        )
+        if lower_score_count and availability_count:
+            return (
+                "Persisted planner facts show both lower-scored eligible alternatives and availability-based rejections."
+            )
+        if lower_score_count:
+            return "Persisted planner facts show that the selected employee kept the strongest eligible score."
+        if availability_count:
+            return "Persisted planner facts show that one or more competing candidates failed availability."
+        return "Persisted planner facts show that alternative candidates were filtered or displaced by planner constraints."
+
+    def _deterministic_assignment_reasons(
+        self,
+        *,
+        live_context: AssignmentLiveContext,
+        proposal_context: ProposalContext,
+    ) -> list[str]:
+        """Generate deterministic alternative-candidate reasons that LLM output cannot omit."""
+
+        alternatives = self._assignment_prompt_alternatives(
+            live_context=live_context,
+            proposal_context=proposal_context,
+        )
+        if not alternatives and int(proposal_context.eligibility.get("eligible_count", 0) or 0) <= 1:
+            return ["No other candidate survived hard filters for this task."]
+
+        selected_name = str(live_context.employee.get("full_name", "the selected employee"))
+        selected_score = proposal_context.selected_score
+        reasons: list[str] = []
+        for alternative in alternatives:
+            employee_name = str(
+                alternative.get("employee_name")
+                or alternative.get("employee_id")
+                or "the competing candidate"
+            )
+            outcome_code = str(alternative.get("outcome_code", ""))
+            if outcome_code == "eligible_not_selected_lower_score":
+                competitor_score = alternative.get("score")
+                if selected_score is not None and competitor_score is not None:
+                    reasons.append(
+                        f"{employee_name} also passed hard filters, but planner selected {selected_name} because "
+                        f"the persisted score was higher ({float(selected_score):.2f} vs {float(competitor_score):.2f})."
+                    )
+                else:
+                    reasons.append(
+                        f"{employee_name} also passed hard filters, but planner selected {selected_name} because the "
+                        "persisted score was higher."
+                    )
+            elif outcome_code == "rejected_insufficient_available_hours":
+                availability_facts = alternative.get("availability_facts", {})
+                available_hours = alternative.get("available_hours_in_window")
+                required_hours = alternative.get("required_hours")
+                if availability_facts.get("approved_leave_overlap"):
+                    reasons.append(
+                        f"{employee_name} matched the skill requirements, but approved leave overlapped the task "
+                        "window, so the candidate did not have enough available hours."
+                    )
+                elif availability_facts.get("availability_override_overlap"):
+                    reasons.append(
+                        f"{employee_name} matched the skill requirements, but current availability overrides reduced "
+                        "available hours below the task requirement."
+                    )
+                elif available_hours is not None and required_hours is not None:
+                    reasons.append(
+                        f"{employee_name} did not have enough available hours in the task window "
+                        f"({available_hours} available vs {required_hours} required)."
+                    )
+                else:
+                    reasons.append(
+                        f"{employee_name} matched the skill requirements, but failed the planner availability check."
+                    )
+            elif outcome_code == "rejected_missing_required_skill":
+                missing_skill_names = [str(name) for name in alternative.get("missing_skill_names", []) if str(name)]
+                missing_skill_ids = [str(skill_id) for skill_id in alternative.get("missing_skill_ids", []) if str(skill_id)]
+                missing_skills = ", ".join(missing_skill_names or missing_skill_ids)
+                if missing_skills:
+                    reasons.append(
+                        f"{employee_name} was filtered out because required skills were missing or below threshold: "
+                        f"{missing_skills}."
+                    )
+                else:
+                    reasons.append(
+                        f"{employee_name} was filtered out because required skills were missing or below threshold."
+                    )
+            elif outcome_code == "eligible_not_selected_capacity_or_conflict":
+                reasons.append(
+                    f"{employee_name} survived hard filters, but the persisted planner run kept a conflicting or "
+                    "higher-value placement elsewhere instead of selecting this candidate for the task."
+                )
+        return reasons
+
+    def _deterministic_unassigned_reasons(self, unassigned_context: UnassignedContext) -> list[str]:
+        """Generate deterministic unassigned reasons from persisted candidate analysis."""
+
+        breakdown = self._candidate_analysis_breakdown(unassigned_context.candidate_analysis)
+        reasons: list[str] = []
+        if breakdown["eligible_conflict_count"] > 0:
+            reasons.append(
+                f"{breakdown['eligible_conflict_count']} eligible candidate(s) passed hard filters, but the solver "
+                "could not place them without conflicts in the persisted run."
+            )
+        if breakdown["rejected_insufficient_availability_count"] > 0:
+            reasons.append(
+                f"{breakdown['rejected_insufficient_availability_count']} candidate(s) failed the availability check "
+                "for the task window."
+            )
+        if breakdown["rejected_missing_skill_count"] > 0:
+            reasons.append(
+                f"{breakdown['rejected_missing_skill_count']} candidate(s) were filtered out by missing or "
+                "insufficient required skills."
+            )
+        if not reasons and int(unassigned_context.eligibility.get("eligible_count", 0) or 0) == 0:
+            reasons.append("No candidate survived the planner hard filters for this task.")
+        return reasons
+
     def _finalize_result(
         self,
         *,
@@ -623,6 +991,8 @@ class ExplanationService:
         structured_output: StructuredExplanationOutput,
         retrieved_items: list[RetrievedIndexItem],
         stale_sources: set[str],
+        extra_reasons: list[str] | None = None,
+        summary_suffix: str = "",
     ) -> ExplanationResult:
         """Build the final public explanation payload and persist one explanation log."""
 
@@ -633,9 +1003,14 @@ class ExplanationService:
                 f"{advisory_note} Note: this explanation used a stale ai-layer retrieval index for {stale_list}."
             )
 
+        summary = structured_output.summary.strip()
+        if summary_suffix:
+            summary = f"{summary} {summary_suffix}".strip()
+        reasons = self._merge_reason_lists(extra_reasons or [], list(structured_output.reasons))
+
         result = ExplanationResult(
-            summary=structured_output.summary,
-            reasons=list(structured_output.reasons),
+            summary=summary,
+            reasons=reasons,
             risks=list(structured_output.risks),
             recommended_actions=list(structured_output.recommended_actions),
             similar_cases=self._build_similar_cases(retrieved_items),
@@ -650,6 +1025,19 @@ class ExplanationService:
             model_name=self._model_name,
         )
         return result
+
+    def _merge_reason_lists(self, preferred: list[str], generated: list[str]) -> list[str]:
+        """Merge deterministic and generated reasons while keeping order and uniqueness."""
+
+        seen: set[str] = set()
+        merged: list[str] = []
+        for reason in [*preferred, *generated]:
+            normalized = " ".join(str(reason).split())
+            if not normalized or normalized in seen:
+                continue
+            seen.add(normalized)
+            merged.append(normalized)
+        return merged
 
     def _build_similar_cases(self, retrieved_items: list[RetrievedIndexItem]) -> list[SimilarCase]:
         """Convert retrieved index records into compact browser-facing similar case payloads."""
