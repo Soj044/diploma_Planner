@@ -43,6 +43,23 @@ def _parse_employee_id(raw_employee_id: str | None) -> int:
         raise ValueError("employee_id must be an integer.") from exc
 
 
+def _parse_comparison_employee_ids(raw_value: str | None) -> list[int]:
+    """Parse an optional comma-separated list of comparison employee identifiers."""
+
+    if raw_value is None or not raw_value.strip():
+        return []
+    parsed_ids: list[int] = []
+    for raw_item in raw_value.split(","):
+        value = raw_item.strip()
+        if not value:
+            continue
+        try:
+            parsed_ids.append(int(value))
+        except ValueError as exc:
+            raise ValueError("comparison_employee_ids must contain only integers.") from exc
+    return parsed_ids
+
+
 class InternalAiServiceBoundaryView(APIView):
     """Expose the core-service ownership boundary for trusted internal AI calls."""
 
@@ -94,7 +111,14 @@ class InternalAiAssignmentContextView(APIView):
 
         try:
             employee_id = _parse_employee_id(request.query_params.get("employee_id"))
-            payload = build_assignment_context(task_id=task_id, employee_id=employee_id)
+            comparison_employee_ids = _parse_comparison_employee_ids(
+                request.query_params.get("comparison_employee_ids")
+            )
+            payload = build_assignment_context(
+                task_id=task_id,
+                employee_id=employee_id,
+                comparison_employee_ids=comparison_employee_ids,
+            )
         except ValueError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         except ObjectDoesNotExist:

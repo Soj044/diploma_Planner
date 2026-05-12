@@ -61,6 +61,27 @@ class InternalAiApiTests(APITestCase):
             skill=self.python_skill,
             level=4,
         )
+        self.comparison_user = user_model.objects.create_user(
+            username="comparison-ai-test",
+            email="comparison-ai@example.com",
+            password="pass12345",
+            role="employee",
+        )
+        self.comparison_employee = Employee.objects.create(
+            user=self.comparison_user,
+            department=self.department,
+            full_name="Bob Backup",
+            position_name="Assembler",
+            employment_type=Employee.EmploymentType.FULL_TIME,
+            weekly_capacity_hours=40,
+            timezone="UTC",
+            is_active=True,
+        )
+        EmployeeSkill.objects.create(
+            employee=self.comparison_employee,
+            skill=self.python_skill,
+            level=4,
+        )
         self.task = Task.objects.create(
             department=self.department,
             title="Assemble batch",
@@ -109,6 +130,17 @@ class InternalAiApiTests(APITestCase):
             is_working_day=False,
             capacity_hours=0,
         )
+        comparison_schedule = WorkSchedule.objects.create(
+            employee=self.comparison_employee,
+            name="Default",
+            is_default=True,
+        )
+        WorkScheduleDay.objects.create(
+            schedule=comparison_schedule,
+            weekday=self.task.start_date.weekday(),
+            is_working_day=True,
+            capacity_hours=8,
+        )
         EmployeeLeave.objects.create(
             employee=self.employee,
             leave_type=EmployeeLeave.LeaveType.DAY_OFF,
@@ -124,6 +156,14 @@ class InternalAiApiTests(APITestCase):
             start_date=self.task.due_date + timedelta(days=5),
             end_date=self.task.due_date + timedelta(days=6),
             comment="Future leave",
+        )
+        EmployeeLeave.objects.create(
+            employee=self.comparison_employee,
+            leave_type=EmployeeLeave.LeaveType.VACATION,
+            status=EmployeeLeave.Status.APPROVED,
+            start_date=self.task.start_date,
+            end_date=self.task.start_date,
+            comment="Overlapping vacation",
         )
         EmployeeAvailabilityOverride.objects.create(
             employee=self.employee,
@@ -247,6 +287,26 @@ class InternalAiApiTests(APITestCase):
         assert len(payload["availability"]["approved_leaves"]) == 1
         assert len(payload["availability"]["availability_overrides"]) == 1
         assert len(payload["availability"]["schedule_days"]) == 2
+        assert payload["availability_facts"]["available_hours_in_window"] >= 4
+
+    def test_internal_ai_assignment_context_returns_comparison_employee_facts(self) -> None:
+        """Return comparison employee live availability facts for AI candidate comparisons."""
+
+        response = self.client.get(
+            (
+                f"/api/v1/internal/ai/tasks/{self.task.id}/assignment-context/"
+                f"?employee_id={self.employee.id}&comparison_employee_ids={self.comparison_employee.id}"
+            ),
+            HTTP_X_INTERNAL_SERVICE_TOKEN="ai-layer-shared-token",
+        )
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert len(payload["comparison_employees"]) == 1
+        comparison = payload["comparison_employees"][0]
+        assert comparison["employee"]["id"] == str(self.comparison_employee.id)
+        assert comparison["availability_facts"]["approved_leave_overlap"] is True
+        assert comparison["availability_facts"]["has_insufficient_available_hours"] is True
 
     def test_internal_ai_assignment_context_requires_internal_token(self) -> None:
         """Reject anonymous access to the live assignment-context endpoint."""

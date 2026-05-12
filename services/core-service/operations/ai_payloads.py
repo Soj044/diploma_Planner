@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta
 from decimal import Decimal
+from math import ceil
 from typing import Any
 
 from django.db.models import Prefetch, Q, QuerySet
@@ -70,14 +71,37 @@ def build_assignment_index_feed(changed_since: datetime | None) -> dict[str, Any
     }
 
 
-def build_assignment_context(*, task_id: int, employee_id: int) -> dict[str, Any]:
-    """Build the live assignment explanation context for one task and employee pair."""
+def build_assignment_context(
+    *,
+    task_id: int,
+    employee_id: int,
+    comparison_employee_ids: list[int] | None = None,
+) -> dict[str, Any]:
+    """Build the live assignment explanation context for one selected and optional comparison employees."""
 
     task = _get_task_for_ai_context(task_id)
-    employee = _get_employee_for_ai_context(employee_id)
     window_start, window_end = _task_window(task)
-    default_schedule = _get_default_schedule(employee)
-    relevant_weekdays = _window_weekdays(window_start, window_end)
+    ordered_ids = [employee_id, *(comparison_employee_ids or [])]
+    employees_by_id = _get_employees_for_ai_context(ordered_ids)
+    if employee_id not in employees_by_id:
+        raise Employee.DoesNotExist("Selected employee was not found.")
+
+    selected_employee_payload = _employee_context_payload(
+        employees_by_id[employee_id],
+        task=task,
+        window_start=window_start,
+        window_end=window_end,
+    )
+    comparison_payloads = [
+        _employee_context_payload(
+            employees_by_id[comparison_employee_id],
+            task=task,
+            window_start=window_start,
+            window_end=window_end,
+        )
+        for comparison_employee_id in ordered_ids[1:]
+        if comparison_employee_id in employees_by_id
+    ]
 
     return {
         "task": {
@@ -93,44 +117,11 @@ def build_assignment_context(*, task_id: int, employee_id: int) -> dict[str, Any
             "department_name": task.department.name if task.department else None,
         },
         "requirements": [_requirement_payload(requirement) for requirement in task.requirements.all()],
-        "employee": {
-            "id": str(employee.id),
-            "full_name": employee.full_name,
-            "position_name": employee.position_name,
-            "department_id": str(employee.department_id) if employee.department_id else None,
-            "department_name": employee.department.name if employee.department else None,
-            "employment_type": employee.employment_type,
-            "weekly_capacity_hours": employee.weekly_capacity_hours,
-            "timezone": employee.timezone,
-            "is_active": employee.is_active,
-        },
-        "employee_skills": [_employee_skill_payload(skill) for skill in employee.skills.all()],
-        "availability": {
-            "default_schedule_id": str(default_schedule.id) if default_schedule else None,
-            "default_schedule_name": default_schedule.name if default_schedule else None,
-            "schedule_days": [
-                _schedule_day_payload(day)
-                for day in sorted(default_schedule.days.all(), key=lambda item: item.weekday)
-                if day.weekday in relevant_weekdays
-            ]
-            if default_schedule
-            else [],
-            "approved_leaves": [
-                _leave_payload(leave)
-                for leave in employee.leaves.all()
-                if leave.status == EmployeeLeave.Status.APPROVED and _date_ranges_overlap(
-                    leave.start_date,
-                    leave.end_date,
-                    window_start,
-                    window_end,
-                )
-            ],
-            "availability_overrides": [
-                _availability_override_payload(override)
-                for override in employee.availability_overrides.all()
-                if window_start <= override.date <= window_end
-            ],
-        },
+        "employee": selected_employee_payload["employee"],
+        "employee_skills": selected_employee_payload["employee_skills"],
+        "availability": selected_employee_payload["availability"],
+        "availability_facts": selected_employee_payload["availability_facts"],
+        "comparison_employees": comparison_payloads,
     }
 
 
@@ -188,10 +179,10 @@ def _get_task_for_ai_context(task_id: int) -> Task:
     )
 
 
-def _get_employee_for_ai_context(employee_id: int) -> Employee:
-    """Load one employee together with the live availability slice dependencies."""
+def _get_employees_for_ai_context(employee_ids: list[int]) -> dict[int, Employee]:
+    """Load employees together with the live availability slice dependencies."""
 
-    return (
+    employees = (
         Employee.objects.select_related("department")
         .prefetch_related(
             Prefetch(
@@ -210,8 +201,9 @@ def _get_employee_for_ai_context(employee_id: int) -> Employee:
                 queryset=EmployeeAvailabilityOverride.objects.order_by("date", "id"),
             ),
         )
-        .get(pk=employee_id)
+        .filter(pk__in=employee_ids)
     )
+    return {employee.id: employee for employee in employees}
 
 
 def _assignment_source_updated_at(assignment: Assignment) -> datetime:
@@ -380,6 +372,157 @@ def _window_weekdays(window_start: date, window_end: date) -> set[int]:
     for current_date in _date_range(window_start, window_end):
         weekdays.add(current_date.weekday())
     return weekdays
+
+
+def _employee_context_payload(
+    employee: Employee,
+    *,
+    task: Task,
+    window_start: date,
+    window_end: date,
+) -> dict[str, Any]:
+    """Build the reusable live AI context payload for one employee."""
+
+    default_schedule = _get_default_schedule(employee)
+    relevant_weekdays = _window_weekdays(window_start, window_end)
+    approved_leaves = [
+        _leave_payload(leave)
+        for leave in employee.leaves.all()
+        if leave.status == EmployeeLeave.Status.APPROVED
+        and _date_ranges_overlap(leave.start_date, leave.end_date, window_start, window_end)
+    ]
+    availability_overrides = [
+        _availability_override_payload(override)
+        for override in employee.availability_overrides.all()
+        if window_start <= override.date <= window_end
+    ]
+    schedule_days = (
+        [
+            _schedule_day_payload(day)
+            for day in sorted(default_schedule.days.all(), key=lambda item: item.weekday)
+            if day.weekday in relevant_weekdays
+        ]
+        if default_schedule
+        else []
+    )
+    availability = {
+        "default_schedule_id": str(default_schedule.id) if default_schedule else None,
+        "default_schedule_name": default_schedule.name if default_schedule else None,
+        "schedule_days": schedule_days,
+        "approved_leaves": approved_leaves,
+        "availability_overrides": availability_overrides,
+    }
+    return {
+        "employee": {
+            "id": str(employee.id),
+            "full_name": employee.full_name,
+            "position_name": employee.position_name,
+            "department_id": str(employee.department_id) if employee.department_id else None,
+            "department_name": employee.department.name if employee.department else None,
+            "employment_type": employee.employment_type,
+            "weekly_capacity_hours": employee.weekly_capacity_hours,
+            "timezone": employee.timezone,
+            "is_active": employee.is_active,
+        },
+        "employee_skills": [_employee_skill_payload(skill) for skill in employee.skills.all()],
+        "availability": availability,
+        "availability_facts": _availability_facts(
+            task=task,
+            employee=employee,
+            schedule_days=schedule_days,
+            approved_leaves=approved_leaves,
+            availability_overrides=availability_overrides,
+            window_start=window_start,
+            window_end=window_end,
+        ),
+    }
+
+
+def _availability_facts(
+    *,
+    task: Task,
+    employee: Employee,
+    schedule_days: list[dict[str, Any]],
+    approved_leaves: list[dict[str, Any]],
+    availability_overrides: list[dict[str, Any]],
+    window_start: date,
+    window_end: date,
+) -> dict[str, Any]:
+    """Build deterministic live availability facts reused by ai-layer explanations."""
+
+    schedule_day_by_weekday = {int(day["weekday"]): day for day in schedule_days}
+    leave_dates = _expanded_leave_dates(approved_leaves)
+    overrides_by_date = {
+        date.fromisoformat(str(override["date"])): int(override["available_hours"])
+        for override in availability_overrides
+    }
+
+    schedule_hours = 0
+    available_hours = 0
+    for current_date in _date_range(window_start, window_end):
+        weekday_payload = schedule_day_by_weekday.get(current_date.weekday())
+        weekday_capacity = (
+            int(weekday_payload["capacity_hours"])
+            if weekday_payload and weekday_payload.get("is_working_day")
+            else 0
+        )
+        schedule_hours += weekday_capacity
+        if current_date in leave_dates:
+            continue
+        if current_date in overrides_by_date:
+            available_hours += max(overrides_by_date[current_date], 0)
+            continue
+        available_hours += weekday_capacity
+
+    required_hours = _task_required_hours(task)
+    return {
+        "available_hours_in_window": available_hours,
+        "required_hours": required_hours,
+        "schedule_hours_in_window": schedule_hours,
+        "approved_leave_overlap": bool(approved_leaves),
+        "approved_leave_overlap_ranges": [
+            _pick_fields(leave_payload, ("start_date", "end_date", "status"))
+            for leave_payload in approved_leaves
+        ],
+        "availability_override_overlap": bool(availability_overrides),
+        "availability_override_ranges": [
+            _pick_fields(override_payload, ("date", "available_hours"))
+            for override_payload in availability_overrides
+        ],
+        "has_insufficient_available_hours": available_hours < required_hours,
+        "employee_is_active": employee.is_active,
+    }
+
+
+def _task_required_hours(task: Task) -> int:
+    """Mirror planner effort normalization for availability comparisons."""
+
+    if task.estimated_hours:
+        return task.estimated_hours
+    window_start, window_end = _task_window(task)
+    day_span = (window_end - window_start).days + 1
+    return max(1, ceil(day_span * 24))
+
+
+def _expanded_leave_dates(approved_leaves: list[dict[str, Any]]) -> set[date]:
+    """Expand serialized leave payloads into concrete dates for availability math."""
+
+    dates: set[date] = set()
+    for leave_payload in approved_leaves:
+        leave_start = date.fromisoformat(str(leave_payload["start_date"]))
+        leave_end = date.fromisoformat(str(leave_payload["end_date"]))
+        dates.update(_date_range(leave_start, leave_end))
+    return dates
+
+
+def _pick_fields(payload: dict[str, Any], field_names: tuple[str, ...]) -> dict[str, Any]:
+    """Copy a small deterministic subset of serialized live availability fields."""
+
+    return {
+        field_name: payload[field_name]
+        for field_name in field_names
+        if field_name in payload and payload[field_name] not in (None, "", [], {})
+    }
 
 
 def _get_default_schedule(employee: Employee) -> WorkSchedule | None:
