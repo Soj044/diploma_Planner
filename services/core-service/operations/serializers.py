@@ -22,6 +22,7 @@ from .models import (
     WorkSchedule,
     WorkScheduleDay,
 )
+from .task_workflow import create_task, update_task
 
 
 class DepartmentEmployeeSummarySerializer(serializers.ModelSerializer):
@@ -170,6 +171,12 @@ class TaskSerializer(serializers.ModelSerializer):
         if start_date and due_date and start_date > due_date:
             raise serializers.ValidationError("Task start_date must be before or equal to due_date.")
         return attrs
+
+    def create(self, validated_data: dict) -> Task:
+        return create_task(validated_data=validated_data)
+
+    def update(self, instance: Task, validated_data: dict) -> Task:
+        return update_task(task=instance, validated_data=validated_data)
 
 
 class TaskRequirementSerializer(serializers.ModelSerializer):

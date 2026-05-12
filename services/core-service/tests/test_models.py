@@ -186,6 +186,243 @@ class CoreApiSmokeTests(APITestCase):
         self.assertEqual(response.data[0]["employees"][0]["position_name"], "Operator")
         self.assertNotIn("email", response.data[0]["employees"][0])
 
+    def test_task_endpoint_allows_null_estimated_hours(self) -> None:
+        user_model = get_user_model()
+        manager = user_model.objects.create_user(
+            username="task-null-estimate-manager",
+            email="task-null-estimate-manager@example.com",
+            password="test-pass",
+            role=user_model.Role.MANAGER,
+        )
+        self.client.force_authenticate(user=manager)
+        department = Department.objects.create(name="Nullable estimate")
+
+        response = self.client.post(
+            "/api/v1/tasks/",
+            {
+                "department": department.id,
+                "title": "Planner can estimate this",
+                "status": Task.Status.PLANNED,
+                "priority": Task.Priority.MEDIUM,
+                "estimated_hours": None,
+                "actual_hours": None,
+                "start_date": "2026-05-10",
+                "due_date": "2026-05-11",
+                "created_by_user": manager.id,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertIsNone(response.data["estimated_hours"])
+
+    def test_task_update_to_in_progress_requires_final_assignment_and_activates_it(self) -> None:
+        user_model = get_user_model()
+        manager = user_model.objects.create_user(
+            username="task-progress-manager",
+            email="task-progress-manager@example.com",
+            password="test-pass",
+            role=user_model.Role.MANAGER,
+        )
+        employee_user = user_model.objects.create_user(
+            username="task-progress-employee",
+            email="task-progress-employee@example.com",
+            password="test-pass",
+        )
+        self.client.force_authenticate(user=manager)
+        department = Department.objects.create(name="Task progress")
+        employee = Employee.objects.create(
+            user=employee_user,
+            department=department,
+            full_name="Progress Employee",
+            position_name="Operator",
+        )
+        task = Task.objects.create(
+            department=department,
+            title="Start progress",
+            status=Task.Status.ASSIGNED,
+            estimated_hours=4,
+            start_date=date(2026, 5, 18),
+            due_date=date(2026, 5, 19),
+            created_by_user=manager,
+        )
+
+        missing_assignment_response = self.client.patch(
+            f"/api/v1/tasks/{task.id}/",
+            {"status": Task.Status.IN_PROGRESS},
+            format="json",
+        )
+        self.assertEqual(missing_assignment_response.status_code, 400)
+        self.assertIn("approved or active", str(missing_assignment_response.data))
+
+        assignment = Assignment.objects.create(
+            task=task,
+            employee=employee,
+            planned_hours=4,
+            start_date=date(2026, 5, 18),
+            end_date=date(2026, 5, 19),
+            status=Assignment.Status.APPROVED,
+            assigned_by_type=Assignment.SourceType.MANAGER,
+            assigned_by_user=manager,
+            approved_by_user=manager,
+            approved_at=timezone.now(),
+        )
+
+        response = self.client.patch(
+            f"/api/v1/tasks/{task.id}/",
+            {"status": Task.Status.IN_PROGRESS},
+            format="json",
+        )
+
+        assignment.refresh_from_db()
+        task.refresh_from_db()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(task.status, Task.Status.IN_PROGRESS)
+        self.assertEqual(assignment.status, Assignment.Status.ACTIVE)
+
+    def test_task_update_to_done_requires_actual_hours_and_completes_assignment(self) -> None:
+        user_model = get_user_model()
+        manager = user_model.objects.create_user(
+            username="task-done-manager",
+            email="task-done-manager@example.com",
+            password="test-pass",
+            role=user_model.Role.MANAGER,
+        )
+        employee_user = user_model.objects.create_user(
+            username="task-done-employee",
+            email="task-done-employee@example.com",
+            password="test-pass",
+        )
+        self.client.force_authenticate(user=manager)
+        department = Department.objects.create(name="Task completion")
+        employee = Employee.objects.create(
+            user=employee_user,
+            department=department,
+            full_name="Completion Employee",
+            position_name="Operator",
+        )
+        task = Task.objects.create(
+            department=department,
+            title="Finish task",
+            status=Task.Status.IN_PROGRESS,
+            estimated_hours=5,
+            start_date=date(2026, 5, 20),
+            due_date=date(2026, 5, 20),
+            created_by_user=manager,
+        )
+        assignment = Assignment.objects.create(
+            task=task,
+            employee=employee,
+            planned_hours=5,
+            start_date=date(2026, 5, 20),
+            end_date=date(2026, 5, 20),
+            status=Assignment.Status.ACTIVE,
+            assigned_by_type=Assignment.SourceType.MANAGER,
+            assigned_by_user=manager,
+            approved_by_user=manager,
+            approved_at=timezone.now(),
+        )
+
+        missing_actuals_response = self.client.patch(
+            f"/api/v1/tasks/{task.id}/",
+            {"status": Task.Status.DONE},
+            format="json",
+        )
+        self.assertEqual(missing_actuals_response.status_code, 400)
+        self.assertIn("Actual hours must be a positive value", str(missing_actuals_response.data))
+
+        response = self.client.patch(
+            f"/api/v1/tasks/{task.id}/",
+            {"status": Task.Status.DONE, "actual_hours": 6},
+            format="json",
+        )
+
+        assignment.refresh_from_db()
+        task.refresh_from_db()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(task.status, Task.Status.DONE)
+        self.assertEqual(task.actual_hours, 6)
+        self.assertEqual(assignment.status, Assignment.Status.COMPLETED)
+
+    def test_task_update_rejects_actual_hours_before_done(self) -> None:
+        user_model = get_user_model()
+        manager = user_model.objects.create_user(
+            username="task-actual-manager",
+            email="task-actual-manager@example.com",
+            password="test-pass",
+            role=user_model.Role.MANAGER,
+        )
+        self.client.force_authenticate(user=manager)
+        task = Task.objects.create(
+            title="Premature actuals",
+            status=Task.Status.PLANNED,
+            estimated_hours=2,
+            due_date=date(2026, 5, 21),
+            created_by_user=manager,
+        )
+
+        response = self.client.patch(
+            f"/api/v1/tasks/{task.id}/",
+            {"actual_hours": 2},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("must stay empty unless task status is done", str(response.data))
+
+    def test_done_task_is_terminal_in_task_edit_flow(self) -> None:
+        user_model = get_user_model()
+        manager = user_model.objects.create_user(
+            username="task-terminal-manager",
+            email="task-terminal-manager@example.com",
+            password="test-pass",
+            role=user_model.Role.MANAGER,
+        )
+        employee_user = user_model.objects.create_user(
+            username="task-terminal-employee",
+            email="task-terminal-employee@example.com",
+            password="test-pass",
+        )
+        self.client.force_authenticate(user=manager)
+        department = Department.objects.create(name="Terminal tasks")
+        employee = Employee.objects.create(
+            user=employee_user,
+            department=department,
+            full_name="Terminal Employee",
+            position_name="Operator",
+        )
+        task = Task.objects.create(
+            department=department,
+            title="Already done",
+            status=Task.Status.DONE,
+            estimated_hours=3,
+            actual_hours=3,
+            start_date=date(2026, 5, 22),
+            due_date=date(2026, 5, 22),
+            created_by_user=manager,
+        )
+        Assignment.objects.create(
+            task=task,
+            employee=employee,
+            planned_hours=3,
+            start_date=date(2026, 5, 22),
+            end_date=date(2026, 5, 22),
+            status=Assignment.Status.COMPLETED,
+            assigned_by_type=Assignment.SourceType.MANAGER,
+            assigned_by_user=manager,
+            approved_by_user=manager,
+            approved_at=timezone.now(),
+        )
+
+        response = self.client.patch(
+            f"/api/v1/tasks/{task.id}/",
+            {"status": Task.Status.ASSIGNED, "actual_hours": None},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("terminal in MVP", str(response.data))
+
     def test_manual_assignment_endpoint_creates_approved_assignment(self) -> None:
         user_model = get_user_model()
         manager = user_model.objects.create_user(

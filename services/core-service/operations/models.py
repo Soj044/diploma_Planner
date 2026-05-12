@@ -237,7 +237,7 @@ class EmployeeAvailabilityOverride(models.Model):
 
 
 class Task(TimeStampedModel):
-    """Business task that must be planned or assigned."""
+    """Business task that may keep a manual estimate and later store actual effort."""
 
     class Status(models.TextChoices):
         DRAFT = "draft", "Draft"
@@ -268,7 +268,7 @@ class Task(TimeStampedModel):
     priority = models.CharField(
         max_length=16, choices=Priority.choices, default=Priority.MEDIUM
     )
-    estimated_hours = models.PositiveSmallIntegerField()
+    estimated_hours = models.PositiveSmallIntegerField(null=True, blank=True)
     actual_hours = models.PositiveSmallIntegerField(null=True, blank=True)
     start_date = models.DateField(null=True, blank=True)
     due_date = models.DateField()
@@ -284,6 +284,13 @@ class Task(TimeStampedModel):
                 condition=models.Q(start_date__isnull=True)
                 | models.Q(start_date__lte=models.F("due_date")),
                 name="task_valid_period",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(status="done", actual_hours__gt=0)
+                    | (~models.Q(status="done") & models.Q(actual_hours__isnull=True))
+                ),
+                name="task_actual_hours_match_done_status",
             ),
         ]
         indexes = [
