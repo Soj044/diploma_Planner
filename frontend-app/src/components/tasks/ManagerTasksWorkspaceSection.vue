@@ -20,7 +20,6 @@ interface TaskFormState {
   description: string;
   status: string;
   priority: string;
-  estimated_hours: OptionalNumericInput;
   actual_hours: OptionalNumericInput;
   start_date: string;
   due_date: string;
@@ -59,7 +58,6 @@ const form = reactive<TaskFormState>({
   description: "",
   status: "planned",
   priority: "medium",
-  estimated_hours: "",
   actual_hours: "",
   start_date: "",
   due_date: "",
@@ -73,6 +71,9 @@ const canDeleteTasks = computed(() => auth.role.value === "admin");
 const isDoneStatus = computed(() => form.status === "done");
 
 const visibleTasks = computed(() => {
+  if (auth.role.value === "admin") {
+    return [...tasks.value].sort((left, right) => right.updated_at.localeCompare(left.updated_at));
+  }
   const currentUserId = auth.user.value?.id;
   return [...tasks.value]
     .filter((task) => task.created_by_user === currentUserId)
@@ -91,7 +92,6 @@ function resetForm() {
   form.description = "";
   form.status = "planned";
   form.priority = "medium";
-  form.estimated_hours = "";
   form.actual_hours = "";
   form.start_date = "";
   form.due_date = "";
@@ -104,7 +104,6 @@ function startEditing(task: Task) {
   form.description = task.description;
   form.status = task.status;
   form.priority = task.priority;
-  form.estimated_hours = task.estimated_hours === null ? "" : String(task.estimated_hours);
   form.actual_hours = task.actual_hours === null ? "" : String(task.actual_hours);
   form.start_date = task.start_date || "";
   form.due_date = task.due_date;
@@ -114,7 +113,6 @@ function startEditing(task: Task) {
 }
 
 function buildPayload(): TaskInput {
-  const estimatedHours = normalizeOptionalNumericInput(form.estimated_hours);
   const actualHours = normalizeOptionalNumericInput(form.actual_hours);
 
   return {
@@ -123,7 +121,7 @@ function buildPayload(): TaskInput {
     description: form.description.trim(),
     status: form.status,
     priority: form.priority,
-    estimated_hours: estimatedHours,
+    estimated_hours: null,
     actual_hours: actualHours,
     start_date: form.start_date || null,
     due_date: form.due_date,
@@ -227,7 +225,7 @@ onMounted(async () => {
       <div>
         <p class="section-caption">My task workspace</p>
         <p class="resource-copy">
-          This list is scoped to tasks created by the current manager/admin session. New task creation moved into a
+          Admin sees all tasks. Manager sees tasks created by the current session user. New task creation moved into a
           dedicated create-and-assign flow.
         </p>
       </div>
@@ -248,7 +246,7 @@ onMounted(async () => {
         </div>
 
         <p v-if="isLoading" class="resource-copy">Loading tasks...</p>
-        <p v-else-if="visibleTasks.length === 0" class="empty-state">No tasks created by this user yet.</p>
+        <p v-else-if="visibleTasks.length === 0" class="empty-state">No tasks available in this scope yet.</p>
         <ul v-else class="resource-list">
           <li
             v-for="task in visibleTasks"
@@ -347,12 +345,6 @@ onMounted(async () => {
                   {{ option.label }}
                 </option>
               </select>
-            </label>
-
-            <label class="field-group">
-              <span class="field-label">Estimated hours</span>
-              <input v-model="form.estimated_hours" class="text-input" min="1" type="number" />
-              <span class="resource-copy">Leave blank to let planner estimate effort during assignment planning.</span>
             </label>
 
             <label v-if="isDoneStatus" class="field-group">

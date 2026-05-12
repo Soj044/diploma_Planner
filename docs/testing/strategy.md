@@ -25,7 +25,7 @@
 - core-service approval flow: persisted planner proposal lookup, manual final assignment creation, assignment rejection, idempotent replay for the same `task + employee + source_plan_run_id`, rejection of missing or non-selected proposals, rejection of second non-rejected final assignment for one task, manual assignment defaults (`start_date=task.start_date`, `end_date=task.due_date`, `source_plan_run_id=null`), upstream planner failure handling, and internal-token reread of planner-service after planner auth gate
 - core-service task lifecycle: done requires positive `actual_hours`, non-done requires null `actual_hours`, done is terminal, and task status transitions sync final assignment status (`approved->active`, `approved|active->completed`) with required final-assignment presence checks
 - planner-service: unit and integration tests for planning pipeline, `CreatePlanRunRequest` boundary, snapshot client failure handling, SQLite persistence of run/snapshot/proposals/unassigned/solver stats, persisted run retrieval for manager review, overlap conflict diagnostics, and weighted score stability
-- planner-service effort estimation: one shared `task_effort_map` reused by eligibility/optimizer/candidate analysis/proposals, persisted `artifacts.time_estimates`, and backward-compatible load for older SQLite runs without `time_estimates_json`
+- planner-service effort estimation: one shared `task_effort_map` reused by eligibility/optimizer/candidate analysis/proposals, persisted `artifacts.time_estimates`, backward-compatible load for older SQLite runs without `time_estimates_json`, discounted secondary-requirement rules baseline, and stricter pure-history gating by shared required skills
 - planner-service auto-estimate cap: non-manual `effective_hours` must respect the inclusive weekday task window (`8h` per weekday), while manual `estimated_hours` remains uncapped
 - planner-service auth gate: Bearer header validation, deny employee role, allow manager/admin role, and controlled `503` when core introspection is unavailable
 - ai-layer: containerized startup, `/health` probe, authenticated `/api/v1/capabilities`, authenticated explanation routes, PostgreSQL connectivity bootstrap, `CREATE EXTENSION vector`, isolated `ai_layer` schema creation without touching core/planner truth tables, repository creation of `index_items`/`sync_state`/`explanation_logs`, HNSW cosine index creation, full/incremental sync, delete-path handling, stale-index fallback, structured Ollama output validation, and deterministic comparison-reason enrichment when the LLM stays generic
@@ -167,13 +167,15 @@ docker compose up --build
 - As manager/admin, verify non-working weekday rules are persisted without editable time inputs in the browser.
 - As manager/admin, verify `/leaves` shows only requested records, resolves employee names/positions from `GET /api/v1/employees/`, and never exposes date/type/comment editing controls.
 - As manager/admin, verify `/leaves` `Approve` and `Reject` both call the status-only action and remove the decided record from the queue after reload.
-- On `/tasks`, verify manager/admin see only tasks where `created_by_user === currentUser.id`.
+- On `/tasks`, verify `admin` sees all tasks, while `manager` sees creator-scoped tasks in v1.
 - On `/tasks/new`, verify task create uses the authenticated user from `/auth/me` and no longer requires reading `/users/`.
 - On `/tasks/new`, verify `Save task` persists the task without planner launch.
 - On `/tasks/new`, verify `Save + Assignment` requires `status=planned`, `start_date`, and `due_date`.
-- On `/tasks/new` and manager task edit forms, verify `estimated_hours` is optional and shows the helper copy about planner estimation fallback.
+- On `/tasks/new` and manager task edit forms, verify `estimated_hours` input is removed from manager UX and payloads keep `estimated_hours = null` unless introduced by legacy clients.
 - On manager task edit forms, verify `actual_hours` input appears only for `status=done`, and submit is blocked client-side when done has empty actual hours.
-- On `/tasks/new`, `/tasks`, and the shared task editor, verify entering a value into `Estimated hours` no longer throws `form.estimated_hours.trim is not a function`.
+- On `/schedule`, verify weekday rule save is blocked client-side when `end_time <= start_time`.
+- On `/schedule`, verify weekday rule save is blocked client-side when `capacity_hours` exceeds the selected time window duration.
+- On `/schedule`, verify the API rejects the same invalid combinations even if the browser validation is bypassed.
 - On `/tasks/new`, verify manual mode opens only when planner actually returned `unassigned`, not because the frontend skipped planner execution.
 - On `Planning`, verify manager/admin can launch a plan run with period-only scope, optional department filter, and optional selected task subset.
 - For single-task planning UX, verify `/tasks/new` still uses `POST /api/v1/plan-runs` with `task_ids=[task.id]` instead of inventing a new planner route.

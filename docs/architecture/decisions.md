@@ -592,3 +592,14 @@ MVP had two gaps:
 ### Update Note (2026-05-12)
 - Non-manual planner estimates are now capped by the inclusive weekday task window with a generic upper bound of `8h` per weekday.
 - Manual `Task.estimated_hours` is still trusted as-is and is not capped by task dates.
+
+### Update Note (2026-05-13)
+- Planner `rules` baseline was tuned to reduce overestimation for fresh tasks:
+  - primary requirement contribution is counted fully;
+  - secondary requirement contributions are discounted to `40%` before multiplier.
+- Planner `history` source was tightened:
+  - pure `history` now requires at least three top matches that share required skills with the target task;
+  - department-only similarity still contributes to `blended`, but no longer upgrades to pure history.
+- Manager UX no longer asks for manual `estimated_hours` during task create/edit; planner estimation is now the default, while backend compatibility for nullable `Task.estimated_hours` remains intact.
+- Weekday-rule validation now enforces `end_time > start_time` and `capacity_hours <= (end_time - start_time)` when a time window is provided.
+- `/tasks` visibility for `admin` now includes all tasks (manager scope remains creator-based in v1).
