@@ -194,7 +194,7 @@ export interface TaskInput {
   description: string;
   status: string;
   priority: string;
-  estimated_hours: number;
+  estimated_hours: number | null;
   actual_hours: number | null;
   start_date: string | null;
   due_date: string;
@@ -208,7 +208,7 @@ export interface Task {
   description: string;
   status: string;
   priority: string;
-  estimated_hours: number;
+  estimated_hours: number | null;
   actual_hours: number | null;
   start_date: string | null;
   due_date: string;
@@ -309,6 +309,19 @@ export interface PlanRunArtifacts {
   eligibility: Record<string, string[]>;
   scores: Record<string, Record<string, number>>;
   solver_statistics: Record<string, number | string>;
+  candidate_analysis?: Record<string, Array<Record<string, unknown>>>;
+  time_estimates?: Record<string, TaskTimeEstimate>;
+}
+
+export type TimeEstimateSource = "manual" | "history" | "blended" | "rules";
+
+export interface TaskTimeEstimate {
+  source: TimeEstimateSource;
+  effective_hours: number;
+  manual_hours: number | null;
+  rules_baseline_hours: number | null;
+  historical_median_hours: number | null;
+  historical_sample_size: number;
 }
 
 export interface PlanResponse {

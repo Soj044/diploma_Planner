@@ -19,7 +19,7 @@ interface TaskFormState {
   description: string;
   status: string;
   priority: string;
-  estimated_hours: number;
+  estimated_hours: string;
   actual_hours: string;
   start_date: string;
   due_date: string;
@@ -58,7 +58,7 @@ const form = reactive<TaskFormState>({
   description: "",
   status: "planned",
   priority: "medium",
-  estimated_hours: 8,
+  estimated_hours: "",
   actual_hours: "",
   start_date: "",
   due_date: "",
@@ -69,6 +69,7 @@ const departmentNameById = computed(() => {
 });
 
 const canDeleteTasks = computed(() => auth.role.value === "admin");
+const isDoneStatus = computed(() => form.status === "done");
 
 const visibleTasks = computed(() => {
   const currentUserId = auth.user.value?.id;
@@ -89,7 +90,7 @@ function resetForm() {
   form.description = "";
   form.status = "planned";
   form.priority = "medium";
-  form.estimated_hours = 8;
+  form.estimated_hours = "";
   form.actual_hours = "";
   form.start_date = "";
   form.due_date = "";
@@ -102,7 +103,7 @@ function startEditing(task: Task) {
   form.description = task.description;
   form.status = task.status;
   form.priority = task.priority;
-  form.estimated_hours = task.estimated_hours;
+  form.estimated_hours = task.estimated_hours === null ? "" : String(task.estimated_hours);
   form.actual_hours = task.actual_hours === null ? "" : String(task.actual_hours);
   form.start_date = task.start_date || "";
   form.due_date = task.due_date;
@@ -112,14 +113,17 @@ function startEditing(task: Task) {
 }
 
 function buildPayload(): TaskInput {
+  const estimatedHours = form.estimated_hours.trim() ? Number(form.estimated_hours) : null;
+  const actualHours = form.actual_hours.trim() ? Number(form.actual_hours) : null;
+
   return {
     department: form.department ? Number(form.department) : null,
     title: form.title.trim(),
     description: form.description.trim(),
     status: form.status,
     priority: form.priority,
-    estimated_hours: Number(form.estimated_hours),
-    actual_hours: form.actual_hours ? Number(form.actual_hours) : null,
+    estimated_hours: estimatedHours,
+    actual_hours: actualHours,
     start_date: form.start_date || null,
     due_date: form.due_date,
     created_by_user: auth.user.value?.id ?? 0,
@@ -159,6 +163,14 @@ async function load() {
 
 async function save() {
   if (editingId.value === null) {
+    return;
+  }
+  if (isDoneStatus.value && !form.actual_hours.trim()) {
+    errorMessage.value = "Done tasks require actual_hours before saving.";
+    return;
+  }
+  if (!isDoneStatus.value && form.actual_hours.trim()) {
+    errorMessage.value = "Actual hours are allowed only when status is done.";
     return;
   }
 
@@ -267,7 +279,7 @@ onMounted(async () => {
               {{ task.department === null ? "None" : departmentNameById.get(task.department) || `#${task.department}` }}
             </p>
             <p class="resource-copy">
-              Estimated: {{ task.estimated_hours }}h
+              Estimated: {{ task.estimated_hours === null ? "Planner estimate" : `${task.estimated_hours}h` }}
               <span v-if="task.actual_hours !== null">· Actual: {{ task.actual_hours }}h</span>
               · Start: {{ task.start_date || "Not set" }}
               · Due: {{ task.due_date }}
@@ -337,12 +349,13 @@ onMounted(async () => {
 
             <label class="field-group">
               <span class="field-label">Estimated hours</span>
-              <input v-model.number="form.estimated_hours" class="text-input" min="1" type="number" required />
+              <input v-model="form.estimated_hours" class="text-input" min="1" type="number" />
+              <span class="resource-copy">Leave blank to let planner estimate effort during assignment planning.</span>
             </label>
 
-            <label class="field-group">
+            <label v-if="isDoneStatus" class="field-group">
               <span class="field-label">Actual hours</span>
-              <input v-model="form.actual_hours" class="text-input" min="0" type="number" />
+              <input v-model="form.actual_hours" class="text-input" min="1" type="number" required />
             </label>
 
             <label class="field-group">

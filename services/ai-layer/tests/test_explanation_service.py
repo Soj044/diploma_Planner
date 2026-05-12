@@ -291,6 +291,14 @@ def _proposal_context() -> ProposalContext:
             "selected_employee_id": "employee-1",
             "selected_score": 95.0,
             "solver_summary": {"status": "OPTIMAL"},
+            "time_estimate": {
+                "source": "history",
+                "effective_hours": 6,
+                "manual_hours": None,
+                "rules_baseline_hours": 5,
+                "historical_median_hours": 6.0,
+                "historical_sample_size": 4,
+            },
         }
     )
 
@@ -337,6 +345,14 @@ def _unassigned_context() -> UnassignedContext:
                 },
             ],
             "solver_summary": {"status": "OPTIMAL"},
+            "time_estimate": {
+                "source": "rules",
+                "effective_hours": 8,
+                "manual_hours": None,
+                "rules_baseline_hours": 8,
+                "historical_median_hours": None,
+                "historical_sample_size": 0,
+            },
         }
     )
 
@@ -426,9 +442,11 @@ def test_build_assignment_rationale_filters_retrieval_and_logs_request() -> None
     assert "selected_candidate_facts=" in prompt
     assert "top_alternative_candidates=" in prompt
     assert "top_score_comparison=" in prompt
+    assert "time_estimate=" in prompt
     assert "live_assignment_context=" not in prompt
     assert "proposal_context=" not in prompt
     assert "content_excerpt" in prompt
+    assert any("history-based estimate" in reason for reason in result.reasons)
     assert any("approved leave overlapped the task window" in reason for reason in result.reasons)
 
 
@@ -485,6 +503,7 @@ def test_build_unassigned_explanation_raises_502_for_invalid_structured_payload(
 def test_build_unassigned_explanation_adds_candidate_breakdown_reason() -> None:
     """Append deterministic candidate-analysis facts even when LLM output stays generic."""
 
+    ollama_client = FakeOllamaClient(embeddings=[_embedding()], generated_content=_generated_json())
     service = ExplanationService(
         repository=FakeRepository(retrieved_items=[_retrieved_item()]),
         reindex_service=FakeReindexService(ready=True),
@@ -493,7 +512,7 @@ def test_build_unassigned_explanation_adds_candidate_breakdown_reason() -> None:
             proposal_context=_proposal_context(),
             unassigned_context=_unassigned_context(),
         ),
-        ollama_client=FakeOllamaClient(embeddings=[_embedding()], generated_content=_generated_json()),
+        ollama_client=ollama_client,
     )
 
     result = service.build_unassigned_explanation(
@@ -502,4 +521,8 @@ def test_build_unassigned_explanation_adds_candidate_breakdown_reason() -> None:
         user_context=_manager_context(),
     )
 
+    prompt = ollama_client.generate_requests[0]["user_prompt"]
+    assert isinstance(prompt, str)
+    assert "time_estimate=" in prompt
+    assert any("rules-based effort estimation" in reason for reason in result.reasons)
     assert any("eligible candidate(s) passed hard filters" in reason for reason in result.reasons)

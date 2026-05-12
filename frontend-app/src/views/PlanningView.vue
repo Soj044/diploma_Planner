@@ -131,6 +131,29 @@ function proposalKey(proposal: AssignmentProposal) {
   return `${proposal.task_id}-${proposal.employee_id}-${proposal.proposal_rank}`;
 }
 
+function estimateSourceLabel(source: string | undefined): string {
+  if (source === "manual") {
+    return "Manual estimate";
+  }
+  if (source === "history") {
+    return "Historical estimate";
+  }
+  if (source === "blended") {
+    return "Blended estimate";
+  }
+  if (source === "rules") {
+    return "Rules-based estimate";
+  }
+  return "Estimate source unavailable";
+}
+
+function proposalTimeEstimate(proposal: AssignmentProposal) {
+  if (!reviewedRun.value) {
+    return null;
+  }
+  return reviewedRun.value.artifacts.time_estimates?.[proposal.task_id] || null;
+}
+
 /**
  * Clears every entry from a reactive record without replacing the reference.
  */
@@ -542,7 +565,7 @@ onMounted(loadPlanningScope);
                 · Due: {{ task.due_date }}
               </p>
               <p class="resource-copy">
-                Status: {{ task.status }} · Estimated: {{ task.estimated_hours }}h
+                Status: {{ task.status }} · Estimated: {{ task.estimated_hours === null ? "Planner estimate" : `${task.estimated_hours}h` }}
               </p>
             </li>
           </ul>
@@ -799,6 +822,12 @@ onMounted(loadPlanningScope);
             <p class="resource-copy">
               Planned hours: {{ proposal.planned_hours ?? "n/a" }}
               · Dates: {{ proposal.start_date || "n/a" }} → {{ proposal.end_date || "n/a" }}
+            </p>
+            <p class="resource-copy">
+              Estimate source: {{ estimateSourceLabel(proposalTimeEstimate(proposal)?.source) }}
+              <span v-if="proposalTimeEstimate(proposal) && proposalTimeEstimate(proposal)?.source !== 'manual'">
+                · Planner used {{ proposalTimeEstimate(proposal)?.effective_hours }}h
+              </span>
             </p>
             <p class="resource-copy">Status: {{ proposal.status }}</p>
             <p class="resource-copy">{{ proposal.explanation_text || "No explanation text." }}</p>

@@ -318,6 +318,7 @@ class ExplanationService:
                     proposal_context=proposal_context,
                 ),
                 "top_score_comparison": self._top_score_comparison(proposal_context),
+                "time_estimate": self._time_estimate_summary(proposal_context.time_estimate),
             }
         )
         return self._search_similar_items(
@@ -347,6 +348,7 @@ class ExplanationService:
                     unassigned_context.candidate_analysis
                 ),
                 "solver_summary": self._solver_summary(unassigned_context.solver_summary),
+                "time_estimate": self._time_estimate_summary(unassigned_context.time_estimate),
             }
         )
         return self._search_similar_items(
@@ -450,6 +452,7 @@ class ExplanationService:
                 f"top_alternative_candidates={self._dump_json(self._assignment_prompt_alternatives(live_context=live_context, proposal_context=proposal_context))}",
                 f"hard_filter_rejections={self._dump_json(self._assignment_hard_filter_rejections(live_context=live_context, proposal_context=proposal_context))}",
                 f"top_score_comparison={self._dump_json(self._top_score_comparison(proposal_context))}",
+                f"time_estimate={self._dump_json(self._time_estimate_summary(proposal_context.time_estimate))}",
                 f"solver_summary={self._dump_json(self._solver_summary(proposal_context.solver_summary))}",
                 f"similar_cases={self._dump_json(self._retrieved_cases_prompt_payload(retrieved_items))}",
             ]
@@ -472,6 +475,7 @@ class ExplanationService:
                 f"score_summary={self._dump_json(self._score_summary(unassigned_context.score_map))}",
                 f"candidate_analysis_breakdown={self._dump_json(self._candidate_analysis_breakdown(unassigned_context.candidate_analysis))}",
                 f"top_candidate_outcomes={self._dump_json(self._top_candidate_outcomes(unassigned_context.candidate_analysis))}",
+                f"time_estimate={self._dump_json(self._time_estimate_summary(unassigned_context.time_estimate))}",
                 f"solver_summary={self._dump_json(self._solver_summary(unassigned_context.solver_summary))}",
                 f"similar_cases={self._dump_json(self._retrieved_cases_prompt_payload(retrieved_items))}",
             ]
@@ -643,6 +647,23 @@ class ExplanationService:
         return self._pick_fields(
             solver_payload,
             ("status", "objective_value", "wall_time_seconds", "assigned_count", "unassigned_count"),
+        )
+
+    def _time_estimate_summary(self, time_estimate_payload: dict[str, Any] | None) -> dict[str, Any]:
+        """Keep only stable planner effort-estimation fields for prompts."""
+
+        if not isinstance(time_estimate_payload, dict):
+            return {}
+        return self._pick_fields(
+            time_estimate_payload,
+            (
+                "source",
+                "effective_hours",
+                "manual_hours",
+                "rules_baseline_hours",
+                "historical_median_hours",
+                "historical_sample_size",
+            ),
         )
 
     def _diagnostic_summary(self, diagnostic_payload: dict[str, Any]) -> dict[str, Any]:
@@ -890,12 +911,12 @@ class ExplanationService:
             live_context=live_context,
             proposal_context=proposal_context,
         )
-        if not alternatives and int(proposal_context.eligibility.get("eligible_count", 0) or 0) <= 1:
-            return ["No other candidate survived hard filters for this task."]
-
         selected_name = str(live_context.employee.get("full_name", "the selected employee"))
         selected_score = proposal_context.selected_score
-        reasons: list[str] = []
+        reasons: list[str] = self._time_estimate_reason(proposal_context.time_estimate)
+        if not alternatives and int(proposal_context.eligibility.get("eligible_count", 0) or 0) <= 1:
+            reasons.append("No other candidate survived hard filters for this task.")
+            return reasons
         for alternative in alternatives:
             employee_name = str(
                 alternative.get("employee_name")
@@ -962,7 +983,7 @@ class ExplanationService:
         """Generate deterministic unassigned reasons from persisted candidate analysis."""
 
         breakdown = self._candidate_analysis_breakdown(unassigned_context.candidate_analysis)
-        reasons: list[str] = []
+        reasons: list[str] = self._time_estimate_reason(unassigned_context.time_estimate)
         if breakdown["eligible_conflict_count"] > 0:
             reasons.append(
                 f"{breakdown['eligible_conflict_count']} eligible candidate(s) passed hard filters, but the solver "
@@ -981,6 +1002,29 @@ class ExplanationService:
         if not reasons and int(unassigned_context.eligibility.get("eligible_count", 0) or 0) == 0:
             reasons.append("No candidate survived the planner hard filters for this task.")
         return reasons
+
+    def _time_estimate_reason(self, time_estimate_payload: dict[str, Any] | None) -> list[str]:
+        """Return one deterministic reason describing planner effort-estimate provenance."""
+
+        estimate = self._time_estimate_summary(time_estimate_payload)
+        source = str(estimate.get("source", "")).strip()
+        effective_hours = estimate.get("effective_hours")
+        if source == "manual":
+            return [f"Planner used the manual task estimate of {effective_hours} hour(s)."]
+        if source == "history":
+            sample_size = estimate.get("historical_sample_size")
+            return [
+                "Planner used a history-based estimate of "
+                f"{effective_hours} hour(s) from {sample_size} similar completed task(s)."
+            ]
+        if source == "blended":
+            return [
+                "Planner blended rules and historical data for an effective estimate of "
+                f"{effective_hours} hour(s)."
+            ]
+        if source == "rules":
+            return [f"Planner used rules-based effort estimation with {effective_hours} hour(s)."]
+        return []
 
     def _finalize_result(
         self,

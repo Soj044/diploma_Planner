@@ -33,7 +33,7 @@ interface TaskFormState {
   description: string;
   status: string;
   priority: string;
-  estimated_hours: number;
+  estimated_hours: string;
   actual_hours: string;
   start_date: string;
   due_date: string;
@@ -110,7 +110,7 @@ const form = reactive<TaskFormState>({
   description: "",
   status: "planned",
   priority: "medium",
-  estimated_hours: 8,
+  estimated_hours: "",
   actual_hours: "",
   start_date: "",
   due_date: "",
@@ -139,6 +139,7 @@ const canStartAssignment = computed(() => {
       auth.user.value?.id,
   );
 });
+const isDoneStatus = computed(() => form.status === "done");
 
 const assignmentReadOnlyDates = computed(() => {
   return {
@@ -168,14 +169,16 @@ const canExplainUnassigned = computed(() => {
 });
 
 function buildTaskPayload(): TaskInput {
+  const estimatedHours = form.estimated_hours.trim() ? Number(form.estimated_hours) : null;
+  const actualHours = form.actual_hours.trim() ? Number(form.actual_hours) : null;
   return {
     department: form.department ? Number(form.department) : null,
     title: form.title.trim(),
     description: form.description.trim(),
     status: form.status,
     priority: form.priority,
-    estimated_hours: Number(form.estimated_hours),
-    actual_hours: form.actual_hours ? Number(form.actual_hours) : null,
+    estimated_hours: estimatedHours,
+    actual_hours: actualHours,
     start_date: form.start_date || null,
     due_date: form.due_date,
     created_by_user: auth.user.value?.id ?? 0,
@@ -189,7 +192,7 @@ function syncFormFromTask(task: Task) {
   form.description = task.description;
   form.status = task.status;
   form.priority = task.priority;
-  form.estimated_hours = task.estimated_hours;
+  form.estimated_hours = task.estimated_hours === null ? "" : String(task.estimated_hours);
   form.actual_hours = task.actual_hours === null ? "" : String(task.actual_hours);
   form.start_date = task.start_date || "";
   form.due_date = task.due_date;
@@ -197,9 +200,32 @@ function syncFormFromTask(task: Task) {
 
 function resetManualAssignmentForm() {
   manualAssignmentForm.employee = "";
-  manualAssignmentForm.planned_hours = currentTask.value?.estimated_hours || form.estimated_hours || 1;
+  manualAssignmentForm.planned_hours = currentTask.value?.estimated_hours || 1;
   manualAssignmentForm.notes = "";
 }
+
+function estimateSourceLabel(source: string | undefined): string {
+  if (source === "manual") {
+    return "Manual estimate";
+  }
+  if (source === "history") {
+    return "Historical estimate";
+  }
+  if (source === "blended") {
+    return "Blended estimate";
+  }
+  if (source === "rules") {
+    return "Rules-based estimate";
+  }
+  return "Estimate source unavailable";
+}
+
+const selectedTaskTimeEstimate = computed(() => {
+  if (!currentPlanRun.value || !currentTask.value) {
+    return null;
+  }
+  return currentPlanRun.value.artifacts.time_estimates?.[String(currentTask.value.id)] || null;
+});
 
 /**
  * Builds a stable cache key for one task/employee/proposal explanation context.
@@ -337,6 +363,14 @@ async function persistTask(): Promise<Task | null> {
     errorMessage.value = "Authenticated manager/admin context is missing.";
     return null;
   }
+  if (isDoneStatus.value && !form.actual_hours.trim()) {
+    errorMessage.value = "Done tasks require actual_hours before saving.";
+    return null;
+  }
+  if (!isDoneStatus.value && form.actual_hours.trim()) {
+    errorMessage.value = "Actual hours are allowed only when status is done.";
+    return null;
+  }
 
   isSavingTask.value = true;
   errorMessage.value = "";
@@ -420,7 +454,7 @@ async function handleSaveAndAssign() {
       assignmentContextMessage.value = "Planner selected one candidate for this task.";
       manualReason.value = null;
       manualAssignmentForm.employee = selectedProposal.value.employee_id;
-      manualAssignmentForm.planned_hours = selectedProposal.value.planned_hours || task.estimated_hours;
+      manualAssignmentForm.planned_hours = selectedProposal.value.planned_hours || task.estimated_hours || 1;
       manualAssignmentForm.notes = "";
       isAssignmentModalOpen.value = true;
       restoreSuggestionAiStateFromCache();
@@ -646,12 +680,13 @@ onMounted(loadCreateContext);
 
           <label class="field-group">
             <span class="field-label">Estimated hours</span>
-            <input v-model.number="form.estimated_hours" class="text-input" min="1" type="number" required />
+            <input v-model="form.estimated_hours" class="text-input" min="1" type="number" />
+            <span class="resource-copy">Leave blank to let planner estimate effort during assignment planning.</span>
           </label>
 
-          <label class="field-group">
+          <label v-if="isDoneStatus" class="field-group">
             <span class="field-label">Actual hours</span>
-            <input v-model="form.actual_hours" class="text-input" min="0" type="number" />
+            <input v-model="form.actual_hours" class="text-input" min="1" type="number" required />
           </label>
 
           <label class="field-group">
@@ -723,6 +758,17 @@ onMounted(loadCreateContext);
             <li class="key-value-item">
               <span class="key-label">Planned hours</span>
               <span class="key-value">{{ selectedProposal.planned_hours ?? currentTask?.estimated_hours ?? "n/a" }}</span>
+            </li>
+            <li class="key-value-item">
+              <span class="key-label">Estimate source</span>
+              <span class="key-value">{{ estimateSourceLabel(selectedTaskTimeEstimate?.source) }}</span>
+            </li>
+            <li
+              v-if="selectedTaskTimeEstimate && selectedTaskTimeEstimate.source !== 'manual'"
+              class="key-value-item"
+            >
+              <span class="key-label">Planner used hours</span>
+              <span class="key-value">{{ selectedTaskTimeEstimate.effective_hours }}</span>
             </li>
             <li class="key-value-item">
               <span class="key-label">Start date</span>
