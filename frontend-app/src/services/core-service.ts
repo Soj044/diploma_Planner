@@ -12,6 +12,7 @@ import type {
   EmployeeLeaveInput,
   EmployeeInput,
   ResourceDescriptor,
+  SchedulePreviewResponse,
   Skill,
   SkillInput,
   Task,
@@ -195,6 +196,12 @@ export const coreService = {
     client.patch<WorkScheduleDay>(`/work-schedule-days/${id}/`, payload),
   deleteWorkScheduleDay: (id: number) =>
     client.delete<null>(`/work-schedule-days/${id}/`).then(() => undefined),
+  getSchedulePreview: (employeeId: number, weekStart: string, scheduleId?: number | null) =>
+    client.get<SchedulePreviewResponse>("/schedule-previews/", {
+      employee_id: employeeId,
+      week_start: weekStart,
+      schedule_id: scheduleId ?? undefined,
+    }),
   listEmployeeLeaves: () => client.get<EmployeeLeave[]>("/employee-leaves/"),
   createEmployeeLeave: (payload: EmployeeLeaveInput) =>
     client.post<EmployeeLeave>("/employee-leaves/", payload),

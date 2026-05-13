@@ -176,6 +176,63 @@ export interface WorkScheduleDay {
   end_time: string | null;
 }
 
+export interface SchedulePreviewRule {
+  is_working_day: boolean;
+  capacity_hours: number;
+  start_time: string | null;
+  end_time: string | null;
+}
+
+export interface SchedulePreviewEffectiveDay extends SchedulePreviewRule {
+  source: "schedule" | "approved_leave" | "availability_override" | "no_rule";
+}
+
+export interface SchedulePreviewLeaveSummary {
+  id: number;
+  leave_type: string;
+  start_date: string;
+  end_date: string;
+}
+
+export interface SchedulePreviewAvailabilityOverride {
+  id: number;
+  date: string;
+  available_hours: number;
+  reason: string;
+}
+
+export interface SchedulePreviewDay {
+  date: string;
+  weekday: number;
+  weekday_label: string;
+  base_rule: SchedulePreviewRule | null;
+  effective_day: SchedulePreviewEffectiveDay;
+  approved_leave: SchedulePreviewLeaveSummary | null;
+  availability_override: SchedulePreviewAvailabilityOverride | null;
+}
+
+export interface SchedulePreviewSummaryEmployee {
+  id: number;
+  full_name: string;
+  position_name: string;
+  department_id: number | null;
+  department_name: string | null;
+}
+
+export interface SchedulePreviewSummarySchedule {
+  id: number;
+  name: string;
+  is_default: boolean;
+}
+
+export interface SchedulePreviewResponse {
+  employee: SchedulePreviewSummaryEmployee;
+  schedule: SchedulePreviewSummarySchedule | null;
+  week_start: string;
+  week_end: string;
+  days: SchedulePreviewDay[];
+}
+
 export interface EmployeeLeaveInput {
   employee: number;
   leave_type: string;

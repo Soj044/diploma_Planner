@@ -2,10 +2,18 @@
 import { computed, onMounted, reactive, ref, watch } from "vue";
 
 import DialogModal from "../components/DialogModal.vue";
+import ScheduleWeekPreviewSection from "../components/schedule/ScheduleWeekPreviewSection.vue";
 import { useAuth } from "../composables/useAuth";
 import { coreService } from "../services/core-service";
 import { describeRequestError } from "../services/http";
-import type { Employee, WorkSchedule, WorkScheduleDay, WorkScheduleDayInput, WorkScheduleInput } from "../types/api";
+import type {
+  Employee,
+  SchedulePreviewResponse,
+  WorkSchedule,
+  WorkScheduleDay,
+  WorkScheduleDayInput,
+  WorkScheduleInput,
+} from "../types/api";
 
 interface ScheduleFormState {
   employee: string;
@@ -31,6 +39,7 @@ const scheduleDays = ref<WorkScheduleDay[]>([]);
 const selectedEmployeeId = ref("");
 const selectedScheduleId = ref("");
 const isLoading = ref(false);
+const isPreviewLoading = ref(false);
 const isSavingSchedule = ref(false);
 const isSavingDay = ref(false);
 const deletingScheduleId = ref<number | null>(null);
@@ -39,8 +48,11 @@ const editingScheduleId = ref<number | null>(null);
 const editingScheduleDayId = ref<number | null>(null);
 const errorMessage = ref("");
 const successMessage = ref("");
+const previewErrorMessage = ref("");
 const isScheduleModalOpen = ref(false);
 const isDayModalOpen = ref(false);
+const schedulePreview = ref<SchedulePreviewResponse | null>(null);
+const previewWeekStart = ref(currentWeekStart());
 
 const scheduleForm = reactive<ScheduleFormState>({
   employee: "",
@@ -88,6 +100,29 @@ const selectedSchedule = computed(() => {
   return employeeSchedules.value.find((schedule) => String(schedule.id) === selectedScheduleId.value) ?? null;
 });
 
+const previewEmployeeId = computed(() => {
+  if (auth.role.value === "employee") {
+    return auth.employeeId.value;
+  }
+  return selectedEmployeeId.value ? Number(selectedEmployeeId.value) : null;
+});
+
+const schedulePreviewTitle = computed(() => {
+  return auth.role.value === "employee" ? "Effective weekly calendar" : "Effective weekly calendar preview";
+});
+
+const schedulePreviewDescription = computed(() => {
+  return auth.role.value === "employee"
+    ? "Real dates, approved leave, and availability overrides are applied on top of the schedule you focus below."
+    : "Preview how the selected schedule behaves on real dates once approved leave and date-level overrides are applied.";
+});
+
+const schedulePreviewEmptyMessage = computed(() => {
+  return selectedSchedule.value
+    ? "Choose a week to inspect the effective calendar preview."
+    : "Select a schedule first to inspect the effective weekly calendar.";
+});
+
 const daysByScheduleId = computed(() => {
   return new Map(
     schedules.value.map((schedule) => {
@@ -115,6 +150,32 @@ const selectedScheduleWeekdays = computed(() => {
     };
   });
 });
+
+function parseIsoDate(value: string): Date {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(year, month - 1, day, 12, 0, 0);
+}
+
+function formatIsoDate(value: Date): string {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function currentWeekStart(): string {
+  const today = new Date();
+  const monday = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 12, 0, 0);
+  const weekdayOffset = (monday.getDay() + 6) % 7;
+  monday.setDate(monday.getDate() - weekdayOffset);
+  return formatIsoDate(monday);
+}
+
+function shiftPreviewWeek(days: number) {
+  const next = parseIsoDate(previewWeekStart.value);
+  next.setDate(next.getDate() + days);
+  previewWeekStart.value = formatIsoDate(next);
+}
 
 function resetScheduleForm() {
   editingScheduleId.value = null;
@@ -236,6 +297,15 @@ function toMinutes(value: string): number | null {
 }
 
 function syncSelectionAfterLoad() {
+  if (auth.role.value === "employee") {
+    selectedEmployeeId.value = auth.employeeId.value ? String(auth.employeeId.value) : "";
+    const availableSchedules = employeeSchedules.value;
+    if (!availableSchedules.some((schedule) => String(schedule.id) === selectedScheduleId.value)) {
+      selectedScheduleId.value = availableSchedules[0] ? String(availableSchedules[0].id) : "";
+    }
+    return;
+  }
+
   const availableEmployees = orderedEmployees.value;
   if (!availableEmployees.some((employee) => String(employee.id) === selectedEmployeeId.value)) {
     selectedEmployeeId.value = availableEmployees[0] ? String(availableEmployees[0].id) : "";
@@ -244,6 +314,31 @@ function syncSelectionAfterLoad() {
   const availableSchedules = employeeSchedules.value;
   if (!availableSchedules.some((schedule) => String(schedule.id) === selectedScheduleId.value)) {
     selectedScheduleId.value = availableSchedules[0] ? String(availableSchedules[0].id) : "";
+  }
+}
+
+async function loadSchedulePreview() {
+  const employeeId = previewEmployeeId.value;
+  if (!employeeId || !selectedSchedule.value) {
+    schedulePreview.value = null;
+    previewErrorMessage.value = "";
+    return;
+  }
+
+  isPreviewLoading.value = true;
+  previewErrorMessage.value = "";
+
+  try {
+    schedulePreview.value = await coreService.getSchedulePreview(
+      employeeId,
+      previewWeekStart.value,
+      selectedSchedule.value.id,
+    );
+  } catch (error: unknown) {
+    schedulePreview.value = null;
+    previewErrorMessage.value = describeRequestError(error);
+  } finally {
+    isPreviewLoading.value = false;
   }
 }
 
@@ -260,8 +355,8 @@ async function load() {
       schedules.value = scheduleRows;
       scheduleDays.value = dayRows;
       employees.value = [];
-      selectedEmployeeId.value = "";
-      selectedScheduleId.value = "";
+      syncSelectionAfterLoad();
+      await loadSchedulePreview();
       return;
     }
 
@@ -274,6 +369,7 @@ async function load() {
     schedules.value = scheduleRows;
     scheduleDays.value = dayRows;
     syncSelectionAfterLoad();
+    await loadSchedulePreview();
   } catch (error: unknown) {
     errorMessage.value = describeRequestError(error);
   } finally {
@@ -375,15 +471,11 @@ async function removeScheduleDay(day: WorkScheduleDay) {
 }
 
 watch(orderedEmployees, () => {
-  if (auth.role.value !== "employee") {
-    syncSelectionAfterLoad();
-  }
+  syncSelectionAfterLoad();
 });
 
 watch(employeeSchedules, () => {
-  if (auth.role.value !== "employee") {
-    syncSelectionAfterLoad();
-  }
+  syncSelectionAfterLoad();
 });
 
 watch(selectedEmployeeId, (employeeId) => {
@@ -395,6 +487,10 @@ watch(selectedEmployeeId, (employeeId) => {
   if (!scheduleForm.employee) {
     scheduleForm.employee = employeeId;
   }
+});
+
+watch([selectedEmployeeId, selectedScheduleId, previewWeekStart], () => {
+  void loadSchedulePreview();
 });
 
 onMounted(load);
@@ -410,8 +506,8 @@ onMounted(load);
       <p class="page-description">
         {{
           auth.role.value === "employee"
-            ? "Employee schedule visibility is now read-only and stays aligned with backend self-scope rules."
-            : "Managers and admins can manage weekly schedules for any employee from one shared workspace."
+            ? "Review your schedule templates together with a real weekly calendar that applies approved leave and date-level overrides."
+            : "Managers and admins can manage weekly schedules for any employee and preview how they behave on real calendar dates."
         }}
       </p>
       <div class="pill-row">
@@ -423,83 +519,103 @@ onMounted(load);
       <div class="editor-header">
         <div>
           <p class="section-caption">Read-only schedules</p>
-          <p class="resource-copy">The browser no longer exposes employee schedule create, edit, or delete controls.</p>
+          <p class="resource-copy">Focus one schedule template to compare its weekly rules with real dates, leave, and overrides.</p>
         </div>
         <button class="button-secondary" type="button" :disabled="isLoading" @click="load">Refresh</button>
       </div>
 
       <p v-if="errorMessage" class="status-banner is-error">{{ errorMessage }}</p>
       <p v-else-if="isLoading" class="resource-copy">Loading schedules and weekdays...</p>
-      <p v-else-if="schedules.length === 0" class="empty-state">No schedules are available for this employee.</p>
-      <div v-else class="page-stack">
-        <section
-          v-for="schedule in [...schedules].sort((left, right) => {
-            if (left.is_default !== right.is_default) {
-              return left.is_default ? -1 : 1;
-            }
-            return left.name.localeCompare(right.name);
-          })"
-          :key="schedule.id"
-          class="records-card"
-        >
+      <p v-else-if="employeeSchedules.length === 0" class="empty-state">No schedules are available for this employee.</p>
+      <div v-else class="grid-two">
+        <section class="records-card">
           <div class="editor-header">
             <div>
-              <p class="section-caption">
-                {{ schedule.name }}
-                <span v-if="schedule.is_default" class="pill">Default</span>
-              </p>
-              <p class="resource-copy">Schedule #{{ schedule.id }}</p>
+              <p class="section-caption">Your schedule templates</p>
+              <p class="resource-copy">Choose one template to inspect its stored weekday rules and the effective weekly calendar.</p>
             </div>
+            <span class="pill">{{ employeeSchedules.length }} schedules</span>
           </div>
 
           <ul class="resource-list">
             <li
-              v-for="weekday in weekdayLabels.map((label, index) => ({ label, index }))"
-              :key="`${schedule.id}-${weekday.index}`"
+              v-for="schedule in employeeSchedules"
+              :key="schedule.id"
               class="resource-item"
+              :class="{ 'is-selected': String(schedule.id) === selectedScheduleId }"
             >
-              <template v-if="daysByScheduleId.get(schedule.id)?.find((day) => day.weekday === weekday.index)">
-                <div class="resource-heading">
-                  <p class="resource-label">{{ weekday.label }}</p>
-                  <span
-                    class="pill"
-                    :class="{
-                      'is-warm': !daysByScheduleId.get(schedule.id)?.find((day) => day.weekday === weekday.index)?.is_working_day,
-                    }"
-                  >
-                    {{
-                      daysByScheduleId.get(schedule.id)?.find((day) => day.weekday === weekday.index)?.is_working_day
-                        ? "Working day"
-                        : "Off day"
-                    }}
-                  </span>
+              <div class="resource-heading">
+                <div>
+                  <p class="resource-label">{{ schedule.name }}</p>
+                  <p class="resource-copy">
+                    Schedule #{{ schedule.id }}
+                    <span v-if="schedule.is_default">· default</span>
+                  </p>
                 </div>
-                <p class="resource-copy">
-                  Capacity:
-                  {{ daysByScheduleId.get(schedule.id)?.find((day) => day.weekday === weekday.index)?.capacity_hours }}h
-                  <span
-                    v-if="
-                      daysByScheduleId.get(schedule.id)?.find((day) => day.weekday === weekday.index)?.start_time ||
-                      daysByScheduleId.get(schedule.id)?.find((day) => day.weekday === weekday.index)?.end_time
-                    "
-                  >
-                    ·
-                    {{ daysByScheduleId.get(schedule.id)?.find((day) => day.weekday === weekday.index)?.start_time?.slice(0, 5) || "n/a" }}
-                    →
-                    {{ daysByScheduleId.get(schedule.id)?.find((day) => day.weekday === weekday.index)?.end_time?.slice(0, 5) || "n/a" }}
-                  </span>
-                </p>
-              </template>
-              <template v-else>
-                <div class="resource-heading">
-                  <p class="resource-label">{{ weekday.label }}</p>
-                  <span class="pill is-warm">No rule</span>
-                </div>
-                <p class="resource-copy">No schedule rule is stored for this weekday.</p>
-              </template>
+                <button class="button-secondary" type="button" @click="selectedScheduleId = String(schedule.id)">
+                  {{ String(schedule.id) === selectedScheduleId ? "Selected" : "Open" }}
+                </button>
+              </div>
             </li>
           </ul>
         </section>
+
+        <div class="page-stack">
+          <section class="records-card">
+            <div class="editor-header">
+              <div>
+                <p class="section-caption">
+                  {{ selectedSchedule ? `${selectedSchedule.name} weekdays` : "Weekday rules" }}
+                </p>
+                <p class="resource-copy">
+                  {{
+                    selectedSchedule
+                      ? "Stored weekly rules for the selected schedule template."
+                      : "Select a schedule to inspect its weekday rules."
+                  }}
+                </p>
+              </div>
+              <span v-if="selectedSchedule?.is_default" class="pill">Default schedule</span>
+            </div>
+
+            <p v-if="!selectedSchedule" class="empty-state">Select a schedule to inspect weekday rules.</p>
+            <ul v-else class="resource-list">
+              <li v-for="entry in selectedScheduleWeekdays" :key="entry.weekday" class="resource-item">
+                <div class="resource-heading">
+                  <div>
+                    <p class="resource-label">{{ entry.label }}</p>
+                    <p class="resource-copy">
+                      {{
+                        entry.rule
+                          ? entry.rule.is_working_day
+                            ? `Capacity ${entry.rule.capacity_hours}h`
+                            : "Off day"
+                          : "No rule yet"
+                      }}
+                      <span v-if="entry.rule && (entry.rule.start_time || entry.rule.end_time)">
+                        · {{ entry.rule.start_time?.slice(0, 5) || "n/a" }} → {{ entry.rule.end_time?.slice(0, 5) || "n/a" }}
+                      </span>
+                    </p>
+                  </div>
+                </div>
+              </li>
+            </ul>
+          </section>
+
+          <ScheduleWeekPreviewSection
+            :preview="schedulePreview"
+            :is-loading="isPreviewLoading"
+            :error-message="previewErrorMessage"
+            :week-start="previewWeekStart"
+            :title="schedulePreviewTitle"
+            :description="schedulePreviewDescription"
+            :empty-message="schedulePreviewEmptyMessage"
+            @previous-week="shiftPreviewWeek(-7)"
+            @current-week="previewWeekStart = currentWeekStart()"
+            @next-week="shiftPreviewWeek(7)"
+            @change-week-start="previewWeekStart = $event"
+          />
+        </div>
       </div>
     </section>
 
@@ -587,73 +703,89 @@ onMounted(load);
               </ul>
             </section>
 
-            <section class="records-card">
-              <div class="editor-header">
-                <div>
-                  <p class="section-caption">
-                    {{ selectedSchedule ? `${selectedSchedule.name} weekdays` : "Weekday rules" }}
-                  </p>
-                  <p class="resource-copy">
-                    {{
-                      selectedSchedule
-                        ? "Add or update weekday rules for the selected schedule."
-                        : "Choose a schedule to manage day-level capacity and working hours."
-                    }}
-                  </p>
-                </div>
-                <span v-if="selectedSchedule?.is_default" class="pill">Default schedule</span>
-              </div>
-
-              <p v-if="!selectedSchedule" class="empty-state">Select a schedule to manage weekday rules.</p>
-              <ul v-else class="resource-list">
-                <li v-for="entry in selectedScheduleWeekdays" :key="entry.weekday" class="resource-item">
-                  <div class="resource-heading">
-                    <div>
-                      <p class="resource-label">{{ entry.label }}</p>
-                      <p class="resource-copy">
-                        {{
-                          entry.rule
-                            ? entry.rule.is_working_day
-                              ? `Capacity ${entry.rule.capacity_hours}h`
-                              : "Off day"
-                            : "No rule yet"
-                        }}
-                        <span v-if="entry.rule && (entry.rule.start_time || entry.rule.end_time)">
-                          · {{ entry.rule.start_time?.slice(0, 5) || "n/a" }} → {{ entry.rule.end_time?.slice(0, 5) || "n/a" }}
-                        </span>
-                      </p>
-                    </div>
-                    <div class="inline-actions">
-                      <button
-                        v-if="entry.rule"
-                        class="button-secondary"
-                        type="button"
-                        @click="openEditDayModal(entry.rule)"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        v-else
-                        class="button-secondary"
-                        type="button"
-                        @click="openCreateDayModal(entry.weekday)"
-                      >
-                        Add rule
-                      </button>
-                      <button
-                        v-if="entry.rule"
-                        class="button-danger"
-                        type="button"
-                        :disabled="deletingDayId === entry.rule.id"
-                        @click="removeScheduleDay(entry.rule)"
-                      >
-                        {{ deletingDayId === entry.rule.id ? "Deleting..." : "Delete" }}
-                      </button>
-                    </div>
+            <div class="page-stack">
+              <section class="records-card">
+                <div class="editor-header">
+                  <div>
+                    <p class="section-caption">
+                      {{ selectedSchedule ? `${selectedSchedule.name} weekdays` : "Weekday rules" }}
+                    </p>
+                    <p class="resource-copy">
+                      {{
+                        selectedSchedule
+                          ? "Add or update weekday rules for the selected schedule."
+                          : "Choose a schedule to manage day-level capacity and working hours."
+                      }}
+                    </p>
                   </div>
-                </li>
-              </ul>
-            </section>
+                  <span v-if="selectedSchedule?.is_default" class="pill">Default schedule</span>
+                </div>
+
+                <p v-if="!selectedSchedule" class="empty-state">Select a schedule to manage weekday rules.</p>
+                <ul v-else class="resource-list">
+                  <li v-for="entry in selectedScheduleWeekdays" :key="entry.weekday" class="resource-item">
+                    <div class="resource-heading">
+                      <div>
+                        <p class="resource-label">{{ entry.label }}</p>
+                        <p class="resource-copy">
+                          {{
+                            entry.rule
+                              ? entry.rule.is_working_day
+                                ? `Capacity ${entry.rule.capacity_hours}h`
+                                : "Off day"
+                              : "No rule yet"
+                          }}
+                          <span v-if="entry.rule && (entry.rule.start_time || entry.rule.end_time)">
+                            · {{ entry.rule.start_time?.slice(0, 5) || "n/a" }} → {{ entry.rule.end_time?.slice(0, 5) || "n/a" }}
+                          </span>
+                        </p>
+                      </div>
+                      <div class="inline-actions">
+                        <button
+                          v-if="entry.rule"
+                          class="button-secondary"
+                          type="button"
+                          @click="openEditDayModal(entry.rule)"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          v-else
+                          class="button-secondary"
+                          type="button"
+                          @click="openCreateDayModal(entry.weekday)"
+                        >
+                          Add rule
+                        </button>
+                        <button
+                          v-if="entry.rule"
+                          class="button-danger"
+                          type="button"
+                          :disabled="deletingDayId === entry.rule.id"
+                          @click="removeScheduleDay(entry.rule)"
+                        >
+                          {{ deletingDayId === entry.rule.id ? "Deleting..." : "Delete" }}
+                        </button>
+                      </div>
+                    </div>
+                  </li>
+                </ul>
+              </section>
+
+              <ScheduleWeekPreviewSection
+                :preview="schedulePreview"
+                :is-loading="isPreviewLoading"
+                :error-message="previewErrorMessage"
+                :week-start="previewWeekStart"
+                :title="schedulePreviewTitle"
+                :description="schedulePreviewDescription"
+                :empty-message="schedulePreviewEmptyMessage"
+                @previous-week="shiftPreviewWeek(-7)"
+                @current-week="previewWeekStart = currentWeekStart()"
+                @next-week="shiftPreviewWeek(7)"
+                @change-week-start="previewWeekStart = $event"
+              />
+            </div>
           </div>
         </div>
       </section>
@@ -662,7 +794,7 @@ onMounted(load);
     <DialogModal
       :open="isScheduleModalOpen"
       :title="editingScheduleId === null ? 'Create schedule' : 'Edit schedule'"
-      description="Schedules stay backend-owned entities. The frontend only manages explicit CRUD inputs allowed by role-based APIs."
+      description="Set up a reusable weekly schedule template for the selected employee."
       @close="isScheduleModalOpen = false"
     >
       <form class="page-stack" @submit.prevent="saveSchedule">
@@ -699,7 +831,7 @@ onMounted(load);
     <DialogModal
       :open="isDayModalOpen"
       :title="editingScheduleDayId === null ? 'Create weekday rule' : 'Edit weekday rule'"
-      description="When a day is marked as non-working, the frontend sends zero capacity and empty times to keep backend truth explicit."
+      description="Define the working-hours rule for one weekday in the selected schedule."
       @close="isDayModalOpen = false"
     >
       <form class="page-stack" @submit.prevent="saveScheduleDay">
