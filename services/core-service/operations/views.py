@@ -10,10 +10,11 @@ from django.db.models import Prefetch
 from pydantic import ValidationError as PydanticValidationError
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from .availability import build_schedule_week_preview
 from .approvals import reject_assignment
 from .models import (
     Assignment,
@@ -39,6 +40,7 @@ from .permissions import (
     EmployeeSkillPermission,
     InternalPlannerServiceTokenPermission,
     PlannerApprovalPermission,
+    SchedulePreviewPermission,
     SkillPermission,
     TaskPermission,
     TaskRequirementPermission,
@@ -58,6 +60,7 @@ from .serializers import (
     EmployeeLeaveStatusSerializer,
     EmployeeSerializer,
     EmployeeSkillSerializer,
+    SchedulePreviewQuerySerializer,
     SkillSerializer,
     TaskRequirementSerializer,
     TaskSerializer,
@@ -77,6 +80,46 @@ class PlanningSnapshotView(APIView):
 
         snapshot = build_planning_snapshot(payload)
         return Response(snapshot.model_dump(mode="json"), status=status.HTTP_200_OK)
+
+
+class SchedulePreviewView(APIView):
+    permission_classes = [SchedulePreviewPermission]
+
+    def get(self, request):
+        serializer = SchedulePreviewQuerySerializer(data=request.query_params)
+        serializer.is_valid(raise_exception=True)
+
+        employee_id = serializer.validated_data["employee_id"]
+        user_role = getattr(request.user, "role", "")
+        if user_role == "employee":
+            employee_profile = getattr(request.user, "employee_profile", None)
+            if employee_profile is None:
+                raise PermissionDenied("Employee profile is required.")
+            if employee_profile.id != employee_id:
+                raise PermissionDenied("You can only preview your own schedule.")
+
+        employee = (
+            Employee.objects.select_related("department")
+            .prefetch_related("schedules__days", "leaves", "availability_overrides")
+            .filter(id=employee_id)
+            .first()
+        )
+        if employee is None:
+            raise NotFound("Employee was not found.")
+
+        selected_schedule = None
+        schedule_id = serializer.validated_data.get("schedule_id")
+        if schedule_id is not None:
+            selected_schedule = next((schedule for schedule in employee.schedules.all() if schedule.id == schedule_id), None)
+            if selected_schedule is None:
+                raise ValidationError({"schedule_id": "schedule_id must belong to the requested employee."})
+
+        preview = build_schedule_week_preview(
+            employee=employee,
+            week_start=serializer.validated_data["week_start"],
+            schedule=selected_schedule,
+        )
+        return Response(preview, status=status.HTTP_200_OK)
 
 
 class DepartmentViewSet(viewsets.ModelViewSet):

@@ -26,6 +26,7 @@ from .views import (
     TaskRequirementViewSet,
     TaskViewSet,
     PlanningSnapshotView,
+    SchedulePreviewView,
     WorkScheduleDayViewSet,
     WorkScheduleViewSet,
 )
@@ -61,5 +62,6 @@ urlpatterns = [
         name="internal-ai-assignment-context",
     ),
     path("planning-snapshot/", PlanningSnapshotView.as_view(), name="planning-snapshot"),
+    path("schedule-previews/", SchedulePreviewView.as_view(), name="schedule-preview"),
     *router.urls,
 ]

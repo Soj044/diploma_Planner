@@ -272,6 +272,154 @@ class CoreApiSmokeTests(APITestCase):
         self.assertEqual(response.status_code, 201)
         self.assertIsNone(response.data["estimated_hours"])
 
+    def test_schedule_preview_returns_effective_week_truth(self) -> None:
+        user_model = get_user_model()
+        manager = user_model.objects.create_user(
+            username="schedule-preview-manager",
+            email="schedule-preview-manager@example.com",
+            password="test-pass",
+            role=user_model.Role.MANAGER,
+        )
+        employee_user = user_model.objects.create_user(
+            username="schedule-preview-employee",
+            email="schedule-preview-employee@example.com",
+            password="test-pass",
+        )
+        self.client.force_authenticate(user=manager)
+        department = Department.objects.create(name="Schedule preview")
+        employee = Employee.objects.create(
+            user=employee_user,
+            department=department,
+            full_name="Preview Employee",
+            position_name="Operator",
+        )
+        schedule = WorkSchedule.objects.create(employee=employee, name="Week A", is_default=True)
+        WorkScheduleDay.objects.create(
+            schedule=schedule,
+            weekday=0,
+            is_working_day=True,
+            capacity_hours=8,
+            start_time="09:00",
+            end_time="18:00",
+        )
+        WorkScheduleDay.objects.create(
+            schedule=schedule,
+            weekday=1,
+            is_working_day=True,
+            capacity_hours=8,
+            start_time="10:00",
+            end_time="19:00",
+        )
+        EmployeeLeave.objects.create(
+            employee=employee,
+            leave_type=EmployeeLeave.LeaveType.VACATION,
+            status=EmployeeLeave.Status.APPROVED,
+            start_date=date(2026, 5, 11),
+            end_date=date(2026, 5, 11),
+        )
+        EmployeeLeave.objects.create(
+            employee=employee,
+            leave_type=EmployeeLeave.LeaveType.DAY_OFF,
+            status=EmployeeLeave.Status.REQUESTED,
+            start_date=date(2026, 5, 13),
+            end_date=date(2026, 5, 13),
+        )
+        EmployeeAvailabilityOverride.objects.create(
+            employee=employee,
+            date=date(2026, 5, 11),
+            available_hours=5,
+            reason="Would normally be shorter day",
+            created_by_user=manager,
+        )
+        EmployeeAvailabilityOverride.objects.create(
+            employee=employee,
+            date=date(2026, 5, 12),
+            available_hours=4,
+            reason="Training afternoon",
+            created_by_user=manager,
+        )
+
+        response = self.client.get(
+            "/api/v1/schedule-previews/",
+            {
+                "employee_id": employee.id,
+                "week_start": "2026-05-11",
+                "schedule_id": schedule.id,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["week_start"], "2026-05-11")
+        self.assertEqual(response.data["week_end"], "2026-05-17")
+        self.assertEqual(len(response.data["days"]), 7)
+        self.assertEqual(response.data["schedule"]["id"], schedule.id)
+
+        monday = response.data["days"][0]
+        self.assertEqual(monday["date"], "2026-05-11")
+        self.assertEqual(monday["effective_day"]["source"], "approved_leave")
+        self.assertFalse(monday["effective_day"]["is_working_day"])
+        self.assertEqual(monday["effective_day"]["capacity_hours"], 0)
+        self.assertEqual(monday["base_rule"]["capacity_hours"], 8)
+        self.assertIsNotNone(monday["approved_leave"])
+        self.assertIsNotNone(monday["availability_override"])
+
+        tuesday = response.data["days"][1]
+        self.assertEqual(tuesday["date"], "2026-05-12")
+        self.assertEqual(tuesday["effective_day"]["source"], "availability_override")
+        self.assertTrue(tuesday["effective_day"]["is_working_day"])
+        self.assertEqual(tuesday["effective_day"]["capacity_hours"], 4)
+        self.assertEqual(tuesday["availability_override"]["reason"], "Training afternoon")
+
+        wednesday = response.data["days"][2]
+        self.assertEqual(wednesday["date"], "2026-05-13")
+        self.assertEqual(wednesday["effective_day"]["source"], "no_rule")
+        self.assertFalse(wednesday["effective_day"]["is_working_day"])
+        self.assertIsNone(wednesday["approved_leave"])
+        self.assertIsNone(wednesday["base_rule"])
+
+    def test_schedule_preview_rejects_foreign_schedule_id(self) -> None:
+        user_model = get_user_model()
+        manager = user_model.objects.create_user(
+            username="schedule-preview-foreign-manager",
+            email="schedule-preview-foreign-manager@example.com",
+            password="test-pass",
+            role=user_model.Role.MANAGER,
+        )
+        employee_user = user_model.objects.create_user(
+            username="schedule-preview-own-employee",
+            email="schedule-preview-own-employee@example.com",
+            password="test-pass",
+        )
+        other_employee_user = user_model.objects.create_user(
+            username="schedule-preview-foreign-employee",
+            email="schedule-preview-foreign-employee@example.com",
+            password="test-pass",
+        )
+        self.client.force_authenticate(user=manager)
+        employee = Employee.objects.create(
+            user=employee_user,
+            full_name="Own Employee",
+            position_name="Operator",
+        )
+        other_employee = Employee.objects.create(
+            user=other_employee_user,
+            full_name="Foreign Employee",
+            position_name="Operator",
+        )
+        foreign_schedule = WorkSchedule.objects.create(employee=other_employee, name="Foreign Week", is_default=True)
+
+        response = self.client.get(
+            "/api/v1/schedule-previews/",
+            {
+                "employee_id": employee.id,
+                "week_start": "2026-05-11",
+                "schedule_id": foreign_schedule.id,
+            },
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("schedule_id", response.data)
+
     def test_task_update_to_in_progress_requires_final_assignment_and_activates_it(self) -> None:
         user_model = get_user_model()
         manager = user_model.objects.create_user(

@@ -170,6 +170,12 @@ class EmployeeAvailabilityOverrideSerializer(serializers.ModelSerializer):
         read_only_fields = ("id", "created_at")
 
 
+class SchedulePreviewQuerySerializer(serializers.Serializer):
+    employee_id = serializers.IntegerField(min_value=1)
+    week_start = serializers.DateField()
+    schedule_id = serializers.IntegerField(min_value=1, required=False, allow_null=True)
+
+
 class TaskSerializer(serializers.ModelSerializer):
     class Meta:
         model = Task
