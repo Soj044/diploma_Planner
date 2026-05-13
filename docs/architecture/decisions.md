@@ -606,3 +606,29 @@ MVP had two gaps:
 - Frontend operational routes no longer show contract/API hint blocks; those remain in docs and reference-data tooling instead of user-facing task/planning screens.
 - `Departments` now drills into a separate read-only colleague profile route (`/employees/:id`) for `admin|manager`, using existing employee and employee-skill APIs without adding new backend contracts.
 - `/tasks` now uses a list-first board with modal editing and shared priority-pill styling so task selection and requirement focus stay visible without a persistent split editor.
+
+## ADR-023: Schedule Calendar Preview Reuses Backend Availability Truth
+
+- Date: 2026-05-13
+- Status: accepted
+
+### Context
+`WorkScheduleDay` stores only weekly template rules by weekday, while approved leave and availability overrides are date-specific exceptions. The planner already respected approved leave and overrides in snapshot export, but `/schedule` showed only weekly template data, so frontend users could not see the real date-based availability that planner used.
+
+### Decision
+- Add a dedicated read-only core-service endpoint: `GET /api/v1/schedule-previews/?employee_id=...&week_start=...&schedule_id=...`
+- Keep `week_start` Monday-based and return a fixed 7-day window.
+- Move effective availability resolution into one shared backend service layer reused by:
+  - planner snapshot export
+  - schedule preview read model
+- Use one precedence order everywhere:
+  - approved leave > availability override > weekly schedule rule > no stored rule
+- Keep approved leave visibility out of the requested-only `/employee-leaves/` manager queue.
+- Frontend `/schedule` renders the backend-owned preview and does not recalculate leave/override precedence in browser code.
+
+### Consequences
+- Плюсы: `/schedule` now matches planner truth for real calendar dates without introducing a second source of truth in frontend.
+- Плюсы: leave overlay stays temporary and does not mutate the weekly template stored in `WorkScheduleDay`.
+- Плюсы: requested-only leave review flow remains intact for manager/admin users.
+- Минусы: `core-service` now owns one more read model endpoint and its test surface.
+- Минусы: schedule UX becomes richer and requires explicit week navigation state in frontend.

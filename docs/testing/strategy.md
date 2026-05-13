@@ -21,6 +21,7 @@
 - core-service auth: public signup/login, refresh via HttpOnly cookie, logout cookie clear, `me` payload shape, `employee_profile` shape in `login/signup/refresh/me`, inactive user login/refresh denial, introspection allowed only with internal token
 - core-service user profile sync: manager/employee user create and role-change auto-create `Employee` profile; employee->admin role change keeps existing profile
 - core-service RBAC: role matrix checks for admin/manager/employee, employee read-only access to own schedules and schedule days, employee self-scope assignments visibility, requested-only employee leave mutation, manager/admin requested-leave queue, manager/admin-only approval/manual assignment paths, and admin-only users API
+- core-service schedule preview read model: Monday-based week preview for one employee + selected schedule, approved-leave precedence over overrides, override precedence over weekly template, and employee self-scope enforcement on `GET /api/v1/schedule-previews/`
 - core-service leave workflow: employee create forces `status=requested`, employee can update/delete only own `requested` leaves, employee cannot change leave status directly, and manager/admin can review requested leaves through `POST /api/v1/employee-leaves/{id}/set-status/` with `approved|rejected`
 - core-service approval flow: persisted planner proposal lookup, manual final assignment creation, assignment rejection, idempotent replay for the same `task + employee + source_plan_run_id`, rejection of missing or non-selected proposals, rejection of second non-rejected final assignment for one task, manual assignment defaults (`start_date=task.start_date`, `end_date=task.due_date`, `source_plan_run_id=null`), upstream planner failure handling, and internal-token reread of planner-service after planner auth gate
 - core-service task lifecycle: done requires positive `actual_hours`, non-done requires null `actual_hours`, done is terminal, and task status transitions sync final assignment status (`approved->active`, `approved|active->completed`) with required final-assignment presence checks
@@ -100,6 +101,10 @@ docker compose up --build
 - Verify `login`, `signup`, `refresh`, and `GET /api/v1/auth/me` all include `employee_profile` with `id`, `full_name`, `department_id`, `position_name`, `hire_date`, and `is_active`.
 - Verify `GET /api/v1/departments/` returns nested employee summaries with `id`, `full_name`, and `position_name`, and does not expose nested employee email in that summary payload.
 - Verify an `employee` token can only `list/retrieve` own `work-schedules` and `work-schedule-days`.
+- Verify `GET /api/v1/schedule-previews/?employee_id=...&week_start=...&schedule_id=...` returns 7 days with `base_rule`, `effective_day`, `approved_leave`, and `availability_override`.
+- Verify an `employee` token can preview only own employee record on `/api/v1/schedule-previews/`, while `manager|admin` can preview any employee.
+- Verify approved leave makes `effective_day` non-working and wins over an availability override on the same date.
+- Verify requested/rejected/cancelled leaves do not affect schedule preview output.
 - Verify employee leave create always persists `status=requested`.
 - Verify an `employee` token can update/delete only own `requested` leaves and cannot change leave status directly.
 - Verify `manager` and `admin` can review requested leaves and call `POST /api/v1/employee-leaves/{id}/set-status/` with `approved|rejected`.
@@ -163,11 +168,17 @@ docker compose up --build
 - On `/employees/:id`, verify the screen renders employee department, position, employment type, weekly capacity, timezone, hire date, active flag, and skills with levels.
 - As employee, verify `/tasks` is assignment-first and shows deadline from `assignment.end_date`, plus title/description/department/status from joined task data.
 - As employee, verify `/schedule` is read-only and exposes no create/edit/delete controls.
+- As employee, verify `/schedule` defaults to one selected schedule template and shows a weekly calendar preview with real dates.
+- As employee, verify `Previous week`, `Current week`, `Next week`, and manual week-start date changes reload the weekly preview.
+- As employee, verify approved leave dates render as `Leave / non-working` without mutating the stored weekday rule details.
 - As employee, verify `/leaves` shows all leave records, opens a create form without a writable `status` field, and exposes edit/delete only while status is `requested`.
 - As manager/admin, verify `/schedule` loads a cross-employee workspace rather than the employee read-only view.
 - As manager/admin, verify `/schedule` lets the operator choose an employee, create a schedule, edit a schedule, delete a schedule, and keep default-schedule selection visible.
 - As manager/admin, verify `/schedule` lets the operator create, edit, and delete weekday rules for the selected schedule.
 - As manager/admin, verify non-working weekday rules are persisted without editable time inputs in the browser.
+- As manager/admin, verify switching employee, selected schedule, and visible week updates the calendar preview without recomputing availability in the browser.
+- As manager/admin, verify approved leave dates in the preview show `Approved leave` and `Leave / non-working`, while override-only dates show `Availability override` and effective override hours.
+- As manager/admin, verify the preview still shows the muted base schedule details when leave or override changed the effective day.
 - As manager/admin, verify `/leaves` shows only requested records, resolves employee names/positions from `GET /api/v1/employees/`, and never exposes date/type/comment editing controls.
 - As manager/admin, verify `/leaves` `Approve` and `Reject` both call the status-only action and remove the decided record from the queue after reload.
 - On `/tasks`, verify `admin` sees all tasks, while `manager` sees creator-scoped tasks in v1.

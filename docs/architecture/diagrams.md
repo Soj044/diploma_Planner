@@ -14,6 +14,7 @@ employee -> frontend-app: navigate top-nav tasks/schedule/leaves/departments/pro
 frontend-app -> core-service: create/update employees, skills, tasks, work schedules, weekday rules, leave decisions, and assignment actions
 frontend-app -> core-service: login/signup/refresh/me (employee_profile included) + employee schedule/leave/assignment reads
 frontend-app -> core-service: GET /api/v1/departments/ (nested employee summaries)
+frontend-app -> core-service: GET /api/v1/schedule-previews/?employee_id=...&week_start=...&schedule_id=... (backend-owned effective week preview with leave + override overlay)
 frontend-app -> planner-service: POST /api/v1/plan-runs (single-task flow uses task_ids=[task.id] from /tasks/new)
 frontend-app -> ai-layer: GET /api/v1/capabilities (Authorization: Bearer <access>)
 frontend-app -> ai-layer: POST /api/v1/explanations/assignment-rationale (Authorization: Bearer <access>)
@@ -199,11 +200,13 @@ manager/admin -> core-service: POST /api/v1/employee-leaves/{id}/set-status/ app
 
 ```text
 employee -> core-service: GET /api/v1/work-schedules/ + GET /api/v1/work-schedule-days/ (self-scope read-only)
+employee -> core-service: GET /api/v1/schedule-previews/?employee_id=self&week_start=...&schedule_id=... (effective weekly calendar)
 manager/admin -> frontend-app: canonical /schedule route selects employee + schedule
 manager/admin -> core-service: GET /api/v1/employees/
 manager/admin -> core-service: GET/POST/PATCH/DELETE /api/v1/work-schedules/
 manager/admin -> core-service: GET/POST/PATCH/DELETE /api/v1/work-schedule-days/
-frontend-app: joins schedules with weekday rules locally, but keeps schedule truth in core-service
+manager/admin -> core-service: GET /api/v1/schedule-previews/?employee_id=...&week_start=...&schedule_id=...
+frontend-app: renders stored weekly rules plus backend-owned effective calendar preview; leave and override precedence stays in core-service
 ```
 
 ## RBAC Boundary (Core-Service)
