@@ -1,12 +1,26 @@
 <script setup lang="ts">
+/**
+ * Owns the /planning launch and persisted review workspace, including on-demand
+ * advisory explanation calls to the ai-layer for selected proposals and diagnostics.
+ */
 import { computed, onMounted, reactive, ref, watch } from "vue";
 
-import SectionPlaceholder from "../components/SectionPlaceholder.vue";
+import { priorityPillClass } from "../components/tasks/taskPriority";
 import { useAuth } from "../composables/useAuth";
+import { aiService } from "../services/ai-service";
 import { coreService } from "../services/core-service";
 import { describeRequestError } from "../services/http";
-import { plannerService, planRunRequestFields, plannerResources, planningWorkflow } from "../services/planner-service";
-import type { Assignment, AssignmentProposal, Department, Employee, PlanResponse, Task } from "../types/api";
+import { plannerService } from "../services/planner-service";
+import type {
+  AiExplanationPayload,
+  Assignment,
+  AssignmentProposal,
+  Department,
+  Employee,
+  PlanResponse,
+  Task,
+  UnassignedTaskDiagnostic,
+} from "../types/api";
 
 interface PlanningFormState {
   planning_period_start: string;
@@ -21,6 +35,11 @@ interface ReviewFormState {
 interface ApprovalFormState {
   notes: string;
 }
+
+type AiExplanationMap = Record<string, AiExplanationPayload>;
+type VisibleAiExplanationMap = Record<string, AiExplanationPayload | null>;
+type AiErrorMap = Record<string, string>;
+type AiLoadingMap = Record<string, boolean>;
 
 const auth = useAuth();
 const departments = ref<Department[]>([]);
@@ -40,6 +59,14 @@ const reviewErrorMessage = ref("");
 const reviewSuccessMessage = ref("");
 const approvalErrorMessage = ref("");
 const approvalSuccessMessage = ref("");
+const proposalAiCache = reactive<AiExplanationMap>({});
+const diagnosticAiCache = reactive<AiExplanationMap>({});
+const visibleProposalAi = reactive<VisibleAiExplanationMap>({});
+const visibleDiagnosticAi = reactive<VisibleAiExplanationMap>({});
+const proposalAiLoadingKeys = reactive<AiLoadingMap>({});
+const diagnosticAiLoadingKeys = reactive<AiLoadingMap>({});
+const proposalAiErrors = reactive<AiErrorMap>({});
+const diagnosticAiErrors = reactive<AiErrorMap>({});
 
 const form = reactive<PlanningFormState>({
   planning_period_start: "",
@@ -104,6 +131,211 @@ function proposalKey(proposal: AssignmentProposal) {
   return `${proposal.task_id}-${proposal.employee_id}-${proposal.proposal_rank}`;
 }
 
+function estimateSourceLabel(source: string | undefined): string {
+  if (source === "manual") {
+    return "Manual estimate";
+  }
+  if (source === "history") {
+    return "Historical estimate";
+  }
+  if (source === "blended") {
+    return "Blended estimate";
+  }
+  if (source === "rules") {
+    return "Rules-based estimate";
+  }
+  return "Estimate source unavailable";
+}
+
+function proposalTimeEstimate(proposal: AssignmentProposal) {
+  if (!reviewedRun.value) {
+    return null;
+  }
+  return reviewedRun.value.artifacts.time_estimates?.[proposal.task_id] || null;
+}
+
+/**
+ * Clears every entry from a reactive record without replacing the reference.
+ */
+function clearReactiveRecord(record: Record<string, unknown>) {
+  for (const key of Object.keys(record)) {
+    delete record[key];
+  }
+}
+
+/**
+ * Resets only row-local AI visibility, loading, and error state for a new persisted review.
+ */
+function resetPlanningAiRowState() {
+  clearReactiveRecord(visibleProposalAi);
+  clearReactiveRecord(visibleDiagnosticAi);
+  clearReactiveRecord(proposalAiLoadingKeys);
+  clearReactiveRecord(diagnosticAiLoadingKeys);
+  clearReactiveRecord(proposalAiErrors);
+  clearReactiveRecord(diagnosticAiErrors);
+}
+
+/**
+ * Builds a stable cache key for one selected proposal explanation context.
+ */
+function buildProposalAiKey(taskId: string, employeeId: string, planRunId: string): string {
+  return `${taskId}:${employeeId}:${planRunId}`;
+}
+
+/**
+ * Builds a stable cache key for one unassigned diagnostic explanation context.
+ */
+function buildDiagnosticAiKey(taskId: string, planRunId: string): string {
+  return `${taskId}:${planRunId}`;
+}
+
+/**
+ * Resolves the active AI key for one selected proposal row.
+ */
+function getProposalAiKey(proposal: AssignmentProposal): string | null {
+  if (!reviewedRun.value) {
+    return null;
+  }
+
+  return buildProposalAiKey(proposal.task_id, proposal.employee_id, reviewedRun.value.summary.plan_run_id);
+}
+
+/**
+ * Returns whether one selected proposal row is currently loading an advisory explanation.
+ */
+function isProposalAiLoading(proposal: AssignmentProposal): boolean {
+  const key = getProposalAiKey(proposal);
+  return key ? Boolean(proposalAiLoadingKeys[key]) : false;
+}
+
+/**
+ * Returns the row-local AI error message for one selected proposal.
+ */
+function getProposalAiError(proposal: AssignmentProposal): string {
+  const key = getProposalAiKey(proposal);
+  return key ? proposalAiErrors[key] || "" : "";
+}
+
+/**
+ * Returns the currently visible advisory explanation for one selected proposal.
+ */
+function getVisibleProposalAi(proposal: AssignmentProposal): AiExplanationPayload | null {
+  const key = getProposalAiKey(proposal);
+  return key ? visibleProposalAi[key] || null : null;
+}
+
+/**
+ * Loads or restores an advisory explanation for one selected persisted proposal.
+ */
+async function loadProposalAiExplanation(proposal: AssignmentProposal) {
+  if (!reviewedRun.value || !proposal.is_selected) {
+    return;
+  }
+
+  const key = getProposalAiKey(proposal);
+  if (!key) {
+    return;
+  }
+
+  proposalAiErrors[key] = "";
+
+  const cachedPayload = proposalAiCache[key];
+  if (cachedPayload) {
+    visibleProposalAi[key] = cachedPayload;
+    return;
+  }
+
+  proposalAiLoadingKeys[key] = true;
+  visibleProposalAi[key] = null;
+
+  try {
+    const payload = await aiService.getAssignmentRationale({
+      task_id: proposal.task_id,
+      employee_id: proposal.employee_id,
+      plan_run_id: reviewedRun.value.summary.plan_run_id,
+    });
+    proposalAiCache[key] = payload;
+    visibleProposalAi[key] = payload;
+  } catch (error: unknown) {
+    proposalAiErrors[key] = describeRequestError(error);
+  } finally {
+    delete proposalAiLoadingKeys[key];
+  }
+}
+
+/**
+ * Resolves the active AI key for one unassigned diagnostic row.
+ */
+function getDiagnosticAiKey(diagnostic: UnassignedTaskDiagnostic): string | null {
+  if (!reviewedRun.value) {
+    return null;
+  }
+
+  return buildDiagnosticAiKey(diagnostic.task_id, reviewedRun.value.summary.plan_run_id);
+}
+
+/**
+ * Returns whether one diagnostic row is currently loading an advisory explanation.
+ */
+function isDiagnosticAiLoading(diagnostic: UnassignedTaskDiagnostic): boolean {
+  const key = getDiagnosticAiKey(diagnostic);
+  return key ? Boolean(diagnosticAiLoadingKeys[key]) : false;
+}
+
+/**
+ * Returns the row-local AI error message for one diagnostic.
+ */
+function getDiagnosticAiError(diagnostic: UnassignedTaskDiagnostic): string {
+  const key = getDiagnosticAiKey(diagnostic);
+  return key ? diagnosticAiErrors[key] || "" : "";
+}
+
+/**
+ * Returns the currently visible advisory explanation for one diagnostic.
+ */
+function getVisibleDiagnosticAi(diagnostic: UnassignedTaskDiagnostic): AiExplanationPayload | null {
+  const key = getDiagnosticAiKey(diagnostic);
+  return key ? visibleDiagnosticAi[key] || null : null;
+}
+
+/**
+ * Loads or restores an advisory explanation for one persisted unassigned diagnostic.
+ */
+async function loadDiagnosticAiExplanation(diagnostic: UnassignedTaskDiagnostic) {
+  if (!reviewedRun.value) {
+    return;
+  }
+
+  const key = getDiagnosticAiKey(diagnostic);
+  if (!key) {
+    return;
+  }
+
+  diagnosticAiErrors[key] = "";
+
+  const cachedPayload = diagnosticAiCache[key];
+  if (cachedPayload) {
+    visibleDiagnosticAi[key] = cachedPayload;
+    return;
+  }
+
+  diagnosticAiLoadingKeys[key] = true;
+  visibleDiagnosticAi[key] = null;
+
+  try {
+    const payload = await aiService.getUnassignedTaskExplanation({
+      task_id: diagnostic.task_id,
+      plan_run_id: reviewedRun.value.summary.plan_run_id,
+    });
+    diagnosticAiCache[key] = payload;
+    visibleDiagnosticAi[key] = payload;
+  } catch (error: unknown) {
+    diagnosticAiErrors[key] = describeRequestError(error);
+  } finally {
+    delete diagnosticAiLoadingKeys[key];
+  }
+}
+
 function resetApprovalState() {
   approvingProposalKey.value = "";
   approvalErrorMessage.value = "";
@@ -153,6 +385,7 @@ async function reviewPlanRun(planRunId = reviewForm.plan_run_id.trim()) {
   reviewErrorMessage.value = "";
   reviewSuccessMessage.value = "";
   resetApprovalState();
+  resetPlanningAiRowState();
 
   try {
     reviewedRun.value = await plannerService.getPlanRun(planRunId);
@@ -220,7 +453,7 @@ async function approveProposal(proposal: AssignmentProposal) {
       source_plan_run_id: reviewedRun.value.summary.plan_run_id,
       notes: approvalForm.notes.trim() || undefined,
     });
-    approvalSuccessMessage.value = "Selected proposal was approved in core-service.";
+    approvalSuccessMessage.value = "Selected proposal was approved.";
   } catch (error: unknown) {
     approvalErrorMessage.value = describeRequestError(error);
   } finally {
@@ -234,15 +467,12 @@ onMounted(loadPlanningScope);
 <template>
   <div class="page-stack">
     <section class="page-card">
-      <p class="eyebrow">Planner-service</p>
+      <p class="eyebrow">Planning</p>
       <h3 class="page-title">Launch a persisted planning run</h3>
       <p class="page-description">
-        This screen now covers plan run launch, persisted review, and the final approval handoff. Browser code still
-        does not recalculate eligibility, scoring, or optimization, and `core-service` remains the authority for final
-        `Assignment` creation.
+        Launch the run, inspect the persisted result, and approve the selected proposal without leaving the same review flow.
       </p>
       <div class="pill-row">
-        <span class="pill">/plan-runs</span>
         <span class="pill is-warm">{{ auth.user.value ? `Initiator #${auth.user.value.id}` : "No auth context" }}</span>
         <span class="pill">{{ selectedTaskCount }} selected tasks</span>
       </div>
@@ -254,7 +484,7 @@ onMounted(loadPlanningScope);
           <div class="editor-header">
             <div>
               <p class="section-caption">Launch planning run</p>
-              <p class="resource-path">POST /api/v1/plan-runs</p>
+              <p class="resource-copy">Choose a planning window and optionally narrow the run to one department or a focused set of tasks.</p>
             </div>
             <div class="inline-actions">
               <button class="button-secondary" type="button" :disabled="isLoading" @click="loadPlanningScope">
@@ -324,7 +554,7 @@ onMounted(loadPlanningScope);
                   <input v-model="selectedTaskIds" class="check-input" type="checkbox" :value="String(task.id)" />
                   <p class="resource-label">{{ task.title }}</p>
                 </div>
-                <span class="pill is-warm">{{ task.priority }}</span>
+                <span class="pill" :class="priorityPillClass(task.priority)">{{ task.priority }}</span>
               </label>
               <p class="resource-copy">
                 Department:
@@ -332,7 +562,7 @@ onMounted(loadPlanningScope);
                 · Due: {{ task.due_date }}
               </p>
               <p class="resource-copy">
-                Status: {{ task.status }} · Estimated: {{ task.estimated_hours }}h
+                Status: {{ task.status }} · Estimated: {{ task.estimated_hours === null ? "Planner estimate" : `${task.estimated_hours}h` }}
               </p>
             </li>
           </ul>
@@ -344,8 +574,7 @@ onMounted(loadPlanningScope);
       <p class="eyebrow">Latest launch result</p>
       <h3 class="page-title">Plan run {{ latestRun.summary.plan_run_id }}</h3>
       <p class="page-description">
-        The run was persisted in planner-service. Use the persisted review section below to re-read the same run through
-        `GET /api/v1/plan-runs/{plan_run_id}`.
+        The run is ready for review below, including proposals, diagnostics, and solver output from the same saved run.
       </p>
       <div class="grid-two">
         <div class="records-card">
@@ -398,7 +627,7 @@ onMounted(loadPlanningScope);
           <div class="editor-header">
             <div>
               <p class="section-caption">Review persisted plan run</p>
-              <p class="resource-path">GET /api/v1/plan-runs/{plan_run_id}</p>
+              <p class="resource-copy">Paste a plan run ID to reopen a saved review and continue from persisted artifacts.</p>
             </div>
             <div class="inline-actions">
               <button
@@ -434,8 +663,7 @@ onMounted(loadPlanningScope);
             <div>
               <p class="section-caption">Review guide</p>
               <p class="resource-copy">
-                Review stays persisted and approval remains a thin handoff. The browser sends only `task`, `employee`,
-                `source_plan_run_id`, and optional notes back to `core-service`.
+                Reopen a saved run, review the result, and send back only the selected proposal reference plus optional approval notes.
               </p>
             </div>
             <span class="pill">{{ reviewedRun ? "Loaded" : "Waiting for run ID" }}</span>
@@ -444,7 +672,7 @@ onMounted(loadPlanningScope);
           <ul class="resource-list">
             <li class="resource-item">
               <p class="resource-label">What gets loaded</p>
-              <p class="resource-copy">Persisted summary, proposals, diagnostics, and solver statistics from planner-service.</p>
+              <p class="resource-copy">Saved summary, proposals, diagnostics, and solver statistics for the selected run.</p>
             </li>
             <li class="resource-item">
               <p class="resource-label">What does not happen here</p>
@@ -459,8 +687,7 @@ onMounted(loadPlanningScope);
       <p class="eyebrow">Persisted review</p>
       <h3 class="page-title">Reviewing plan run {{ reviewedRun.summary.plan_run_id }}</h3>
       <p class="page-description">
-        This data is reloaded from persisted planner artifacts. Manager approval below only hands back the selected
-        proposal identifiers so `core-service` can recreate the final assignment from persisted planner truth.
+        This view reopens the saved planning result so you can compare proposals, inspect diagnostics, and finalize one assignment.
       </p>
 
       <div class="grid-two">
@@ -520,8 +747,7 @@ onMounted(loadPlanningScope);
           <div>
             <p class="section-caption">Assignment proposals</p>
             <p class="resource-copy">
-              Selected proposal appears first. Only the selected proposal can be approved from this screen, and the
-              browser never sends timing or scoring back as manager-owned state.
+              Selected proposal appears first. Only the selected proposal can be approved from this screen.
             </p>
           </div>
           <div class="pill-row">
@@ -533,8 +759,7 @@ onMounted(loadPlanningScope);
         <div class="resource-item">
           <p class="resource-label">Approval handoff</p>
           <p class="resource-copy">
-            `core-service` re-reads the persisted proposal by `source_plan_run_id`, validates the selected
-            `task + employee` pair, and writes the final approved `Assignment`.
+            Approving a proposal finalizes the selected task and employee pairing from this saved plan run.
           </p>
           <label class="field-group">
             <span class="field-label">Approval notes</span>
@@ -590,8 +815,75 @@ onMounted(loadPlanningScope);
               Planned hours: {{ proposal.planned_hours ?? "n/a" }}
               · Dates: {{ proposal.start_date || "n/a" }} → {{ proposal.end_date || "n/a" }}
             </p>
+            <p class="resource-copy">
+              Estimate source: {{ estimateSourceLabel(proposalTimeEstimate(proposal)?.source) }}
+              <span v-if="proposalTimeEstimate(proposal) && proposalTimeEstimate(proposal)?.source !== 'manual'">
+                · Planner used {{ proposalTimeEstimate(proposal)?.effective_hours }}h
+              </span>
+            </p>
             <p class="resource-copy">Status: {{ proposal.status }}</p>
             <p class="resource-copy">{{ proposal.explanation_text || "No explanation text." }}</p>
+            <div v-if="proposal.is_selected" class="action-row">
+              <button
+                class="button-secondary"
+                type="button"
+                :disabled="isProposalAiLoading(proposal)"
+                @click="loadProposalAiExplanation(proposal)"
+              >
+                {{ isProposalAiLoading(proposal) ? "Explaining..." : "Explain with AI" }}
+              </button>
+            </div>
+            <p v-if="getProposalAiError(proposal)" class="status-banner is-error">
+              {{ getProposalAiError(proposal) }}
+            </p>
+            <div v-if="getVisibleProposalAi(proposal)" class="section-stack">
+              <div>
+                <p class="section-caption">Assistant explanation</p>
+                <p class="resource-copy">{{ getVisibleProposalAi(proposal)?.summary }}</p>
+              </div>
+              <div v-if="getVisibleProposalAi(proposal)?.reasons.length">
+                <p class="section-caption">Reasons</p>
+                <ul class="copy-list">
+                  <li v-for="reason in getVisibleProposalAi(proposal)?.reasons" :key="reason">{{ reason }}</li>
+                </ul>
+              </div>
+              <div v-if="getVisibleProposalAi(proposal)?.risks.length">
+                <p class="section-caption">Risks</p>
+                <ul class="copy-list">
+                  <li v-for="risk in getVisibleProposalAi(proposal)?.risks" :key="risk">{{ risk }}</li>
+                </ul>
+              </div>
+              <div v-if="getVisibleProposalAi(proposal)?.similar_cases.length">
+                <p class="section-caption">Similar cases</p>
+                <ul class="resource-list">
+                  <li
+                    v-for="similarCase in getVisibleProposalAi(proposal)?.similar_cases"
+                    :key="`${similarCase.source_key}-${similarCase.headline}`"
+                    class="resource-item"
+                  >
+                    <p class="resource-label">{{ similarCase.headline }}</p>
+                    <p class="item-meta">
+                      {{ similarCase.source_service }} · {{ similarCase.source_type }} · {{ similarCase.source_key }}
+                    </p>
+                    <p class="resource-copy">{{ similarCase.outcome_note }}</p>
+                  </li>
+                </ul>
+              </div>
+              <div v-if="getVisibleProposalAi(proposal)?.recommended_actions.length">
+                <p class="section-caption">Recommended actions</p>
+                <ul class="copy-list">
+                  <li
+                    v-for="action in getVisibleProposalAi(proposal)?.recommended_actions"
+                    :key="action"
+                  >
+                    {{ action }}
+                  </li>
+                </ul>
+              </div>
+              <div class="notice">
+                {{ getVisibleProposalAi(proposal)?.advisory_note }}
+              </div>
+            </div>
             <div class="action-row">
               <button
                 v-if="canApproveProposal(proposal)"
@@ -632,6 +924,67 @@ onMounted(loadPlanningScope);
             </div>
             <p class="resource-copy">{{ diagnostic.message }}</p>
             <p class="resource-copy">{{ diagnostic.reason_details }}</p>
+            <div class="action-row">
+              <button
+                class="button-secondary"
+                type="button"
+                :disabled="isDiagnosticAiLoading(diagnostic)"
+                @click="loadDiagnosticAiExplanation(diagnostic)"
+              >
+                {{ isDiagnosticAiLoading(diagnostic) ? "Explaining..." : "Explain with AI" }}
+              </button>
+            </div>
+            <p v-if="getDiagnosticAiError(diagnostic)" class="status-banner is-error">
+              {{ getDiagnosticAiError(diagnostic) }}
+            </p>
+            <div v-if="getVisibleDiagnosticAi(diagnostic)" class="section-stack">
+              <div>
+                <p class="section-caption">Assistant explanation</p>
+                <p class="resource-copy">{{ getVisibleDiagnosticAi(diagnostic)?.summary }}</p>
+              </div>
+              <div v-if="getVisibleDiagnosticAi(diagnostic)?.reasons.length">
+                <p class="section-caption">Reasons</p>
+                <ul class="copy-list">
+                  <li v-for="reason in getVisibleDiagnosticAi(diagnostic)?.reasons" :key="reason">{{ reason }}</li>
+                </ul>
+              </div>
+              <div v-if="getVisibleDiagnosticAi(diagnostic)?.risks.length">
+                <p class="section-caption">Risks</p>
+                <ul class="copy-list">
+                  <li v-for="risk in getVisibleDiagnosticAi(diagnostic)?.risks" :key="risk">{{ risk }}</li>
+                </ul>
+              </div>
+              <div v-if="getVisibleDiagnosticAi(diagnostic)?.similar_cases.length">
+                <p class="section-caption">Similar cases</p>
+                <ul class="resource-list">
+                  <li
+                    v-for="similarCase in getVisibleDiagnosticAi(diagnostic)?.similar_cases"
+                    :key="`${similarCase.source_key}-${similarCase.headline}`"
+                    class="resource-item"
+                  >
+                    <p class="resource-label">{{ similarCase.headline }}</p>
+                    <p class="item-meta">
+                      {{ similarCase.source_service }} · {{ similarCase.source_type }} · {{ similarCase.source_key }}
+                    </p>
+                    <p class="resource-copy">{{ similarCase.outcome_note }}</p>
+                  </li>
+                </ul>
+              </div>
+              <div v-if="getVisibleDiagnosticAi(diagnostic)?.recommended_actions.length">
+                <p class="section-caption">Recommended actions</p>
+                <ul class="copy-list">
+                  <li
+                    v-for="action in getVisibleDiagnosticAi(diagnostic)?.recommended_actions"
+                    :key="action"
+                  >
+                    {{ action }}
+                  </li>
+                </ul>
+              </div>
+              <div class="notice">
+                {{ getVisibleDiagnosticAi(diagnostic)?.advisory_note }}
+              </div>
+            </div>
           </li>
         </ul>
       </section>
@@ -655,48 +1008,6 @@ onMounted(loadPlanningScope);
       </ul>
     </section>
 
-    <div class="grid-two">
-      <SectionPlaceholder
-        eyebrow="Endpoints"
-        title="Planning APIs"
-        description="Points 7 to 9 now cover launch, persisted review, and manager approval handoff."
-      >
-        <ul class="resource-list">
-          <li v-for="resource in plannerResources" :key="resource.key" class="resource-item">
-            <p class="resource-label">{{ resource.label }}</p>
-            <p class="resource-path">{{ resource.endpoint }}</p>
-            <p class="resource-copy">{{ resource.description }}</p>
-            <p class="resource-copy"><strong>Next:</strong> {{ resource.nextStep }}</p>
-          </li>
-        </ul>
-      </SectionPlaceholder>
-
-      <SectionPlaceholder
-        eyebrow="Request contract"
-        title="CreatePlanRunRequest fields"
-        description="These fields mirror the shared backend contract from `packages/contracts`."
-      >
-        <ul class="resource-list">
-          <li v-for="field in planRunRequestFields" :key="field.title" class="resource-item">
-            <p class="resource-label">{{ field.title }}</p>
-            <p class="resource-copy">{{ field.details }}</p>
-          </li>
-        </ul>
-      </SectionPlaceholder>
-    </div>
-
-    <SectionPlaceholder
-      eyebrow="Workflow"
-      title="Frontend role in planning"
-      description="The client only orchestrates manager/admin actions around persisted backend flow."
-    >
-      <ul class="resource-list">
-        <li v-for="step in planningWorkflow" :key="step.title" class="resource-item">
-          <p class="resource-label">{{ step.title }}</p>
-          <p class="resource-copy">{{ step.details }}</p>
-        </li>
-      </ul>
-    </SectionPlaceholder>
   </div>
 </template>
 

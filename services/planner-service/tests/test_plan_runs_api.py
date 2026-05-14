@@ -177,3 +177,13 @@ def test_require_planner_access_returns_503_when_introspection_unavailable(monke
         plan_runs.require_planner_access("Bearer manager-token")
     assert exc_info.value.status_code == 503
     assert exc_info.value.detail == "core-service auth introspection is unavailable"
+
+
+def test_require_plan_run_read_access_accepts_valid_internal_token(monkeypatch) -> None:
+    """Allow trusted internal rereads when the shared token matches exactly."""
+
+    monkeypatch.setattr(plan_runs, "INTERNAL_SERVICE_TOKEN", "shared-ai-token")
+
+    context = plan_runs.require_plan_run_read_access(None, "shared-ai-token")
+
+    assert context is None

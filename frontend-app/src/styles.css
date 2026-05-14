@@ -15,8 +15,14 @@
   --app-surface-strong: #fffdf8;
   --app-accent: #107d67;
   --app-accent-soft: rgba(16, 125, 103, 0.12);
+  --app-info: #2d6bb2;
+  --app-info-soft: rgba(45, 107, 178, 0.12);
+  --app-warning: #b8860b;
+  --app-warning-soft: rgba(184, 134, 11, 0.12);
   --app-warm: #c67130;
+  --app-warm-soft: rgba(198, 113, 48, 0.12);
   --app-danger: #a44444;
+  --app-danger-soft: rgba(164, 68, 68, 0.12);
   --app-shadow: 0 20px 60px rgba(33, 48, 58, 0.08);
 }
 
@@ -133,12 +139,32 @@ a {
 }
 
 .pill.is-warm {
-  background: rgba(198, 113, 48, 0.12);
+  background: var(--app-warm-soft);
   color: var(--app-warm);
 }
 
 .pill.is-danger {
-  background: rgba(164, 68, 68, 0.12);
+  background: var(--app-danger-soft);
+  color: var(--app-danger);
+}
+
+.pill.is-priority-low {
+  background: var(--app-info-soft);
+  color: var(--app-info);
+}
+
+.pill.is-priority-medium {
+  background: var(--app-warning-soft);
+  color: var(--app-warning);
+}
+
+.pill.is-priority-high {
+  background: var(--app-warm-soft);
+  color: var(--app-warm);
+}
+
+.pill.is-priority-critical {
+  background: var(--app-danger-soft);
   color: var(--app-danger);
 }
 
@@ -193,6 +219,19 @@ a {
 .resource-copy {
   color: var(--app-muted);
   margin: 0.4rem 0 0;
+}
+
+.section-stack {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.copy-list {
+  color: var(--app-muted);
+  display: grid;
+  gap: 0.45rem;
+  margin: 0;
+  padding-left: 1.1rem;
 }
 
 .data-layout {

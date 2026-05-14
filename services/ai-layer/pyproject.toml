@@ -1,0 +1,23 @@
+[tool.poetry]
+name = "ai-layer"
+version = "0.1.0"
+description = "AI support layer bootstrap service (FastAPI + Ollama + pgvector)"
+authors = ["Soj044"]
+readme = "README.md"
+packages = [{ include = "app" }]
+
+[tool.poetry.dependencies]
+python = "^3.12"
+fastapi = ">=0.115,<1.0"
+uvicorn = { extras = ["standard"], version = ">=0.30,<1.0" }
+pydantic = ">=2.8,<3.0"
+httpx = ">=0.27,<1.0"
+psycopg = { extras = ["binary"], version = ">=3.2,<4.0" }
+python-dotenv = "^1.1.1"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.2"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

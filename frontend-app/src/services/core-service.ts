@@ -6,11 +6,13 @@ import type {
   Department,
   DepartmentInput,
   Employee,
+  EmployeeSkill,
   EmployeeLeave,
   EmployeeLeaveStatusUpdatePayload,
   EmployeeLeaveInput,
   EmployeeInput,
   ResourceDescriptor,
+  SchedulePreviewResponse,
   Skill,
   SkillInput,
   Task,
@@ -177,9 +179,11 @@ export const coreService = {
   updateSkill: (id: number, payload: SkillInput) => client.patch<Skill>(`/skills/${id}/`, payload),
   deleteSkill: (id: number) => client.delete<null>(`/skills/${id}/`).then(() => undefined),
   listEmployees: () => client.get<Employee[]>("/employees/"),
+  getEmployee: (id: number) => client.get<Employee>(`/employees/${id}/`),
   createEmployee: (payload: EmployeeInput) => client.post<Employee>("/employees/", payload),
   updateEmployee: (id: number, payload: EmployeeInput) => client.patch<Employee>(`/employees/${id}/`, payload),
   deleteEmployee: (id: number) => client.delete<null>(`/employees/${id}/`).then(() => undefined),
+  listEmployeeSkills: () => client.get<EmployeeSkill[]>("/employee-skills/"),
   listWorkSchedules: () => client.get<WorkSchedule[]>("/work-schedules/"),
   createWorkSchedule: (payload: WorkScheduleInput) => client.post<WorkSchedule>("/work-schedules/", payload),
   updateWorkSchedule: (id: number, payload: WorkScheduleInput) =>
@@ -192,6 +196,12 @@ export const coreService = {
     client.patch<WorkScheduleDay>(`/work-schedule-days/${id}/`, payload),
   deleteWorkScheduleDay: (id: number) =>
     client.delete<null>(`/work-schedule-days/${id}/`).then(() => undefined),
+  getSchedulePreview: (employeeId: number, weekStart: string, scheduleId?: number | null) =>
+    client.get<SchedulePreviewResponse>("/schedule-previews/", {
+      employee_id: employeeId,
+      week_start: weekStart,
+      schedule_id: scheduleId ?? undefined,
+    }),
   listEmployeeLeaves: () => client.get<EmployeeLeave[]>("/employee-leaves/"),
   createEmployeeLeave: (payload: EmployeeLeaveInput) =>
     client.post<EmployeeLeave>("/employee-leaves/", payload),

@@ -3,129 +3,84 @@ import { computed } from "vue";
 
 import SectionPlaceholder from "../components/SectionPlaceholder.vue";
 import { useAuth } from "../composables/useAuth";
-import { appConfig, frontendAssumptions } from "../config/env";
-import { assignmentResources, referenceDataResources, taskResources } from "../services/core-service";
-import { plannerResources } from "../services/planner-service";
 
 const auth = useAuth();
 
 const roleHeadline = computed(() => {
   if (auth.role.value === "employee") {
-    return "Employee self-service shell";
+    return "Employee self-service workspace";
   }
 
   if (auth.role.value === "manager") {
-    return "Manager workspace over persisted backend flows";
+    return "Manager planning workspace";
   }
 
-  return "Admin workspace over persisted backend flows";
+  return "Admin planning workspace";
 });
 
 const roleDescription = computed(() => {
   if (auth.role.value === "employee") {
-    return "Employee users can review tasks and work only inside self-service schedule and leave routes.";
+    return "Review assignments, keep your schedule visible, and manage leave requests from one place.";
   }
 
-  return "`core-service` stays the source of truth for business entities and final assignments. `planner-service` keeps persisted plan runs, proposals, and diagnostics. Frontend runtime is aligned with the backend token-auth contract and cookie-compatible local proxy paths.";
+  return "Move between tasks, planning, departments, schedules, and final assignments without leaving the main shell.";
 });
 </script>
 
 <template>
   <div class="page-stack">
     <section class="page-card">
-      <p class="eyebrow">Architecture</p>
+      <p class="eyebrow">Workspace</p>
       <h3 class="page-title">{{ roleHeadline }}</h3>
       <p class="page-description">{{ roleDescription }}</p>
       <div class="pill-row">
-        <span class="pill">Core endpoints: {{ referenceDataResources.length + taskResources.length + assignmentResources.length }}</span>
-        <span class="pill">Planner endpoints: {{ plannerResources.length }}</span>
-        <span class="pill is-warm">/api/v1/auth/*</span>
+        <span class="pill is-warm">{{ auth.user.value?.role || "No role" }}</span>
+        <span class="pill">{{ auth.user.value?.employee_profile?.full_name || auth.user.value?.email || "No session" }}</span>
       </div>
     </section>
 
     <div class="grid-two">
       <SectionPlaceholder
-        eyebrow="What exists now"
-        title="App shell and route map"
-        description="The frontend now has a stable home in the monorepo with a shared layout and room for the next CRUD slices."
+        eyebrow="What you can do"
+        title="Core daily flows"
+        description="The shell now keeps the main operational routes close together instead of exposing backend contracts."
       >
         <ul class="resource-list">
           <li class="resource-item">
-            <p class="resource-label">Shared layout</p>
-            <p class="resource-copy">Sidebar navigation plus a content area for each MVP section.</p>
+            <p class="resource-label">Tasks and requirements</p>
+            <p class="resource-copy">Create, focus, and refine planning tasks in one connected flow.</p>
           </li>
           <li v-if="auth.role.value !== 'employee'" class="resource-item">
-            <p class="resource-label">Reference data CRUD</p>
-            <p class="resource-copy">Users, departments, skills, and employees now support list/create/edit/delete from the shell.</p>
+            <p class="resource-label">Planning and approvals</p>
+            <p class="resource-copy">Launch runs, review proposals, and approve the selected assignment outcome.</p>
           </li>
           <li class="resource-item">
-            <p class="resource-label">Task flow</p>
-            <p class="resource-copy">Tasks and task requirements now support a connected create/edit/delete flow.</p>
-          </li>
-          <li v-if="auth.role.value === 'employee'" class="resource-item">
-            <p class="resource-label">Self-service routes</p>
-            <p class="resource-copy">Employees now get dedicated navigation entries for own schedules and leaves.</p>
-          </li>
-          <li class="resource-item">
-            <p class="resource-label">Thin API layer</p>
-            <p class="resource-copy">Dedicated modules for `core-service` and `planner-service` requests.</p>
-          </li>
-          <li class="resource-item">
-            <p class="resource-label">Local proxy</p>
-            <p class="resource-copy">{{ frontendAssumptions.proxy }}</p>
+            <p class="resource-label">Departments and people</p>
+            <p class="resource-copy">Browse department structure and open employee profiles where your role allows it.</p>
           </li>
         </ul>
       </SectionPlaceholder>
 
       <SectionPlaceholder
-        eyebrow="Known gaps"
-        title="Still intentionally missing"
-        description="This cycle avoids fake browser business logic and keeps unresolved backend/frontend seams visible."
+        eyebrow="Current profile"
+        title="Session snapshot"
+        description="A quick read-only view of who is currently signed in."
       >
-        <ul class="resource-list">
-          <li class="resource-item">
-            <p class="resource-label">Role-aware access</p>
-            <p class="resource-copy">Navigation and routes now respect backend roles at UX level, but screen-level action pruning still needs to be completed.</p>
+        <ul class="key-value-list">
+          <li class="key-value-item">
+            <span class="key-label">Email</span>
+            <span class="key-value">{{ auth.user.value?.email || "No authenticated user" }}</span>
           </li>
-          <li class="resource-item">
-            <p class="resource-label">Planning and approval flows</p>
-            <p class="resource-copy">
-              {{ auth.role.value === "employee"
-                ? "Employees remain intentionally excluded from planner launch and assignment approval routes."
-                : "Plan runs, proposal review, approvals, and assignments remain ahead after the task flow." }}
-            </p>
+          <li class="key-value-item">
+            <span class="key-label">Role</span>
+            <span class="key-value">{{ auth.user.value?.role || "n/a" }}</span>
           </li>
-          <li class="resource-item">
-            <p class="resource-label">Core API schema UI</p>
-            <p class="resource-copy">Planner already has Swagger; core-service still needs manual contract references for frontend work.</p>
+          <li class="key-value-item">
+            <span class="key-label">Employee profile</span>
+            <span class="key-value">{{ auth.user.value?.employee_profile?.full_name || "Not linked" }}</span>
           </li>
         </ul>
       </SectionPlaceholder>
     </div>
-
-    <SectionPlaceholder
-      eyebrow="Runtime"
-      title="Current defaults"
-      description="These values come from the frontend env configuration and can be overridden per environment."
-    >
-      <ul class="key-value-list">
-        <li class="key-value-item">
-          <span class="key-label">App title</span>
-          <span class="key-value">{{ appConfig.appTitle }}</span>
-        </li>
-        <li class="key-value-item">
-          <span class="key-label">Core service URL</span>
-          <span class="key-value">{{ appConfig.coreServiceUrl }}</span>
-        </li>
-        <li class="key-value-item">
-          <span class="key-label">Auth contract</span>
-          <span class="key-value">{{ frontendAssumptions.auth }}</span>
-        </li>
-        <li class="key-value-item">
-          <span class="key-label">Planner service URL</span>
-          <span class="key-value">{{ appConfig.plannerServiceUrl }}</span>
-        </li>
-      </ul>
-    </SectionPlaceholder>
   </div>
 </template>

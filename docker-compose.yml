@@ -1,11 +1,9 @@
 services:
   postgres:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:pg16
     container_name: workestrator-postgres
     env_file:
       - .env
-    ports:
-      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -51,6 +49,47 @@ services:
     command: >
       sh -c "uvicorn app.main:app --host $${PLANNER_HOST:-0.0.0.0} --port $${PLANNER_PORT:-8001}"
 
+  ai-layer:
+    build:
+      context: .
+      dockerfile: services/ai-layer/Dockerfile
+    container_name: workestrator-ai-layer
+    env_file:
+      - .env
+    environment:
+      CORE_SERVICE_URL: http://core-service:8000
+      PLANNER_SERVICE_URL: http://planner-service:8001
+      AI_LAYER_URL: http://ai-layer:8002
+      OLLAMA_BASE_URL: http://ollama:11434
+      OLLAMA_CHAT_MODEL: ${OLLAMA_CHAT_MODEL:-llama3.2:3b}
+      OLLAMA_EMBED_MODEL: ${OLLAMA_EMBED_MODEL:-bge-m3}
+      OLLAMA_TIMEOUT_SECONDS: ${OLLAMA_TIMEOUT_SECONDS:-90}
+      AI_VECTOR_DIM: ${AI_VECTOR_DIM:-1024}
+      AI_TOP_K: ${AI_TOP_K:-5}
+      AI_SYNC_STALE_SECONDS: ${AI_SYNC_STALE_SECONDS:-300}
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-local-dev-internal-service-token}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      core-service:
+        condition: service_started
+      planner-service:
+        condition: service_started
+      ollama:
+        condition: service_started
+    ports:
+      - "8002:8002"
+    command: >
+      sh -c "uvicorn app.main:app --host $${AI_LAYER_HOST:-0.0.0.0} --port $${AI_LAYER_PORT:-8002}"
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: workestrator-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+
   frontend-app:
     build:
       context: .
@@ -61,15 +100,23 @@ services:
         condition: service_started
       planner-service:
         condition: service_started
+      ai-layer:
+        condition: service_started
     environment:
       VITE_APP_TITLE: Workestrator Frontend
       VITE_CORE_SERVICE_PROXY_TARGET: http://core-service:8000
       VITE_PLANNER_SERVICE_PROXY_TARGET: http://planner-service:8001
+      VITE_AI_SERVICE_PROXY_TARGET: http://ai-layer:8002
     ports:
       - "5173:5173"
     volumes:
       - ./frontend-app:/app/frontend-app
       - frontend_node_modules:/app/frontend-app/node_modules
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:5173/"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
     command: >
       sh -c "npm install &&
              npm run dev"
@@ -77,3 +124,4 @@ services:
 volumes:
   postgres_data:
   frontend_node_modules:
+  ollama_data:

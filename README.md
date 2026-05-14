@@ -6,6 +6,7 @@
 
 - `services/core-service` — Django + DRF, источник бизнес-истины
 - `services/planner-service` — FastAPI + OR-Tools/CP-SAT, persisted `plan runs`, `proposals`, `diagnostics`
+- `services/ai-layer` — FastAPI AI support layer с локальным `ollama`, shared `pgvector`, retrieval sync и advisory explanations
 - `frontend-app` — Vue 3 + Vite thin client для manager и employee flows
 - `packages/contracts` — общий слой DTO/контрактов между сервисами
 
@@ -17,12 +18,32 @@
 - запуск planning run через `planner-service`
 - persisted review proposals и diagnostics
 - manager approval flow через `POST /api/v1/assignments/approve-proposal/`
-- read-only экран итоговых assignments во frontend
-- Stage 2 shared frontend shell: top navigation, canonical routes, thin profile screen, admin workspace wrapper
+- manual assignment flow через `POST /api/v1/assignments/manual/`
+- employee canonical UX:
+- assignment-first `Tasks`
+- read-only `Schedule`
+- requested-only `Leaves`
+- `Departments`
+- `Profile`
+- manager/admin canonical UX:
+- top navigation
+- own `Tasks` workspace
+- `/tasks/new` create-and-assign wizard
+- employee schedule management
+- requested leave review queue
+- read-only экран итоговых assignments
+- admin users/roles workspace
+- AI runtime foundation:
+- `ai-layer` health/bootstrap service
+- `ollama` container in local compose runtime
+- shared PostgreSQL `pgvector` + `ai_layer` schema bootstrap
+- internal AI feeds/context between `core-service`, `planner-service`, and `ai-layer`
+- advisory backend explanation pipeline for `assignment-rationale` and `unassigned-task`
+- on-demand AI advisory UI in `/tasks/new` and `/planning`
 
 ## Что еще не реализовано
 
-- AI/RAG слой
+- task drafting hints and employee-facing AI UX
 - сложные уведомления, realtime и внешние интеграции
 
 ## Требования
@@ -40,7 +61,12 @@
 cp .env.example .env
 ```
 
-Текущий `.env.example` уже достаточен для локального MVP запуска.
+Текущий `.env.example` уже достаточен для локального MVP запуска, включая foundation для `ai-layer`, `ollama` и shared `pgvector` storage.
+Локальный AI runtime по умолчанию настроен на:
+
+- `OLLAMA_CHAT_MODEL=llama3.2:3b`
+- `OLLAMA_EMBED_MODEL=bge-m3`
+- `OLLAMA_TIMEOUT_SECONDS=90`
 
 ### 2. Поднять весь dev runtime
 
@@ -54,7 +80,26 @@ docker compose up --build
 - `Django admin`: `http://localhost:8000/admin/`
 - `planner-service health`: `http://localhost:8001/health`
 - `planner-service docs`: `http://localhost:8001/docs`
+- `ai-layer health`: `http://localhost:8002/health`
+- `ai-layer capabilities`: `http://localhost:8002/api/v1/capabilities`
+- `ollama API`: `http://localhost:11434/api/tags`
 - `frontend-app`: `http://localhost:5173`
+
+Если `frontend-app` выглядит зависшим в браузере, сначала проверь runtime из терминала:
+
+```bash
+docker compose ps
+docker logs workestrator-frontend
+docker exec workestrator-frontend wget -qO- http://127.0.0.1:5173/ | head
+curl http://localhost:5173/
+curl http://localhost:5173/@vite/client
+```
+
+Если контейнер healthy и внутри контейнера `index.html` отдается, но хостовый браузер все еще висит:
+
+- пересоздай только `frontend-app` контейнер;
+- сделай hard refresh или открой страницу в incognito;
+- проверь, не блокирует ли published port `5173` локальный firewall/antivirus/другой dev runtime.
 
 Если `core-service` падает с `InconsistentMigrationHistory`, значит локальный `postgres_data` volume остался от более старой схемы. Для чистого MVP-старта:
 
@@ -129,6 +174,7 @@ npm run dev
 - `core-service` вызывается через `/api/v1/*`
 - auth endpoints вызываются через `/api/v1/auth/*`
 - `planner-service` вызывается через `/planner-api/api/v1/*`
+- `ai-layer` вызывается через `/ai-api/api/v1/*`
 - Vite proxy используется и в standalone-режиме, и внутри `frontend-app` container
 - refresh token хранится в HttpOnly cookie
 - access token хранится только в памяти frontend
@@ -136,8 +182,9 @@ npm run dev
 Важно:
 
 - frontend больше не использует Basic auth workaround
-- при запуске через `docker compose` frontend автоматически проксирует `core-service` и `planner-service` по именам compose-сервисов
+- при запуске через `docker compose` frontend автоматически проксирует `core-service`, `planner-service` и `ai-layer` runtime path по именам compose-сервисов
 - при standalone-запуске frontend использует `localhost` proxy targets из `frontend-app/.env.example`
+- frontend-facing `ai-layer` routes повторяют auth pattern `planner-service`: Bearer token from browser -> core-service introspection through shared `INTERNAL_SERVICE_TOKEN` -> allow only `admin|manager`
 
 ## Минимальный ручной сценарий проверки
 
@@ -155,6 +202,11 @@ npm run dev
 
 `Planning` и `Assignments` сохранены как совместимые advanced routes, но после Stage 2 больше не показываются в основном верхнем меню.
 
+Важно для `/tasks/new -> Save + Assignment`:
+
+- manual mode открывается только когда planner реально вернул `unassigned`;
+- для date-based multi-day задач planner теперь считает eligibility по **сумме доступных часов** в окне задачи, а не требует один непрерывный availability slot на весь интервал.
+
 ### Employee flow
 
 1. Открыть `http://localhost:5173/signup`
@@ -168,6 +220,9 @@ npm run dev
 - `core-service API root`: `http://localhost:8000/api/v1/`
 - `core-service admin`: `http://localhost:8000/admin/`
 - `planner-service docs`: `http://localhost:8001/docs`
+- `ai-layer health`: `http://localhost:8002/health`
+- `ai-layer capabilities`: `http://localhost:8002/api/v1/capabilities`
+- `ollama API`: `http://localhost:11434/api/tags`
 - `frontend-app`: `http://localhost:5173`
 
 ## Локальная разработка по сервисам
@@ -195,6 +250,21 @@ cd services/planner-service
 poetry install
 poetry run pytest -q
 poetry run uvicorn app.main:app --host 0.0.0.0 --port 8001
+```
+
+### ai-layer
+
+```bash
+cd services/ai-layer
+poetry install
+poetry run uvicorn app.main:app --host 0.0.0.0 --port 8002
+```
+
+При старте `ai-layer` сам проверяет доступность PostgreSQL, включает `CREATE EXTENSION IF NOT EXISTS vector` и создает отдельную schema `ai_layer`.
+Полный AI corpus можно вручную наполнить через:
+
+```bash
+poetry run python -m app.cli.reindex --mode full
 ```
 
 ### frontend-app
@@ -230,6 +300,13 @@ DJANGO_TEST_SQLITE=true poetry run python manage.py test
 # planner-service
 cd services/planner-service
 poetry run pytest -q
+
+# ai-layer bootstrap smoke
+curl http://localhost:8002/health
+
+# ai-layer full reindex
+cd services/ai-layer
+poetry run python -m app.cli.reindex --mode full
 ```
 
 ## Документация

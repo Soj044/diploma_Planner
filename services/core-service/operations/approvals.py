@@ -16,12 +16,7 @@ from contracts.schemas import AssignmentProposal, PlanResponse
 
 from .models import Assignment, AssignmentChangeLog, Employee, Task
 from .planner_client import PlannerServiceClient
-
-FINAL_TASK_STATUSES = [
-    Assignment.Status.APPROVED,
-    Assignment.Status.ACTIVE,
-    Assignment.Status.COMPLETED,
-]
+from .task_workflow import FINAL_ASSIGNMENT_STATUSES
 
 
 def create_manual_assignment(
@@ -199,7 +194,7 @@ def _validate_planner_handoff(
 def _ensure_task_has_no_final_assignment(task: Task) -> None:
     """Reject new final assignment writes when the task already has an active final assignee."""
 
-    if Assignment.objects.filter(task=task, status__in=FINAL_TASK_STATUSES).exists():
+    if Assignment.objects.filter(task=task, status__in=FINAL_ASSIGNMENT_STATUSES).exists():
         raise serializers.ValidationError("Task already has a final assignment.")
 
 

@@ -133,6 +133,15 @@ export interface Employee {
   updated_at: string;
 }
 
+export interface EmployeeSkill {
+  id: number;
+  employee: number;
+  skill: number;
+  level: number;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface WorkScheduleInput {
   employee: number;
   name: string;
@@ -167,6 +176,63 @@ export interface WorkScheduleDay {
   end_time: string | null;
 }
 
+export interface SchedulePreviewRule {
+  is_working_day: boolean;
+  capacity_hours: number;
+  start_time: string | null;
+  end_time: string | null;
+}
+
+export interface SchedulePreviewEffectiveDay extends SchedulePreviewRule {
+  source: "schedule" | "approved_leave" | "availability_override" | "no_rule";
+}
+
+export interface SchedulePreviewLeaveSummary {
+  id: number;
+  leave_type: string;
+  start_date: string;
+  end_date: string;
+}
+
+export interface SchedulePreviewAvailabilityOverride {
+  id: number;
+  date: string;
+  available_hours: number;
+  reason: string;
+}
+
+export interface SchedulePreviewDay {
+  date: string;
+  weekday: number;
+  weekday_label: string;
+  base_rule: SchedulePreviewRule | null;
+  effective_day: SchedulePreviewEffectiveDay;
+  approved_leave: SchedulePreviewLeaveSummary | null;
+  availability_override: SchedulePreviewAvailabilityOverride | null;
+}
+
+export interface SchedulePreviewSummaryEmployee {
+  id: number;
+  full_name: string;
+  position_name: string;
+  department_id: number | null;
+  department_name: string | null;
+}
+
+export interface SchedulePreviewSummarySchedule {
+  id: number;
+  name: string;
+  is_default: boolean;
+}
+
+export interface SchedulePreviewResponse {
+  employee: SchedulePreviewSummaryEmployee;
+  schedule: SchedulePreviewSummarySchedule | null;
+  week_start: string;
+  week_end: string;
+  days: SchedulePreviewDay[];
+}
+
 export interface EmployeeLeaveInput {
   employee: number;
   leave_type: string;
@@ -194,7 +260,7 @@ export interface TaskInput {
   description: string;
   status: string;
   priority: string;
-  estimated_hours: number;
+  estimated_hours: number | null;
   actual_hours: number | null;
   start_date: string | null;
   due_date: string;
@@ -208,7 +274,7 @@ export interface Task {
   description: string;
   status: string;
   priority: string;
-  estimated_hours: number;
+  estimated_hours: number | null;
   actual_hours: number | null;
   start_date: string | null;
   due_date: string;
@@ -309,6 +375,19 @@ export interface PlanRunArtifacts {
   eligibility: Record<string, string[]>;
   scores: Record<string, Record<string, number>>;
   solver_statistics: Record<string, number | string>;
+  candidate_analysis?: Record<string, Array<Record<string, unknown>>>;
+  time_estimates?: Record<string, TaskTimeEstimate>;
+}
+
+export type TimeEstimateSource = "manual" | "history" | "blended" | "rules";
+
+export interface TaskTimeEstimate {
+  source: TimeEstimateSource;
+  effective_hours: number;
+  manual_hours: number | null;
+  rules_baseline_hours: number | null;
+  historical_median_hours: number | null;
+  historical_sample_size: number;
 }
 
 export interface PlanResponse {
@@ -316,4 +395,32 @@ export interface PlanResponse {
   proposals: AssignmentProposal[];
   unassigned: UnassignedTaskDiagnostic[];
   artifacts: PlanRunArtifacts;
+}
+
+export interface AiSimilarCase {
+  headline: string;
+  source_service: string;
+  source_type: string;
+  source_key: string;
+  outcome_note: string;
+}
+
+export interface AiExplanationPayload {
+  summary: string;
+  reasons: string[];
+  risks: string[];
+  recommended_actions: string[];
+  similar_cases: AiSimilarCase[];
+  advisory_note: string;
+}
+
+export interface AssignmentRationaleRequest {
+  task_id: string;
+  employee_id: string;
+  plan_run_id: string;
+}
+
+export interface UnassignedTaskExplanationRequest {
+  task_id: string;
+  plan_run_id: string;
 }
