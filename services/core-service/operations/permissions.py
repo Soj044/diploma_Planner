@@ -142,6 +142,18 @@ class AssignmentChangeLogPermission(RoleActionPermission):
     manager_actions = {"list", "retrieve"}
 
 
+class SchedulePreviewPermission(BasePermission):
+    """Allow authenticated schedule preview reads for operational roles."""
+
+    message = "Authentication credentials were not provided."
+
+    def has_permission(self, request, view) -> bool:
+        user = getattr(request, "user", None)
+        if not user or not user.is_authenticated or not user.is_active:
+            return False
+        return getattr(user, "role", "") in {"admin", "manager", "employee"}
+
+
 class PlannerApprovalPermission(RoleActionPermission):
     """Explicit allow-list for assignment approval handoff endpoint."""
 

@@ -82,6 +82,9 @@ Flow:
 - `manager`: operational access for tasks, schedules, overrides, approvals, and read access where required.
 - `employee`: read-only tasks plus self-scope CRUD for own schedules and leaves.
 - `planning-snapshot` is internal-only via `X-Internal-Service-Token`.
+- `GET /api/v1/internal/ai/service-boundary/` is internal-only via `X-Internal-Service-Token`.
+- `GET /api/v1/internal/ai/index-feed/` is internal-only via `X-Internal-Service-Token`.
+- `GET /api/v1/internal/ai/tasks/{task_id}/assignment-context/` is internal-only via `X-Internal-Service-Token`.
 
 ## Approval handoff
 
@@ -102,5 +105,23 @@ re-validates the requested proposal, keeps the operation idempotent for the same
 
 `POST /api/v1/planning-snapshot/` exports a planner-ready `PlanningSnapshot` from
 core business truth. The endpoint accepts either:
-- an authenticated core user request
 - an internal service request with `X-Internal-Service-Token`
+
+## Internal AI helper boundary
+
+`GET /api/v1/internal/ai/service-boundary/` returns a compact description of
+the `core-service` ownership boundary for trusted backend-to-backend AI calls.
+It is intended for `ai-layer` integration only and never accepts browser auth.
+
+`GET /api/v1/internal/ai/index-feed/` returns flattened `assignment_case`
+records for ai-layer retrieval sync. The feed indexes only successful final
+assignments in current flattened form and emits `index_action=delete` when a
+previously indexed assignment becomes `rejected` or `cancelled`.
+
+`GET /api/v1/internal/ai/tasks/{task_id}/assignment-context/?employee_id=...&comparison_employee_ids=...`
+returns live task, requirements, the selected employee payload, optional
+comparison employee payloads, and only the availability slice that overlaps the
+task window. The response now also includes deterministic `availability_facts`
+such as `available_hours_in_window`, `approved_leave_overlap`, and
+`has_insufficient_available_hours` so `ai-layer` can explain why an alternative
+candidate was filtered without inventing leave or schedule facts in the LLM.

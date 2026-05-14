@@ -23,6 +23,10 @@ FastAPI сервис планирования для MVP.
 - `GET /health`
 - `POST /api/v1/plan-runs` with `CreatePlanRunRequest` (requires Bearer token, `admin|manager`)
 - `GET /api/v1/plan-runs/{plan_run_id}` (requires Bearer token, `admin|manager`, or trusted internal reread token from `core-service`)
+- `GET /api/v1/internal/ai/service-boundary` (requires `X-Internal-Service-Token`)
+- `GET /api/v1/internal/ai/index-feed` (requires `X-Internal-Service-Token`)
+- `GET /api/v1/internal/ai/plan-runs/{plan_run_id}/proposal-context` (requires `X-Internal-Service-Token`)
+- `GET /api/v1/internal/ai/plan-runs/{plan_run_id}/unassigned-context` (requires `X-Internal-Service-Token`)
 
 ## Review and approval handoff
 
@@ -43,6 +47,29 @@ FastAPI сервис планирования для MVP.
 - `CORE_SERVICE_URL` — base URL для `core-service`
 - `INTERNAL_SERVICE_TOKEN` — shared token для вызова `/api/v1/planning-snapshot/` и `/api/v1/auth/introspect`
 - `PLANNER_DB_PATH` — путь к SQLite-файлу planner artifacts
+
+## Internal AI helper boundary
+
+`GET /api/v1/internal/ai/service-boundary` returns a compact description of
+planner ownership over proposals, diagnostics, and persisted planning artifacts.
+It is available only to trusted backend callers that send the shared
+`X-Internal-Service-Token`.
+
+`GET /api/v1/internal/ai/index-feed` returns flattened `unassigned_case`
+records for completed persisted plan runs only. The v1 feed is append-only and
+uses persisted snapshot, diagnostics, eligibility, scores, and solver summary
+plus a short `candidate_analysis` outcome breakdown to build retrieval items for
+`ai-layer`.
+
+`GET /api/v1/internal/ai/plan-runs/{plan_run_id}/proposal-context` returns the
+persisted proposal slice for one `task_id + employee_id` pair, including the
+task snapshot, target proposal, sibling proposals, eligibility list, score map,
+persisted `candidate_analysis`, selected employee id/score, and solver summary.
+
+`GET /api/v1/internal/ai/plan-runs/{plan_run_id}/unassigned-context` returns
+the persisted diagnostic slice for one task, including the task snapshot,
+matching unassigned diagnostic, eligibility list, score map, persisted
+`candidate_analysis`, and solver summary.
 
 ## Запуск
 

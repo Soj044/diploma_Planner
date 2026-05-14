@@ -14,17 +14,37 @@ employee -> frontend-app: navigate top-nav tasks/schedule/leaves/departments/pro
 frontend-app -> core-service: create/update employees, skills, tasks, work schedules, weekday rules, leave decisions, and assignment actions
 frontend-app -> core-service: login/signup/refresh/me (employee_profile included) + employee schedule/leave/assignment reads
 frontend-app -> core-service: GET /api/v1/departments/ (nested employee summaries)
+frontend-app -> core-service: GET /api/v1/schedule-previews/?employee_id=...&week_start=...&schedule_id=... (backend-owned effective week preview with leave + override overlay)
 frontend-app -> planner-service: POST /api/v1/plan-runs (single-task flow uses task_ids=[task.id] from /tasks/new)
+frontend-app -> ai-layer: GET /api/v1/capabilities (Authorization: Bearer <access>)
+frontend-app -> ai-layer: POST /api/v1/explanations/assignment-rationale (Authorization: Bearer <access>)
+frontend-app -> ai-layer: POST /api/v1/explanations/unassigned-task (Authorization: Bearer <access>)
 planner-service -> core-service: POST /api/v1/planning-snapshot/ + X-Internal-Service-Token
-planner-service (CP-SAT): eligibility -> scoring -> optimization
+ai-layer -> core-service: POST /api/v1/auth/introspect + X-Internal-Service-Token
+ai-layer -> core-service: GET /api/v1/internal/ai/service-boundary/ + X-Internal-Service-Token
+ai-layer -> core-service: GET /api/v1/internal/ai/index-feed/ + X-Internal-Service-Token
+ai-layer -> core-service: GET /api/v1/internal/ai/tasks/{task_id}/assignment-context/?employee_id=...&comparison_employee_ids=... + X-Internal-Service-Token
+ai-layer -> planner-service: GET /api/v1/internal/ai/service-boundary + X-Internal-Service-Token
+ai-layer -> planner-service: GET /api/v1/internal/ai/index-feed + X-Internal-Service-Token
+ai-layer -> planner-service: GET /api/v1/internal/ai/plan-runs/{plan_run_id}/proposal-context?task_id=...&employee_id=... + candidate_analysis + X-Internal-Service-Token
+ai-layer -> planner-service: GET /api/v1/internal/ai/plan-runs/{plan_run_id}/unassigned-context?task_id=... + candidate_analysis + X-Internal-Service-Token
+ai-layer -> ollama: /api/embed for feed vectors and retrieval query vectors
+ai-layer -> ollama: /api/chat stream=false + JSON schema for structured explanations (default local chat model: llama3.2:3b)
+planner-service (CP-SAT): eligibility with cumulative availability hours in the task window -> scoring -> optimization -> persisted candidate_analysis
+planner-service: build task_effort_map once (manual/history/blended/rules) and reuse effective_hours in eligibility + optimizer + diagnostics
 planner-service -> planner artifact store: save run + snapshot + proposals + diagnostics
+planner-service -> planner artifact store: save artifacts.time_estimates + expose source/effective hours for manager review
 planner-service -> frontend-app: assignment proposals + diagnostics
 frontend-app -> planner-service: GET /api/v1/plan-runs/{id}
 frontend-app -> core-service: POST /api/v1/assignments/approve-proposal/
 frontend-app -> core-service: POST /api/v1/assignments/manual/ or POST /api/v1/assignments/{id}/reject/
 frontend-app -> core-service: POST /api/v1/employee-leaves/{id}/set-status/ (manager/admin)
 core-service -> planner-service: GET /api/v1/plan-runs/{id} + X-Internal-Service-Token
+ai-layer -> postgres: bootstrap vector extension + ai_layer schema for derived AI storage
+ai-layer -> postgres: create index_items + sync_state + explanation_logs + HNSW cosine index
+ai-layer -> postgres: upsert/delete assignment_case and unassigned_case rows during full/incremental sync
 core-service -> core database: store final assignments, sync task status, and persist leave status changes
+core-service -> core database: enforce task completion invariants (`done` requires positive `actual_hours`, non-`done` requires null) and sync final assignment status on task lifecycle transitions
 ```
 
 ## Approval Handoff
@@ -46,6 +66,8 @@ core-service -> core database: create approved Assignment + AssignmentChangeLog
 
 manager/admin -> core-service: POST /api/v1/assignments/{id}/reject/
 core-service -> core database: mark Assignment rejected + write AssignmentChangeLog + reopen task.status to planned
+manager/admin -> core-service: PATCH /api/v1/tasks/{id}/ status=in_progress|done + actual_hours (via existing task form)
+core-service: sync final assignment approved->active on task in_progress, and approved|active->completed on task done
 ```
 
 ## Runtime Diagram (Docker)
@@ -60,13 +82,13 @@ browser
 | docker compose svc  |
 |       :5173         |
 +----------+----------+
-           | /api, /planner-api
+           | /api, /planner-api, /ai-api
            v
-+---------------------+      +-----------------------+
-|   core-service      |<---->|       postgres        |
-|   django + drf      |      |      postgres:16      |
-+----------+----------+      +-----------------------+
-           ^
++---------------------+      +-----------------------------+
+|   core-service      |<---->|          postgres           |
+|   django + drf      |      | pgvector + core db +        |
++----------+----------+      | ai_layer schema foundation  |
+           ^                 +-----------------------------+
            | POST /api/v1/planning-snapshot/
            | X-Internal-Service-Token
            |
@@ -75,9 +97,26 @@ browser
 |   planner-service   |----->|   planner sqlite db   |
 |  fastapi + or-tools |      |   planner.sqlite3     |
 +---------------------+      +-----------------------+
+
++---------------------+      +-----------------------+
+|      ai-layer       |----->|        ollama         |
+| fastapi explanation |      | local model runtime   |
+| sync + retrieval    |      |       :11434          |
+|       :8002         |      +-----------------------+
++----------+----------+
+           |
+           v
+      postgres ai_layer bootstrap
+      - CREATE EXTENSION vector
+      - CREATE SCHEMA ai_layer
+      - CREATE TABLE index_items/sync_state/explanation_logs
+      - CREATE INDEX ... USING hnsw (embedding vector_cosine_ops)
+      - full/incremental sync for assignment_case + unassigned_case
 ```
 
 `frontend-app` can also be run standalone on the host with `npm run dev`, but `docker compose up --build` is now the default full-stack dev runtime.
+`ai-layer` runtime is available in compose now with authenticated capability/explanation endpoints, token-protected internal feed/context reads, pgvector sync, structured Ollama generation, and deterministic comparison-reason enrichment from planner/core facts. The first frontend integrations now live in `/tasks/new` and `/planning`, where manager/admin users can request on-demand advisory explanations for planner suggestions, selected persisted proposals, and unassigned diagnostics.
+The compose `frontend-app` service now includes an HTTP healthcheck on `http://127.0.0.1:5173/` to make Vite readiness visible during local troubleshooting.
 
 ## Frontend-Useful Read Models (Stage 1)
 
@@ -113,6 +152,7 @@ frontend-app:
     services/auth-service.ts
     services/core-service.ts
     services/planner-service.ts
+    services/ai-service.ts
     services/http.ts
     composables/useAuth.ts
 
@@ -140,6 +180,8 @@ core-service -> frontend-app: rotated refresh cookie + new access token + employ
 frontend-app -> planner-service: Authorization: Bearer <access>
 planner-service -> core-service: POST /api/v1/auth/introspect + X-Internal-Service-Token
 core-service -> planner-service: user_id + role + is_active + employee_id
+ai-layer -> core-service: POST /api/v1/auth/introspect + X-Internal-Service-Token
+core-service -> ai-layer: user_id + role + is_active + employee_id
 core-service -> planner-service: persisted approval reread via X-Internal-Service-Token
 ```
 
@@ -158,11 +200,13 @@ manager/admin -> core-service: POST /api/v1/employee-leaves/{id}/set-status/ app
 
 ```text
 employee -> core-service: GET /api/v1/work-schedules/ + GET /api/v1/work-schedule-days/ (self-scope read-only)
+employee -> core-service: GET /api/v1/schedule-previews/?employee_id=self&week_start=...&schedule_id=... (effective weekly calendar)
 manager/admin -> frontend-app: canonical /schedule route selects employee + schedule
 manager/admin -> core-service: GET /api/v1/employees/
 manager/admin -> core-service: GET/POST/PATCH/DELETE /api/v1/work-schedules/
 manager/admin -> core-service: GET/POST/PATCH/DELETE /api/v1/work-schedule-days/
-frontend-app: joins schedules with weekday rules locally, but keeps schedule truth in core-service
+manager/admin -> core-service: GET /api/v1/schedule-previews/?employee_id=...&week_start=...&schedule_id=...
+frontend-app: renders stored weekly rules plus backend-owned effective calendar preview; leave and override precedence stays in core-service
 ```
 
 ## RBAC Boundary (Core-Service)
@@ -203,6 +247,7 @@ planner-service:
   PlanRun, PlanInputSnapshot, CandidateEligibility,
   CandidateScore, AssignmentProposal, UnassignedTask,
   ConstraintViolation, SolverStatistics
+  + PlanRunArtifacts.time_estimates (source/effective_hours/manual_hours/rules/historical metadata)
 
 MVP runtime storage:
   SQLite-backed planner artifact repository

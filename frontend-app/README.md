@@ -5,7 +5,7 @@ Vue 3 + Vite + TypeScript shell for the Workestrator MVP frontend.
 ## Current frontend slice
 
 - application scaffold and routing;
-- thin API layer for `core-service` and `planner-service`;
+- thin API layer for `core-service`, `planner-service`, and `ai-layer`;
 - local Vite proxy for backend calls during development;
 - token-based auth flow with login, signup, refresh, logout, and me bootstrap;
 - top navigation shell with role-aware primary routes and guarded access;
@@ -32,8 +32,22 @@ This starts the Vite dev server inside the `frontend-app` container and proxies:
 
 - `/api/*` -> `core-service`
 - `/planner-api/*` -> `planner-service`
+- `/ai-api/*` -> `ai-layer`
 
 Frontend becomes available at `http://localhost:5173`.
+
+If the browser keeps loading indefinitely while the container looks healthy, check:
+
+```bash
+docker compose ps
+docker logs workestrator-frontend
+docker exec workestrator-frontend wget -qO- http://127.0.0.1:5173/ | head
+curl http://localhost:5173/
+curl http://localhost:5173/@vite/client
+```
+
+If the container serves `index.html` internally but the host still cannot open `:5173`, recreate only the
+frontend container or node_modules volume, hard-refresh the browser, and check host-level port blockers.
 
 ### Option 2: Standalone Vite on the host
 
@@ -48,9 +62,11 @@ npm run dev
 
 - `VITE_CORE_SERVICE_URL` defaults to `/api/v1`
 - `VITE_PLANNER_SERVICE_URL` defaults to `/planner-api/api/v1`
+- `VITE_AI_SERVICE_URL` defaults to `/ai-api/api/v1`
 - `VITE_CORE_SERVICE_PROXY_TARGET` defaults to `http://localhost:8000`
 - `VITE_PLANNER_SERVICE_PROXY_TARGET` defaults to `http://localhost:8001`
-- in `docker compose`, proxy targets are overridden to `http://core-service:8000` and `http://planner-service:8001`
+- `VITE_AI_SERVICE_PROXY_TARGET` defaults to `http://localhost:8002`
+- in `docker compose`, proxy targets are overridden to `http://core-service:8000`, `http://planner-service:8001`, and `http://ai-layer:8002`
 
 ## Runtime routing
 
@@ -59,6 +75,7 @@ npm run dev
 - Vite proxies `/api` directly to `core-service` without path rewrite so the refresh cookie path `/api/v1/auth/` still matches
 - `planner-service` is reached through `/planner-api/api/v1/*`
 - Vite rewrites `/planner-api/*` to backend root before forwarding to planner-service
+- `ai-layer` is reached through `/ai-api/api/v1/*`
 
 ## Current auth flow
 
@@ -103,6 +120,7 @@ npm run dev
 - employee `/tasks` now reads self-scoped assignments and joins them with task and department labels;
 - manager/admin `/tasks` now shows only tasks created by the current authenticated user;
 - `/tasks/new` saves a task first, then can continue into the single-task assignment flow;
+- `/tasks/new` can request on-demand AI advisory explanations for planner suggestions and unassigned manual fallback;
 - task requirements stay editable for manager/admin users after the task is saved;
 - single-task assignment still reuses persisted planner runs plus backend approval/manual assignment endpoints.
 
@@ -118,6 +136,7 @@ npm run dev
 
 - reload persisted plan runs by `plan_run_id` from the same `Planning` screen;
 - render proposal list with task/employee labels, score, rank, selected marker, timing, and explanation text;
+- allow on-demand AI advisory explanations for selected proposals and diagnostics without mutating planner artifacts;
 - render unassigned task diagnostics and persisted solver statistics;
 - keep planner artifacts read-only even while enabling separate approval handoff.
 

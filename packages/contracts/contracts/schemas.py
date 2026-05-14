@@ -14,6 +14,17 @@ from pydantic import BaseModel, Field, model_validator
 
 PlanRunStatus = Literal["created", "running", "completed", "failed"]
 ProposalStatus = Literal["proposed", "approved", "rejected", "applied"]
+PriorityLevel = Literal["low", "medium", "high", "critical"]
+CandidateOutcomeCode = Literal[
+    "selected",
+    "eligible_not_selected_lower_score",
+    "eligible_not_selected_capacity_or_conflict",
+    "rejected_inactive_employee",
+    "rejected_department_mismatch",
+    "rejected_missing_required_skill",
+    "rejected_insufficient_available_hours",
+]
+TimeEstimateSource = Literal["manual", "history", "blended", "rules"]
 
 
 class SkillRequirement(BaseModel):
@@ -46,6 +57,7 @@ class TaskSnapshot(BaseModel):
     task_id: str
     department_id: str | None = None
     title: str
+    priority: PriorityLevel = "medium"
     starts_at: datetime
     ends_at: datetime
     estimated_hours: int | None = Field(default=None, ge=1)
@@ -58,11 +70,29 @@ class TaskSnapshot(BaseModel):
         return self
 
 
+class HistoricalTaskSummary(BaseModel):
+    task_id: str
+    department_id: str | None = None
+    priority: PriorityLevel = "medium"
+    estimated_hours: int | None = Field(default=None, ge=1)
+    actual_hours: int = Field(ge=1)
+    requirements: list[SkillRequirement] = Field(default_factory=list)
+    start_date: date | None = None
+    due_date: date
+
+    @model_validator(mode="after")
+    def validate_period(self) -> "HistoricalTaskSummary":
+        if self.start_date and self.start_date > self.due_date:
+            raise ValueError("historical task start_date must be before or equal to due_date")
+        return self
+
+
 class PlanningSnapshot(BaseModel):
     planning_period_start: datetime
     planning_period_end: datetime
     employees: list[EmployeeSnapshot]
     tasks: list[TaskSnapshot]
+    historical_tasks: list[HistoricalTaskSummary] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def validate_period_and_tasks(self) -> "PlanningSnapshot":
@@ -130,10 +160,36 @@ class PlanRunSummary(BaseModel):
     unassigned_count: int
 
 
+class CandidateAnalysisRow(BaseModel):
+    """Persisted planner-side explanation facts for one task/employee comparison."""
+
+    employee_id: str
+    outcome_code: CandidateOutcomeCode
+    eligible: bool
+    score: float | None = None
+    selected: bool = False
+    available_hours_in_window: float | None = Field(default=None, ge=0)
+    required_hours: int | None = Field(default=None, ge=1)
+    missing_skill_ids: list[str] = Field(default_factory=list)
+    missing_skill_names: list[str] = Field(default_factory=list)
+    matched_department: bool = True
+
+
+class TaskTimeEstimate(BaseModel):
+    source: TimeEstimateSource
+    effective_hours: int = Field(ge=1)
+    manual_hours: int | None = Field(default=None, ge=1)
+    rules_baseline_hours: int | None = Field(default=None, ge=1)
+    historical_median_hours: float | None = Field(default=None, ge=1)
+    historical_sample_size: int = Field(default=0, ge=0)
+
+
 class PlanRunArtifacts(BaseModel):
     eligibility: dict[str, list[str]] = Field(default_factory=dict)
     scores: dict[str, dict[str, float]] = Field(default_factory=dict)
     solver_statistics: dict[str, int | float | str] = Field(default_factory=dict)
+    candidate_analysis: dict[str, list[CandidateAnalysisRow]] = Field(default_factory=dict)
+    time_estimates: dict[str, TaskTimeEstimate] = Field(default_factory=dict)
 
 
 class PlanResponse(BaseModel):

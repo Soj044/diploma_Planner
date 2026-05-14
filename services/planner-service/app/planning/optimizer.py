@@ -4,14 +4,13 @@
 eligibility и scoring. Он связывает planner business rules с solver output,
 который затем уходит в proposals и diagnostics.
 """
-
-from math import ceil
+from datetime import timedelta
 
 from contracts.schemas import AssignmentProposal, EmployeeSnapshot, TaskSnapshot
-from datetime import timedelta
 
 from ortools.sat.python import cp_model
 
+from .time_estimation import TaskEffortMap, effective_task_hours
 from .types import EligibilityResult, ScoreResult
 
 SCORE_SCALE = 100
@@ -24,20 +23,12 @@ def _intervals_overlap(start_a, end_a, start_b, end_b) -> bool:
     return start_a < end_b and start_b < end_a
 
 
-def _planned_hours(task: TaskSnapshot) -> int:
-    """Derive assignment effort in whole hours when the task omits an explicit estimate."""
-
-    if task.estimated_hours:
-        return task.estimated_hours
-    duration_seconds = max((task.ends_at - task.starts_at).total_seconds(), 0)
-    return max(1, ceil(duration_seconds / 3600))
-
-
 def build_plan(
     tasks: list[TaskSnapshot],
     employees: list[EmployeeSnapshot],
     eligibility: EligibilityResult,
     scores: ScoreResult,
+    task_effort_map: TaskEffortMap,
 ) -> tuple[list[AssignmentProposal], dict[str, int | float | str]]:
     """Choose the best non-conflicting employee-task assignments with CP-SAT."""
 
@@ -95,7 +86,7 @@ def build_plan(
                         task_id=task_id,
                         employee_id=employee_id,
                         score=scores.by_task.get(task_id, {}).get(employee_id, 0.0),
-                        planned_hours=_planned_hours(task),
+                        planned_hours=effective_task_hours(task.task_id, task_effort_map),
                         start_date=task.starts_at.date(),
                         end_date=(task.ends_at - timedelta(microseconds=1)).date(),
                     )

@@ -3,7 +3,6 @@ import { computed } from "vue";
 import { RouterLink, RouterView, useRoute, useRouter } from "vue-router";
 
 import { useAuth } from "../composables/useAuth";
-import { appConfig, frontendAssumptions } from "../config/env";
 import type { AuthRole } from "../types/api";
 
 const route = useRoute();
@@ -58,6 +57,22 @@ const visibleNavigation = computed(() => {
   return navigation.filter((item) => role !== null && item.roles.includes(role));
 });
 
+function isNavigationActive(item: NavigationItem) {
+  if (route.path === item.to) {
+    return true;
+  }
+
+  if (item.to === "/tasks" && route.path === "/tasks/new") {
+    return true;
+  }
+
+  if (item.to === "/departments" && route.path.startsWith("/employees/")) {
+    return true;
+  }
+
+  return route.path.startsWith(`${item.to}/`);
+}
+
 const sessionLabel = computed(() => {
   if (!auth.user.value) {
     return "No session";
@@ -72,6 +87,14 @@ const sessionDetails = computed(() => {
   }
 
   return `${auth.user.value.email} · ${auth.user.value.role}`;
+});
+
+const sectionBadges = computed(() => {
+  if (!auth.user.value) {
+    return [];
+  }
+
+  return [auth.user.value.role, auth.user.value.employee_profile?.is_active ? "employee active" : "employee pending"].filter(Boolean);
 });
 
 async function handleLogout() {
@@ -94,7 +117,7 @@ async function handleLogout() {
           :key="item.to"
           :to="item.to"
           class="nav-link"
-          :class="{ 'is-active': route.path === item.to }"
+          :class="{ 'is-active': isNavigationActive(item) }"
         >
           {{ item.label }}
         </RouterLink>
@@ -115,9 +138,7 @@ async function handleLogout() {
         <h2 class="shell-title">{{ pageTitle }}</h2>
       </div>
       <div class="pill-row shell-pills">
-        <span class="pill">Core {{ appConfig.coreServiceUrl }}</span>
-        <span class="pill">Planner {{ appConfig.plannerServiceUrl }}</span>
-        <span class="pill is-warm">{{ frontendAssumptions.auth }}</span>
+        <span v-for="badge in sectionBadges" :key="badge" class="pill">{{ badge }}</span>
       </div>
     </section>
 

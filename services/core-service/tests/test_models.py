@@ -136,6 +136,62 @@ class CoreSerializerTests(TestCase):
         self.assertFalse(serializer.is_valid())
         self.assertIn("weekday", serializer.errors)
 
+    def test_weekday_validation_rejects_end_time_before_start_time(self) -> None:
+        user_model = get_user_model()
+        user = user_model.objects.create_user(
+            username="weekday-time-order-manager",
+            email="weekday-time-order-manager@example.com",
+            password="test-pass",
+            role=user_model.Role.MANAGER,
+        )
+        employee = Employee.objects.create(
+            user=user,
+            full_name="Weekday Time Order",
+            position_name="Operator",
+        )
+        schedule = WorkSchedule.objects.create(employee=employee, name="Default")
+        serializer = WorkScheduleDaySerializer(
+            data={
+                "schedule": schedule.id,
+                "weekday": 1,
+                "is_working_day": True,
+                "capacity_hours": 4,
+                "start_time": "12:00",
+                "end_time": "11:00",
+            }
+        )
+
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("end_time must be later than start_time.", str(serializer.errors))
+
+    def test_weekday_validation_rejects_capacity_outside_time_window(self) -> None:
+        user_model = get_user_model()
+        user = user_model.objects.create_user(
+            username="weekday-capacity-window-manager",
+            email="weekday-capacity-window-manager@example.com",
+            password="test-pass",
+            role=user_model.Role.MANAGER,
+        )
+        employee = Employee.objects.create(
+            user=user,
+            full_name="Weekday Capacity Window",
+            position_name="Operator",
+        )
+        schedule = WorkSchedule.objects.create(employee=employee, name="Default")
+        serializer = WorkScheduleDaySerializer(
+            data={
+                "schedule": schedule.id,
+                "weekday": 1,
+                "is_working_day": True,
+                "capacity_hours": 10,
+                "start_time": "11:00",
+                "end_time": "12:00",
+            }
+        )
+
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("capacity_hours cannot exceed the duration", str(serializer.errors))
+
 
 class CoreApiSmokeTests(APITestCase):
     def test_department_crud_endpoint_creates_department(self) -> None:
@@ -185,6 +241,391 @@ class CoreApiSmokeTests(APITestCase):
         self.assertEqual(response.data[0]["employees"][0]["full_name"], "Directory Employee")
         self.assertEqual(response.data[0]["employees"][0]["position_name"], "Operator")
         self.assertNotIn("email", response.data[0]["employees"][0])
+
+    def test_task_endpoint_allows_null_estimated_hours(self) -> None:
+        user_model = get_user_model()
+        manager = user_model.objects.create_user(
+            username="task-null-estimate-manager",
+            email="task-null-estimate-manager@example.com",
+            password="test-pass",
+            role=user_model.Role.MANAGER,
+        )
+        self.client.force_authenticate(user=manager)
+        department = Department.objects.create(name="Nullable estimate")
+
+        response = self.client.post(
+            "/api/v1/tasks/",
+            {
+                "department": department.id,
+                "title": "Planner can estimate this",
+                "status": Task.Status.PLANNED,
+                "priority": Task.Priority.MEDIUM,
+                "estimated_hours": None,
+                "actual_hours": None,
+                "start_date": "2026-05-10",
+                "due_date": "2026-05-11",
+                "created_by_user": manager.id,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertIsNone(response.data["estimated_hours"])
+
+    def test_schedule_preview_returns_effective_week_truth(self) -> None:
+        user_model = get_user_model()
+        manager = user_model.objects.create_user(
+            username="schedule-preview-manager",
+            email="schedule-preview-manager@example.com",
+            password="test-pass",
+            role=user_model.Role.MANAGER,
+        )
+        employee_user = user_model.objects.create_user(
+            username="schedule-preview-employee",
+            email="schedule-preview-employee@example.com",
+            password="test-pass",
+        )
+        self.client.force_authenticate(user=manager)
+        department = Department.objects.create(name="Schedule preview")
+        employee = Employee.objects.create(
+            user=employee_user,
+            department=department,
+            full_name="Preview Employee",
+            position_name="Operator",
+        )
+        schedule = WorkSchedule.objects.create(employee=employee, name="Week A", is_default=True)
+        WorkScheduleDay.objects.create(
+            schedule=schedule,
+            weekday=0,
+            is_working_day=True,
+            capacity_hours=8,
+            start_time="09:00",
+            end_time="18:00",
+        )
+        WorkScheduleDay.objects.create(
+            schedule=schedule,
+            weekday=1,
+            is_working_day=True,
+            capacity_hours=8,
+            start_time="10:00",
+            end_time="19:00",
+        )
+        EmployeeLeave.objects.create(
+            employee=employee,
+            leave_type=EmployeeLeave.LeaveType.VACATION,
+            status=EmployeeLeave.Status.APPROVED,
+            start_date=date(2026, 5, 11),
+            end_date=date(2026, 5, 11),
+        )
+        EmployeeLeave.objects.create(
+            employee=employee,
+            leave_type=EmployeeLeave.LeaveType.DAY_OFF,
+            status=EmployeeLeave.Status.REQUESTED,
+            start_date=date(2026, 5, 13),
+            end_date=date(2026, 5, 13),
+        )
+        EmployeeAvailabilityOverride.objects.create(
+            employee=employee,
+            date=date(2026, 5, 11),
+            available_hours=5,
+            reason="Would normally be shorter day",
+            created_by_user=manager,
+        )
+        EmployeeAvailabilityOverride.objects.create(
+            employee=employee,
+            date=date(2026, 5, 12),
+            available_hours=4,
+            reason="Training afternoon",
+            created_by_user=manager,
+        )
+
+        response = self.client.get(
+            "/api/v1/schedule-previews/",
+            {
+                "employee_id": employee.id,
+                "week_start": "2026-05-11",
+                "schedule_id": schedule.id,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["week_start"], "2026-05-11")
+        self.assertEqual(response.data["week_end"], "2026-05-17")
+        self.assertEqual(len(response.data["days"]), 7)
+        self.assertEqual(response.data["schedule"]["id"], schedule.id)
+
+        monday = response.data["days"][0]
+        self.assertEqual(monday["date"], "2026-05-11")
+        self.assertEqual(monday["effective_day"]["source"], "approved_leave")
+        self.assertFalse(monday["effective_day"]["is_working_day"])
+        self.assertEqual(monday["effective_day"]["capacity_hours"], 0)
+        self.assertEqual(monday["base_rule"]["capacity_hours"], 8)
+        self.assertIsNotNone(monday["approved_leave"])
+        self.assertIsNotNone(monday["availability_override"])
+
+        tuesday = response.data["days"][1]
+        self.assertEqual(tuesday["date"], "2026-05-12")
+        self.assertEqual(tuesday["effective_day"]["source"], "availability_override")
+        self.assertTrue(tuesday["effective_day"]["is_working_day"])
+        self.assertEqual(tuesday["effective_day"]["capacity_hours"], 4)
+        self.assertEqual(tuesday["availability_override"]["reason"], "Training afternoon")
+
+        wednesday = response.data["days"][2]
+        self.assertEqual(wednesday["date"], "2026-05-13")
+        self.assertEqual(wednesday["effective_day"]["source"], "no_rule")
+        self.assertFalse(wednesday["effective_day"]["is_working_day"])
+        self.assertIsNone(wednesday["approved_leave"])
+        self.assertIsNone(wednesday["base_rule"])
+
+    def test_schedule_preview_rejects_foreign_schedule_id(self) -> None:
+        user_model = get_user_model()
+        manager = user_model.objects.create_user(
+            username="schedule-preview-foreign-manager",
+            email="schedule-preview-foreign-manager@example.com",
+            password="test-pass",
+            role=user_model.Role.MANAGER,
+        )
+        employee_user = user_model.objects.create_user(
+            username="schedule-preview-own-employee",
+            email="schedule-preview-own-employee@example.com",
+            password="test-pass",
+        )
+        other_employee_user = user_model.objects.create_user(
+            username="schedule-preview-foreign-employee",
+            email="schedule-preview-foreign-employee@example.com",
+            password="test-pass",
+        )
+        self.client.force_authenticate(user=manager)
+        employee = Employee.objects.create(
+            user=employee_user,
+            full_name="Own Employee",
+            position_name="Operator",
+        )
+        other_employee = Employee.objects.create(
+            user=other_employee_user,
+            full_name="Foreign Employee",
+            position_name="Operator",
+        )
+        foreign_schedule = WorkSchedule.objects.create(employee=other_employee, name="Foreign Week", is_default=True)
+
+        response = self.client.get(
+            "/api/v1/schedule-previews/",
+            {
+                "employee_id": employee.id,
+                "week_start": "2026-05-11",
+                "schedule_id": foreign_schedule.id,
+            },
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("schedule_id", response.data)
+
+    def test_task_update_to_in_progress_requires_final_assignment_and_activates_it(self) -> None:
+        user_model = get_user_model()
+        manager = user_model.objects.create_user(
+            username="task-progress-manager",
+            email="task-progress-manager@example.com",
+            password="test-pass",
+            role=user_model.Role.MANAGER,
+        )
+        employee_user = user_model.objects.create_user(
+            username="task-progress-employee",
+            email="task-progress-employee@example.com",
+            password="test-pass",
+        )
+        self.client.force_authenticate(user=manager)
+        department = Department.objects.create(name="Task progress")
+        employee = Employee.objects.create(
+            user=employee_user,
+            department=department,
+            full_name="Progress Employee",
+            position_name="Operator",
+        )
+        task = Task.objects.create(
+            department=department,
+            title="Start progress",
+            status=Task.Status.ASSIGNED,
+            estimated_hours=4,
+            start_date=date(2026, 5, 18),
+            due_date=date(2026, 5, 19),
+            created_by_user=manager,
+        )
+
+        missing_assignment_response = self.client.patch(
+            f"/api/v1/tasks/{task.id}/",
+            {"status": Task.Status.IN_PROGRESS},
+            format="json",
+        )
+        self.assertEqual(missing_assignment_response.status_code, 400)
+        self.assertIn("approved or active", str(missing_assignment_response.data))
+
+        assignment = Assignment.objects.create(
+            task=task,
+            employee=employee,
+            planned_hours=4,
+            start_date=date(2026, 5, 18),
+            end_date=date(2026, 5, 19),
+            status=Assignment.Status.APPROVED,
+            assigned_by_type=Assignment.SourceType.MANAGER,
+            assigned_by_user=manager,
+            approved_by_user=manager,
+            approved_at=timezone.now(),
+        )
+
+        response = self.client.patch(
+            f"/api/v1/tasks/{task.id}/",
+            {"status": Task.Status.IN_PROGRESS},
+            format="json",
+        )
+
+        assignment.refresh_from_db()
+        task.refresh_from_db()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(task.status, Task.Status.IN_PROGRESS)
+        self.assertEqual(assignment.status, Assignment.Status.ACTIVE)
+
+    def test_task_update_to_done_requires_actual_hours_and_completes_assignment(self) -> None:
+        user_model = get_user_model()
+        manager = user_model.objects.create_user(
+            username="task-done-manager",
+            email="task-done-manager@example.com",
+            password="test-pass",
+            role=user_model.Role.MANAGER,
+        )
+        employee_user = user_model.objects.create_user(
+            username="task-done-employee",
+            email="task-done-employee@example.com",
+            password="test-pass",
+        )
+        self.client.force_authenticate(user=manager)
+        department = Department.objects.create(name="Task completion")
+        employee = Employee.objects.create(
+            user=employee_user,
+            department=department,
+            full_name="Completion Employee",
+            position_name="Operator",
+        )
+        task = Task.objects.create(
+            department=department,
+            title="Finish task",
+            status=Task.Status.IN_PROGRESS,
+            estimated_hours=5,
+            start_date=date(2026, 5, 20),
+            due_date=date(2026, 5, 20),
+            created_by_user=manager,
+        )
+        assignment = Assignment.objects.create(
+            task=task,
+            employee=employee,
+            planned_hours=5,
+            start_date=date(2026, 5, 20),
+            end_date=date(2026, 5, 20),
+            status=Assignment.Status.ACTIVE,
+            assigned_by_type=Assignment.SourceType.MANAGER,
+            assigned_by_user=manager,
+            approved_by_user=manager,
+            approved_at=timezone.now(),
+        )
+
+        missing_actuals_response = self.client.patch(
+            f"/api/v1/tasks/{task.id}/",
+            {"status": Task.Status.DONE},
+            format="json",
+        )
+        self.assertEqual(missing_actuals_response.status_code, 400)
+        self.assertIn("Actual hours must be a positive value", str(missing_actuals_response.data))
+
+        response = self.client.patch(
+            f"/api/v1/tasks/{task.id}/",
+            {"status": Task.Status.DONE, "actual_hours": 6},
+            format="json",
+        )
+
+        assignment.refresh_from_db()
+        task.refresh_from_db()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(task.status, Task.Status.DONE)
+        self.assertEqual(task.actual_hours, 6)
+        self.assertEqual(assignment.status, Assignment.Status.COMPLETED)
+
+    def test_task_update_rejects_actual_hours_before_done(self) -> None:
+        user_model = get_user_model()
+        manager = user_model.objects.create_user(
+            username="task-actual-manager",
+            email="task-actual-manager@example.com",
+            password="test-pass",
+            role=user_model.Role.MANAGER,
+        )
+        self.client.force_authenticate(user=manager)
+        task = Task.objects.create(
+            title="Premature actuals",
+            status=Task.Status.PLANNED,
+            estimated_hours=2,
+            due_date=date(2026, 5, 21),
+            created_by_user=manager,
+        )
+
+        response = self.client.patch(
+            f"/api/v1/tasks/{task.id}/",
+            {"actual_hours": 2},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("must stay empty unless task status is done", str(response.data))
+
+    def test_done_task_is_terminal_in_task_edit_flow(self) -> None:
+        user_model = get_user_model()
+        manager = user_model.objects.create_user(
+            username="task-terminal-manager",
+            email="task-terminal-manager@example.com",
+            password="test-pass",
+            role=user_model.Role.MANAGER,
+        )
+        employee_user = user_model.objects.create_user(
+            username="task-terminal-employee",
+            email="task-terminal-employee@example.com",
+            password="test-pass",
+        )
+        self.client.force_authenticate(user=manager)
+        department = Department.objects.create(name="Terminal tasks")
+        employee = Employee.objects.create(
+            user=employee_user,
+            department=department,
+            full_name="Terminal Employee",
+            position_name="Operator",
+        )
+        task = Task.objects.create(
+            department=department,
+            title="Already done",
+            status=Task.Status.DONE,
+            estimated_hours=3,
+            actual_hours=3,
+            start_date=date(2026, 5, 22),
+            due_date=date(2026, 5, 22),
+            created_by_user=manager,
+        )
+        Assignment.objects.create(
+            task=task,
+            employee=employee,
+            planned_hours=3,
+            start_date=date(2026, 5, 22),
+            end_date=date(2026, 5, 22),
+            status=Assignment.Status.COMPLETED,
+            assigned_by_type=Assignment.SourceType.MANAGER,
+            assigned_by_user=manager,
+            approved_by_user=manager,
+            approved_at=timezone.now(),
+        )
+
+        response = self.client.patch(
+            f"/api/v1/tasks/{task.id}/",
+            {"status": Task.Status.ASSIGNED, "actual_hours": None},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("terminal in MVP", str(response.data))
 
     def test_manual_assignment_endpoint_creates_approved_assignment(self) -> None:
         user_model = get_user_model()
@@ -984,11 +1425,23 @@ class CoreApiSmokeTests(APITestCase):
             department=department,
             title="Move pallets",
             status=Task.Status.PLANNED,
-            estimated_hours=4,
+            estimated_hours=None,
             due_date=date(2026, 5, 2),
             created_by_user=manager,
         )
         task.requirements.create(skill=skill, min_level=2, weight=1.5)
+        historical_task = Task.objects.create(
+            department=department,
+            title="Completed route",
+            status=Task.Status.DONE,
+            priority=Task.Priority.HIGH,
+            estimated_hours=5,
+            actual_hours=7,
+            start_date=date(2026, 4, 20),
+            due_date=date(2026, 4, 21),
+            created_by_user=manager,
+        )
+        historical_task.requirements.create(skill=skill, min_level=3, weight=2.0)
 
         response = self.client.post(
             "/api/v1/planning-snapshot/",
@@ -1008,9 +1461,68 @@ class CoreApiSmokeTests(APITestCase):
         self.assertEqual(snapshot.tasks[0].task_id, str(task.id))
         self.assertEqual(snapshot.tasks[0].starts_at.isoformat(), "2026-05-02T00:00:00+00:00")
         self.assertEqual(snapshot.tasks[0].ends_at.isoformat(), "2026-05-03T00:00:00+00:00")
+        self.assertIsNone(snapshot.tasks[0].estimated_hours)
+        self.assertEqual(snapshot.tasks[0].priority, Task.Priority.MEDIUM)
         self.assertEqual(snapshot.employees[0].employee_id, str(employee.id))
         override_slot = next(slot for slot in snapshot.employees[0].availability if slot.start_at.date() == date(2026, 5, 2))
         self.assertEqual(override_slot.available_hours, 4)
+        self.assertEqual(snapshot.historical_tasks[0].task_id, str(historical_task.id))
+        self.assertEqual(snapshot.historical_tasks[0].priority, Task.Priority.HIGH)
+        self.assertEqual(snapshot.historical_tasks[0].actual_hours, 7)
+        self.assertEqual(snapshot.historical_tasks[0].requirements[0].min_level, 3)
+
+    @override_settings(INTERNAL_SERVICE_TOKEN="planner-service-secret")
+    def test_planning_snapshot_endpoint_limits_history_to_done_tasks_in_scope(self) -> None:
+        user_model = get_user_model()
+        manager = user_model.objects.create_user(
+            username="snapshot-history-manager",
+            email="snapshot-history-manager@example.com",
+            password="test-pass",
+        )
+        department = Department.objects.create(name="History scope")
+        other_department = Department.objects.create(name="Other history scope")
+        in_scope_task = Task.objects.create(
+            department=department,
+            title="In scope history",
+            status=Task.Status.DONE,
+            estimated_hours=4,
+            actual_hours=6,
+            due_date=date(2026, 4, 10),
+            created_by_user=manager,
+        )
+        Task.objects.create(
+            department=other_department,
+            title="Out of scope history",
+            status=Task.Status.DONE,
+            estimated_hours=3,
+            actual_hours=5,
+            due_date=date(2026, 4, 12),
+            created_by_user=manager,
+        )
+        Task.objects.create(
+            department=department,
+            title="Still planned",
+            status=Task.Status.PLANNED,
+            estimated_hours=2,
+            due_date=date(2026, 5, 2),
+            created_by_user=manager,
+        )
+
+        response = self.client.post(
+            "/api/v1/planning-snapshot/",
+            {
+                "planning_period_start": "2026-05-01",
+                "planning_period_end": "2026-05-02",
+                "initiated_by_user_id": str(manager.id),
+                "department_id": str(department.id),
+            },
+            format="json",
+            HTTP_X_INTERNAL_SERVICE_TOKEN="planner-service-secret",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        snapshot = PlanningSnapshot.model_validate(response.data)
+        self.assertEqual([row.task_id for row in snapshot.historical_tasks], [str(in_scope_task.id)])
 
     def test_planning_snapshot_endpoint_requires_internal_service_token(self) -> None:
         response = self.client.post(

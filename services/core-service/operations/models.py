@@ -9,6 +9,7 @@ from decimal import Decimal
 
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
 
 
 class TimeStampedModel(models.Model):
@@ -100,6 +101,20 @@ class EmployeeSkill(TimeStampedModel):
             models.Index(fields=("employee",), name="employee_skill_employee_idx"),
             models.Index(fields=("skill",), name="employee_skill_skill_idx"),
         ]
+
+    def save(self, *args, **kwargs) -> None:
+        """Persist the skill row and touch the parent employee for AI incremental sync."""
+
+        super().save(*args, **kwargs)
+        Employee.objects.filter(pk=self.employee_id).update(updated_at=timezone.now())
+
+    def delete(self, *args, **kwargs):
+        """Delete the skill row and touch the parent employee for AI incremental sync."""
+
+        employee_id = self.employee_id
+        deleted = super().delete(*args, **kwargs)
+        Employee.objects.filter(pk=employee_id).update(updated_at=timezone.now())
+        return deleted
 
 
 class WorkSchedule(TimeStampedModel):
@@ -222,7 +237,7 @@ class EmployeeAvailabilityOverride(models.Model):
 
 
 class Task(TimeStampedModel):
-    """Business task that must be planned or assigned."""
+    """Business task that may keep a manual estimate and later store actual effort."""
 
     class Status(models.TextChoices):
         DRAFT = "draft", "Draft"
@@ -253,7 +268,7 @@ class Task(TimeStampedModel):
     priority = models.CharField(
         max_length=16, choices=Priority.choices, default=Priority.MEDIUM
     )
-    estimated_hours = models.PositiveSmallIntegerField()
+    estimated_hours = models.PositiveSmallIntegerField(null=True, blank=True)
     actual_hours = models.PositiveSmallIntegerField(null=True, blank=True)
     start_date = models.DateField(null=True, blank=True)
     due_date = models.DateField()
@@ -269,6 +284,13 @@ class Task(TimeStampedModel):
                 condition=models.Q(start_date__isnull=True)
                 | models.Q(start_date__lte=models.F("due_date")),
                 name="task_valid_period",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(status="done", actual_hours__gt=0)
+                    | (~models.Q(status="done") & models.Q(actual_hours__isnull=True))
+                ),
+                name="task_actual_hours_match_done_status",
             ),
         ]
         indexes = [
@@ -306,6 +328,20 @@ class TaskRequirement(models.Model):
             models.Index(fields=("task",), name="task_requirement_task_idx"),
             models.Index(fields=("skill",), name="task_requirement_skill_idx"),
         ]
+
+    def save(self, *args, **kwargs) -> None:
+        """Persist the requirement row and touch the parent task for AI incremental sync."""
+
+        super().save(*args, **kwargs)
+        Task.objects.filter(pk=self.task_id).update(updated_at=timezone.now())
+
+    def delete(self, *args, **kwargs):
+        """Delete the requirement row and touch the parent task for AI incremental sync."""
+
+        task_id = self.task_id
+        deleted = super().delete(*args, **kwargs)
+        Task.objects.filter(pk=task_id).update(updated_at=timezone.now())
+        return deleted
 
 
 class Assignment(models.Model):
