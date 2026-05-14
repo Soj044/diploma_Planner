@@ -49,12 +49,15 @@ Table plan_runs {
   algorithm_version varchar(100) [not null]
   objective_summary text
   objective_weights_json jsonb
+  time_estimates_json jsonb [not null, default: '{}', note: 'task_id -> source/effective/manual/rules/history estimate metadata']
   created_at timestamptz [not null]
   started_at timestamptz
   finished_at timestamptz
 
   Note: '''
   Один запуск планирования на конкретный период.
+  В MVP persisted artifact slice включает planner-side оценки времени:
+  source=manual|history|blended|rules + effective_hours.
   '''
   
   Indexes {

@@ -214,7 +214,6 @@ onMounted(load);
         }}
       </p>
       <div class="pill-row">
-        <span class="pill">/leaves</span>
         <span class="pill is-warm">{{ auth.role.value ?? "unknown role" }}</span>
       </div>
     </section>
@@ -274,7 +273,7 @@ onMounted(load);
         <div>
           <p class="section-caption">Requested queue</p>
           <p class="resource-copy">
-            This list is driven by `GET /employee-leaves/` for manager/admin roles and uses `set-status` for decisions.
+            Review pending leave requests here and decide them without leaving the queue.
           </p>
         </div>
         <button class="button-secondary" type="button" :disabled="isLoading" @click="load">Refresh</button>

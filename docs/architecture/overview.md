@@ -2,7 +2,7 @@
 
 ## Services
 - `core-service` (Django + DRF): source of truth for business entities and final approved assignments.
-- `planner-service` (FastAPI + OR-Tools / CP-SAT): planning runs, snapshots, eligibility, scoring, proposals, diagnostics.
+- `planner-service` (FastAPI + OR-Tools / CP-SAT): planning runs, snapshots (including bounded historical task slice), eligibility, scoring, proposals, diagnostics, and persisted planner-side time estimate artifacts.
 - `frontend-app` (Vue 3 + Vite): thin manager/employee UI over existing backend contracts; not a source of business truth.
 - `ai-layer` (FastAPI): support layer for AI-assisted explanations; current scope includes runtime bootstrap, authenticated explanation contracts, internal feed/context wiring, derived pgvector-backed storage, and structured Ollama generation, but it is not a source of business truth.
 
@@ -49,6 +49,7 @@
 
 ## Main Principle
 - `core-service` is the source of truth for employees, schedules, leaves, tasks, and approved assignments.
+- `core-service` also owns task completion truth: `Task.status=done` requires positive `actual_hours`, and task/assignment completion statuses are synchronized by backend lifecycle rules.
 - `planner-service` is the source of truth for planning proposals, diagnostics, and related persisted artifacts.
 - `frontend-app` keeps only transient UI state and submits all business changes through backend APIs.
 - `ai-layer` may keep only derived retrieval/index data, explanations, and sync metadata in its own schema and must not mirror or own business truth from `core-service` or planning truth from `planner-service`.

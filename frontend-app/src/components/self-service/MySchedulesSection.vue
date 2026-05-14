@@ -179,14 +179,51 @@ function buildScheduleDayPayload(): WorkScheduleDayInput | null {
     return null;
   }
 
+  if (!dayForm.is_working_day) {
+    return {
+      schedule: selectedScheduleId.value,
+      weekday: Number(dayForm.weekday),
+      is_working_day: false,
+      capacity_hours: 0,
+      start_time: null,
+      end_time: null,
+    };
+  }
+
+  if (dayForm.start_time && dayForm.end_time) {
+    const startMinutes = toMinutes(dayForm.start_time);
+    const endMinutes = toMinutes(dayForm.end_time);
+    if (startMinutes === null || endMinutes === null) {
+      errorMessage.value = "Start time and end time must be valid HH:MM values.";
+      return null;
+    }
+    if (endMinutes <= startMinutes) {
+      errorMessage.value = "End time must be later than start time.";
+      return null;
+    }
+    const windowHours = (endMinutes - startMinutes) / 60;
+    if (Number(dayForm.capacity_hours) > windowHours) {
+      errorMessage.value = "Capacity hours cannot exceed the selected time window.";
+      return null;
+    }
+  }
+
   return {
     schedule: selectedScheduleId.value,
     weekday: Number(dayForm.weekday),
-    is_working_day: dayForm.is_working_day,
+    is_working_day: true,
     capacity_hours: Number(dayForm.capacity_hours),
     start_time: dayForm.start_time || null,
     end_time: dayForm.end_time || null,
   };
+}
+
+function toMinutes(value: string): number | null {
+  const [hours, minutes] = value.split(":").map(Number);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) {
+    return null;
+  }
+  return hours * 60 + minutes;
 }
 
 async function saveSchedule() {
@@ -294,8 +331,7 @@ onMounted(async () => {
       <p class="eyebrow">Employee self-service</p>
       <h3 class="page-title">Own work schedules and weekdays</h3>
       <p class="page-description">
-        This screen writes only through `core-service`. Employee scope is anchored to `me.employee_id`, and backend
-        keeps the final self-scope validation.
+        Manage your own work schedule templates and weekday rules from one place.
       </p>
     </section>
 
@@ -312,7 +348,7 @@ onMounted(async () => {
                 <p class="section-caption">
                   {{ editingScheduleId === null ? "Create work schedule" : "Edit work schedule" }}
                 </p>
-                <p class="resource-path">/work-schedules/</p>
+                <p class="resource-copy">Create a reusable schedule and then add weekday rules for it below.</p>
               </div>
               <div class="inline-actions">
                 <button class="button-secondary" type="button" :disabled="isLoading" @click="load">Refresh</button>
@@ -398,7 +434,7 @@ onMounted(async () => {
                 <p class="section-caption">
                   {{ editingDayId === null ? "Create schedule day" : "Edit schedule day" }}
                 </p>
-                <p class="resource-path">/work-schedule-days/</p>
+                <p class="resource-copy">Add the weekday hours that belong to the schedule currently in focus.</p>
               </div>
               <div class="inline-actions">
                 <button

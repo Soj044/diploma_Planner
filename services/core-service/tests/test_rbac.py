@@ -175,6 +175,46 @@ class CoreRbacApiTests(APITestCase):
         self.assertEqual(update_response.status_code, status.HTTP_403_FORBIDDEN)
         self.assertEqual(delete_response.status_code, status.HTTP_403_FORBIDDEN)
 
+    def test_employee_can_preview_only_own_schedule_calendar(self) -> None:
+        self.client.force_authenticate(self.employee_user)
+
+        own_response = self.client.get(
+            "/api/v1/schedule-previews/",
+            {
+                "employee_id": self.employee.id,
+                "week_start": "2026-05-11",
+                "schedule_id": self.own_schedule.id,
+            },
+        )
+        foreign_response = self.client.get(
+            "/api/v1/schedule-previews/",
+            {
+                "employee_id": self.other_employee.id,
+                "week_start": "2026-05-11",
+                "schedule_id": self.schedule.id,
+            },
+        )
+
+        self.assertEqual(own_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(own_response.data["employee"]["id"], self.employee.id)
+        self.assertEqual(foreign_response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_manager_and_admin_can_preview_any_employee_schedule_calendar(self) -> None:
+        for actor in (self.manager, self.admin):
+            with self.subTest(role=actor.role):
+                self.client.force_authenticate(actor)
+                response = self.client.get(
+                    "/api/v1/schedule-previews/",
+                    {
+                        "employee_id": self.other_employee.id,
+                        "week_start": "2026-05-11",
+                        "schedule_id": self.schedule.id,
+                    },
+                )
+
+                self.assertEqual(response.status_code, status.HTTP_200_OK)
+                self.assertEqual(response.data["employee"]["id"], self.other_employee.id)
+
     def test_employee_leave_creation_is_requested_and_foreign_create_is_forbidden(self) -> None:
         self.client.force_authenticate(self.employee_user)
 

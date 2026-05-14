@@ -1,16 +1,23 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
+import { RouterLink } from "vue-router";
 
+import { useAuth } from "../composables/useAuth";
 import { coreService } from "../services/core-service";
 import { describeRequestError } from "../services/http";
 import type { Department } from "../types/api";
 
+const auth = useAuth();
 const departments = ref<Department[]>([]);
 const isLoading = ref(false);
 const errorMessage = ref("");
 
 const orderedDepartments = computed(() => {
   return [...departments.value].sort((left, right) => left.name.localeCompare(right.name));
+});
+
+const canOpenEmployeeProfiles = computed(() => {
+  return auth.role.value === "admin" || auth.role.value === "manager";
 });
 
 async function load() {
@@ -35,13 +42,8 @@ onMounted(load);
       <p class="eyebrow">Departments</p>
       <h3 class="page-title">Department directory</h3>
       <p class="page-description">
-        This view reads the Stage 1 nested department payload directly from `core-service` and intentionally keeps
-        email out of the directory.
+        Browse teams, see who belongs where, and open employee profiles directly from the directory when your role allows it.
       </p>
-      <div class="pill-row">
-        <span class="pill">/departments</span>
-        <span class="pill">GET /api/v1/departments/</span>
-      </div>
     </section>
 
     <section class="page-card">
@@ -69,7 +71,14 @@ onMounted(load);
           <p v-if="department.employees.length === 0" class="empty-state">No employees in this department yet.</p>
           <ul v-else class="resource-list">
             <li v-for="employee in department.employees" :key="employee.id" class="resource-item">
-              <p class="resource-label">{{ employee.full_name }}</p>
+              <RouterLink
+                v-if="canOpenEmployeeProfiles"
+                class="resource-label department-employee-link"
+                :to="{ name: 'employee-profile', params: { id: employee.id } }"
+              >
+                {{ employee.full_name }}
+              </RouterLink>
+              <p v-else class="resource-label">{{ employee.full_name }}</p>
               <p class="resource-copy">{{ employee.position_name || "Position not set" }}</p>
             </li>
           </ul>
@@ -78,3 +87,11 @@ onMounted(load);
     </section>
   </div>
 </template>
+
+<style scoped>
+.department-employee-link:hover,
+.department-employee-link:focus-visible {
+  color: var(--app-accent);
+  outline: none;
+}
+</style>

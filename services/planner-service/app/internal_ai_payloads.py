@@ -28,6 +28,7 @@ def build_unassigned_index_feed(
     for record in repository.list_completed_records(changed_since):
         for diagnostic in record.response.unassigned:
             task_snapshot = _find_task_snapshot(record, diagnostic.task_id)
+            time_estimate = record.response.artifacts.time_estimates.get(diagnostic.task_id)
             eligibility = list(record.response.artifacts.eligibility.get(diagnostic.task_id, []))
             score_map = {
                 employee_id: float(score)
@@ -47,6 +48,7 @@ def build_unassigned_index_feed(
                         eligibility=eligibility,
                         score_map=score_map,
                         candidate_analysis=candidate_analysis,
+                        time_estimate=time_estimate.model_dump(mode="json") if time_estimate else None,
                     ),
                     "metadata": {
                         "plan_run_id": record.plan_run_id,
@@ -55,6 +57,7 @@ def build_unassigned_index_feed(
                         "eligible_employee_ids": eligibility,
                         "eligible_count": len(eligibility),
                         "score_map": score_map,
+                        "time_estimate": time_estimate.model_dump(mode="json") if time_estimate else None,
                         **_candidate_analysis_breakdown(candidate_analysis),
                     },
                     "source_updated_at": record.created_at.isoformat(),
@@ -99,6 +102,7 @@ def build_proposal_context(
         for candidate_id, score in record.response.artifacts.scores.get(task_id, {}).items()
     }
     candidate_analysis = list(record.response.artifacts.candidate_analysis.get(task_id, []))
+    time_estimate = record.response.artifacts.time_estimates.get(task_id)
     return {
         "plan_run_summary": _plan_run_summary_payload(record),
         "task_snapshot": _task_snapshot_payload(task_snapshot),
@@ -113,6 +117,7 @@ def build_proposal_context(
         "selected_employee_id": target_proposal.employee_id,
         "selected_score": float(target_proposal.score),
         "solver_summary": record.response.artifacts.solver_statistics,
+        "time_estimate": time_estimate.model_dump(mode="json") if time_estimate else None,
     }
 
 
@@ -136,6 +141,7 @@ def build_unassigned_context(
         for candidate_id, score in record.response.artifacts.scores.get(task_id, {}).items()
     }
     candidate_analysis = list(record.response.artifacts.candidate_analysis.get(task_id, []))
+    time_estimate = record.response.artifacts.time_estimates.get(task_id)
     return {
         "plan_run_summary": _plan_run_summary_payload(record),
         "task_snapshot": _task_snapshot_payload(task_snapshot),
@@ -147,6 +153,7 @@ def build_unassigned_context(
         "score_map": score_map,
         "candidate_analysis": [_candidate_analysis_payload(row) for row in candidate_analysis],
         "solver_summary": record.response.artifacts.solver_statistics,
+        "time_estimate": time_estimate.model_dump(mode="json") if time_estimate else None,
     }
 
 
@@ -208,6 +215,7 @@ def _task_snapshot_payload(task_snapshot: TaskSnapshot) -> dict[str, Any]:
         "task_id": task_snapshot.task_id,
         "department_id": task_snapshot.department_id,
         "title": task_snapshot.title,
+        "priority": task_snapshot.priority,
         "starts_at": task_snapshot.starts_at.isoformat(),
         "ends_at": task_snapshot.ends_at.isoformat(),
         "estimated_hours": task_snapshot.estimated_hours,
@@ -270,6 +278,7 @@ def _unassigned_case_content(
     eligibility: list[str],
     score_map: dict[str, float],
     candidate_analysis: list[CandidateAnalysisRow],
+    time_estimate: dict[str, Any] | None,
 ) -> str:
     """Build a flattened retrieval body for one persisted unassigned case."""
 
@@ -287,6 +296,8 @@ def _unassigned_case_content(
             f"Task department: {task_snapshot.department_id or 'n/a'}",
             f"Task window: {task_snapshot.starts_at.isoformat()} -> {task_snapshot.ends_at.isoformat()}",
             f"Task estimated hours: {task_snapshot.estimated_hours}",
+            f"Task priority: {task_snapshot.priority}",
+            f"Planner time estimate: {time_estimate or 'n/a'}",
             "Task requirements:",
             *(requirement_lines or ["- none"]),
             f"Diagnostic reason: {diagnostic.reason_code}",

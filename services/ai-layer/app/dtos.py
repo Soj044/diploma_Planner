@@ -60,6 +60,7 @@ class ProposalContext(BaseModel):
     selected_employee_id: str | None = None
     selected_score: float | None = None
     solver_summary: dict[str, Any] = Field(default_factory=dict)
+    time_estimate: dict[str, Any] | None = None
 
 
 class UnassignedContext(BaseModel):
@@ -72,6 +73,7 @@ class UnassignedContext(BaseModel):
     score_map: dict[str, float] = Field(default_factory=dict)
     candidate_analysis: list[dict[str, Any]] = Field(default_factory=list)
     solver_summary: dict[str, Any] = Field(default_factory=dict)
+    time_estimate: dict[str, Any] | None = None
 
 
 class StructuredExplanationOutput(BaseModel):

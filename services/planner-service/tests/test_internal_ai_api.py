@@ -135,6 +135,7 @@ def test_internal_ai_index_feed_returns_unassigned_case(
     assert item["source_type"] == "unassigned_case"
     assert item["source_key"] == f"unassigned:{response.summary.plan_run_id}:{diagnostic.task_id}"
     assert item["metadata"]["reason_code"] == diagnostic.reason_code
+    assert item["metadata"]["time_estimate"]["source"] == "manual"
     assert "eligible_conflict_count" in item["metadata"]
 
 
@@ -170,6 +171,8 @@ def test_internal_ai_proposal_context_returns_persisted_task_slice(
     assert payload["score_map"][proposal.employee_id] == response.artifacts.scores[proposal.task_id][proposal.employee_id]
     assert payload["candidate_analysis"][0]["outcome_code"] == "selected"
     assert payload["selected_employee_id"] == proposal.employee_id
+    assert payload["task_snapshot"]["priority"] == "medium"
+    assert payload["time_estimate"]["source"] == "manual"
 
 
 def test_internal_ai_unassigned_context_returns_persisted_diagnostic_slice(
@@ -190,3 +193,6 @@ def test_internal_ai_unassigned_context_returns_persisted_diagnostic_slice(
     assert payload["task_snapshot"]["task_id"] == diagnostic.task_id
     assert payload["solver_summary"]["status"] == response.artifacts.solver_statistics["status"]
     assert payload["candidate_analysis"][0]["outcome_code"] == "eligible_not_selected_capacity_or_conflict"
+    assert payload["time_estimate"]["effective_hours"] == response.artifacts.time_estimates[
+        diagnostic.task_id
+    ].effective_hours

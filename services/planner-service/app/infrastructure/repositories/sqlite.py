@@ -75,13 +75,14 @@ class SqlitePlanRunRepository:
                     eligibility_json,
                     scores_json,
                     candidate_analysis_json,
+                    time_estimates_json,
                     assigned_count,
                     unassigned_count,
                     created_at,
                     started_at,
                     finished_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(external_uuid) DO UPDATE SET
                     initiated_by_user_id = excluded.initiated_by_user_id,
                     department_id = excluded.department_id,
@@ -95,6 +96,7 @@ class SqlitePlanRunRepository:
                     eligibility_json = excluded.eligibility_json,
                     scores_json = excluded.scores_json,
                     candidate_analysis_json = excluded.candidate_analysis_json,
+                    time_estimates_json = excluded.time_estimates_json,
                     assigned_count = excluded.assigned_count,
                     unassigned_count = excluded.unassigned_count,
                     created_at = excluded.created_at,
@@ -118,6 +120,13 @@ class SqlitePlanRunRepository:
                         {
                             task_id: [row.model_dump(mode="json") for row in rows]
                             for task_id, rows in response.artifacts.candidate_analysis.items()
+                        },
+                        sort_keys=True,
+                    ),
+                    json.dumps(
+                        {
+                            task_id: estimate.model_dump(mode="json")
+                            for task_id, estimate in response.artifacts.time_estimates.items()
                         },
                         sort_keys=True,
                     ),
@@ -370,6 +379,9 @@ class SqlitePlanRunRepository:
                 candidate_analysis=json.loads(plan_run["candidate_analysis_json"])
                 if plan_run["candidate_analysis_json"]
                 else {},
+                time_estimates=json.loads(plan_run["time_estimates_json"])
+                if plan_run["time_estimates_json"]
+                else {},
             ),
         )
         return PersistedPlanRunRecord(
@@ -404,6 +416,7 @@ class SqlitePlanRunRepository:
                     eligibility_json TEXT NOT NULL,
                     scores_json TEXT NOT NULL,
                     candidate_analysis_json TEXT NOT NULL DEFAULT '{}',
+                    time_estimates_json TEXT NOT NULL DEFAULT '{}',
                     assigned_count INTEGER NOT NULL,
                     unassigned_count INTEGER NOT NULL,
                     created_at TEXT NOT NULL,
@@ -468,6 +481,11 @@ class SqlitePlanRunRepository:
             self._ensure_plan_runs_column(
                 connection,
                 column_name="candidate_analysis_json",
+                column_definition="TEXT NOT NULL DEFAULT '{}'",
+            )
+            self._ensure_plan_runs_column(
+                connection,
+                column_name="time_estimates_json",
                 column_definition="TEXT NOT NULL DEFAULT '{}'",
             )
 

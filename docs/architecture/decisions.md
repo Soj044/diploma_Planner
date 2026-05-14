@@ -554,3 +554,81 @@ The first AI-assisted `/tasks/new` smoke uncovered a planner mismatch for date-b
 - Плюсы: multi-day date-based tasks can now match employees with normal daily schedules, which aligns planner behavior with the browser UX and expected manager mental model.
 - Плюсы: no new core-service contracts or snapshot fields are required.
 - Минусы: cumulative availability is still an MVP approximation and does not by itself guarantee an optimal intra-day schedule; deeper time-slicing remains a future planner enhancement.
+
+## ADR-022: Two-Phase Task Completion Truth and Planner-Side Effort Estimation
+
+- Date: 2026-05-12
+- Status: accepted
+
+### Context
+MVP had two gaps:
+- `Task.estimated_hours` was mandatory, so planner could not run without manual effort input.
+- `Task.actual_hours` existed, but completion lifecycle did not enforce backend truth or synchronize final assignment status.
+
+### Decision
+- Keep `actual_hours` only on `Task` in v1 and treat it as business truth after completion.
+- Keep manager/admin completion inside existing task update flow (`TaskViewSet update/partial_update`), but move lifecycle invariants into explicit service-layer logic.
+- Make `Task.estimated_hours` nullable and let planner fill effort only when manual estimate is missing.
+- Enforce task lifecycle invariants:
+  - `task.status == done` requires `actual_hours > 0`
+  - `task.status != done` requires `actual_hours == null`
+  - `done` is terminal in v1
+  - `in_progress` requires final assignment in `approved|active`
+  - `done` requires final assignment in `approved|active|completed`
+  - `approved -> active` auto-sync on `task.status -> in_progress`
+  - `approved|active -> completed` auto-sync on `task.status -> done`
+- Extend `PlanningSnapshot` with bounded `historical_tasks` (completed tasks with non-null `actual_hours`, up to 200 rows, department-scoped when requested).
+- Add planner-side time estimation module and persisted `PlanRunArtifacts.time_estimates` with source transparency:
+  - `manual | history | blended | rules`
+- Reuse one `effective_hours` value everywhere in planner pipeline (eligibility, optimizer planned hours, diagnostics/candidate analysis, persisted artifacts).
+
+### Consequences
+- Плюсы: completion truth becomes consistent and auditable in `core-service`; manager flow stays minimal.
+- Плюсы: planner launch no longer blocks on manual `estimated_hours`; manager sees whether effort came from manual input or planner estimation.
+- Плюсы: approval flow remains intact, with assignment/task lifecycle synchronized by backend.
+- Минусы: history/rules estimation in v1 is heuristic and may need recalibration as data grows.
+- Минусы: planner persistence and internal AI contexts now carry additional artifact fields, increasing compatibility test surface.
+
+### Update Note (2026-05-12)
+- Non-manual planner estimates are now capped by the inclusive weekday task window with a generic upper bound of `8h` per weekday.
+- Manual `Task.estimated_hours` is still trusted as-is and is not capped by task dates.
+
+### Update Note (2026-05-13)
+- Planner `rules` baseline was tuned to reduce overestimation for fresh tasks:
+  - primary requirement contribution is counted fully;
+  - secondary requirement contributions are discounted to `40%` before multiplier.
+- Planner `history` source was tightened:
+  - pure `history` now requires at least three top matches that share required skills with the target task;
+  - department-only similarity still contributes to `blended`, but no longer upgrades to pure history.
+- Manager UX no longer asks for manual `estimated_hours` during task create/edit; planner estimation is now the default, while backend compatibility for nullable `Task.estimated_hours` remains intact.
+- Weekday-rule validation now enforces `end_time > start_time` and `capacity_hours <= (end_time - start_time)` when a time window is provided.
+- `/tasks` visibility for `admin` now includes all tasks (manager scope remains creator-based in v1).
+- Frontend operational routes no longer show contract/API hint blocks; those remain in docs and reference-data tooling instead of user-facing task/planning screens.
+- `Departments` now drills into a separate read-only colleague profile route (`/employees/:id`) for `admin|manager`, using existing employee and employee-skill APIs without adding new backend contracts.
+- `/tasks` now uses a list-first board with modal editing and shared priority-pill styling so task selection and requirement focus stay visible without a persistent split editor.
+
+## ADR-023: Schedule Calendar Preview Reuses Backend Availability Truth
+
+- Date: 2026-05-13
+- Status: accepted
+
+### Context
+`WorkScheduleDay` stores only weekly template rules by weekday, while approved leave and availability overrides are date-specific exceptions. The planner already respected approved leave and overrides in snapshot export, but `/schedule` showed only weekly template data, so frontend users could not see the real date-based availability that planner used.
+
+### Decision
+- Add a dedicated read-only core-service endpoint: `GET /api/v1/schedule-previews/?employee_id=...&week_start=...&schedule_id=...`
+- Keep `week_start` Monday-based and return a fixed 7-day window.
+- Move effective availability resolution into one shared backend service layer reused by:
+  - planner snapshot export
+  - schedule preview read model
+- Use one precedence order everywhere:
+  - approved leave > availability override > weekly schedule rule > no stored rule
+- Keep approved leave visibility out of the requested-only `/employee-leaves/` manager queue.
+- Frontend `/schedule` renders the backend-owned preview and does not recalculate leave/override precedence in browser code.
+
+### Consequences
+- Плюсы: `/schedule` now matches planner truth for real calendar dates without introducing a second source of truth in frontend.
+- Плюсы: leave overlay stays temporary and does not mutate the weekly template stored in `WorkScheduleDay`.
+- Плюсы: requested-only leave review flow remains intact for manager/admin users.
+- Минусы: `core-service` now owns one more read model endpoint and its test surface.
+- Минусы: schedule UX becomes richer and requires explicit week navigation state in frontend.

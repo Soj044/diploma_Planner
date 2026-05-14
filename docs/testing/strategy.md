@@ -11,6 +11,8 @@
 - planning constraints
 - planner artifact persistence and retrieval
 - final assignment flows (planner approval, manual assignment, rejection)
+- task completion workflow (`actual_hours` truth + task/assignment status sync)
+- planner-side effort estimation fallback (`manual|history|blended|rules`)
 - ai-layer runtime/bootstrap, retrieval sync, hybrid structured explanations, and shared pgvector foundation
 - shared contracts validation for planning windows and proposal dates
 
@@ -19,9 +21,13 @@
 - core-service auth: public signup/login, refresh via HttpOnly cookie, logout cookie clear, `me` payload shape, `employee_profile` shape in `login/signup/refresh/me`, inactive user login/refresh denial, introspection allowed only with internal token
 - core-service user profile sync: manager/employee user create and role-change auto-create `Employee` profile; employee->admin role change keeps existing profile
 - core-service RBAC: role matrix checks for admin/manager/employee, employee read-only access to own schedules and schedule days, employee self-scope assignments visibility, requested-only employee leave mutation, manager/admin requested-leave queue, manager/admin-only approval/manual assignment paths, and admin-only users API
+- core-service schedule preview read model: Monday-based week preview for one employee + selected schedule, approved-leave precedence over overrides, override precedence over weekly template, and employee self-scope enforcement on `GET /api/v1/schedule-previews/`
 - core-service leave workflow: employee create forces `status=requested`, employee can update/delete only own `requested` leaves, employee cannot change leave status directly, and manager/admin can review requested leaves through `POST /api/v1/employee-leaves/{id}/set-status/` with `approved|rejected`
 - core-service approval flow: persisted planner proposal lookup, manual final assignment creation, assignment rejection, idempotent replay for the same `task + employee + source_plan_run_id`, rejection of missing or non-selected proposals, rejection of second non-rejected final assignment for one task, manual assignment defaults (`start_date=task.start_date`, `end_date=task.due_date`, `source_plan_run_id=null`), upstream planner failure handling, and internal-token reread of planner-service after planner auth gate
+- core-service task lifecycle: done requires positive `actual_hours`, non-done requires null `actual_hours`, done is terminal, and task status transitions sync final assignment status (`approved->active`, `approved|active->completed`) with required final-assignment presence checks
 - planner-service: unit and integration tests for planning pipeline, `CreatePlanRunRequest` boundary, snapshot client failure handling, SQLite persistence of run/snapshot/proposals/unassigned/solver stats, persisted run retrieval for manager review, overlap conflict diagnostics, and weighted score stability
+- planner-service effort estimation: one shared `task_effort_map` reused by eligibility/optimizer/candidate analysis/proposals, persisted `artifacts.time_estimates`, backward-compatible load for older SQLite runs without `time_estimates_json`, discounted secondary-requirement rules baseline, and stricter pure-history gating by shared required skills
+- planner-service auto-estimate cap: non-manual `effective_hours` must respect the inclusive weekday task window (`8h` per weekday), while manual `estimated_hours` remains uncapped
 - planner-service auth gate: Bearer header validation, deny employee role, allow manager/admin role, and controlled `503` when core introspection is unavailable
 - ai-layer: containerized startup, `/health` probe, authenticated `/api/v1/capabilities`, authenticated explanation routes, PostgreSQL connectivity bootstrap, `CREATE EXTENSION vector`, isolated `ai_layer` schema creation without touching core/planner truth tables, repository creation of `index_items`/`sync_state`/`explanation_logs`, HNSW cosine index creation, full/incremental sync, delete-path handling, stale-index fallback, structured Ollama output validation, and deterministic comparison-reason enrichment when the LLM stays generic
 - internal AI helper routes:
@@ -95,6 +101,10 @@ docker compose up --build
 - Verify `login`, `signup`, `refresh`, and `GET /api/v1/auth/me` all include `employee_profile` with `id`, `full_name`, `department_id`, `position_name`, `hire_date`, and `is_active`.
 - Verify `GET /api/v1/departments/` returns nested employee summaries with `id`, `full_name`, and `position_name`, and does not expose nested employee email in that summary payload.
 - Verify an `employee` token can only `list/retrieve` own `work-schedules` and `work-schedule-days`.
+- Verify `GET /api/v1/schedule-previews/?employee_id=...&week_start=...&schedule_id=...` returns 7 days with `base_rule`, `effective_day`, `approved_leave`, and `availability_override`.
+- Verify an `employee` token can preview only own employee record on `/api/v1/schedule-previews/`, while `manager|admin` can preview any employee.
+- Verify approved leave makes `effective_day` non-working and wins over an availability override on the same date.
+- Verify requested/rejected/cancelled leaves do not affect schedule preview output.
 - Verify employee leave create always persists `status=requested`.
 - Verify an `employee` token can update/delete only own `requested` leaves and cannot change leave status directly.
 - Verify `manager` and `admin` can review requested leaves and call `POST /api/v1/employee-leaves/{id}/set-status/` with `approved|rejected`.
@@ -103,6 +113,9 @@ docker compose up --build
 - Verify `POST /api/v1/assignments/approve-proposal/` creates a final `approved` assignment, keeps planner handoff semantics, and moves `Task.status` to `assigned`.
 - Verify `POST /api/v1/assignments/manual/` moves `Task.status` to `assigned`.
 - Verify `POST /api/v1/assignments/{id}/reject/` marks the final assignment as rejected, reopens `Task.status` to `planned`, and allows a future non-rejected final assignment.
+- Verify task update to `status=done` through existing manager/admin form requires `actual_hours > 0`, marks final assignment `completed`, and rejects transition when final assignment preconditions are not met.
+- Verify task update to `status=in_progress` through existing manager/admin form requires final assignment and auto-moves it from `approved` to `active`.
+- Verify `Task.estimated_hours` can be null in CRUD and planning snapshot export.
 - Verify planner approval and manual assignment both reject creation of a second non-rejected final assignment for the same task.
 - Verify single-task planning still uses the existing planner boundary `POST /api/v1/plan-runs` with `task_ids=[task.id]`.
 - Verify planner-backed final assignment keeps `end_date == task.due_date` for date-based tasks.
@@ -150,25 +163,44 @@ docker compose up --build
 - Verify `/tasks/new` is reachable only for `manager` and `admin`.
 - On `/admin`, verify the reference-data workspace still loads, preserves role-aware CRUD gating, and exposes the admin-only users/roles workspace.
 - On `/departments`, verify the directory renders nested employee summaries and does not require employee email from `GET /api/v1/departments/`.
+- As `admin` and `manager`, verify employee names on `/departments` open read-only colleague profiles at `/employees/:id`.
+- As `employee`, verify names on `/departments` remain plain text and direct `/employees/:id` access is blocked by route role guards.
+- On `/employees/:id`, verify the screen renders employee department, position, employment type, weekly capacity, timezone, hire date, active flag, and skills with levels.
 - As employee, verify `/tasks` is assignment-first and shows deadline from `assignment.end_date`, plus title/description/department/status from joined task data.
 - As employee, verify `/schedule` is read-only and exposes no create/edit/delete controls.
+- As employee, verify `/schedule` defaults to one selected schedule template and shows a weekly calendar preview with real dates.
+- As employee, verify `Previous week`, `Current week`, `Next week`, and manual week-start date changes reload the weekly preview.
+- As employee, verify approved leave dates render as `Leave / non-working` without mutating the stored weekday rule details.
 - As employee, verify `/leaves` shows all leave records, opens a create form without a writable `status` field, and exposes edit/delete only while status is `requested`.
 - As manager/admin, verify `/schedule` loads a cross-employee workspace rather than the employee read-only view.
 - As manager/admin, verify `/schedule` lets the operator choose an employee, create a schedule, edit a schedule, delete a schedule, and keep default-schedule selection visible.
 - As manager/admin, verify `/schedule` lets the operator create, edit, and delete weekday rules for the selected schedule.
 - As manager/admin, verify non-working weekday rules are persisted without editable time inputs in the browser.
+- As manager/admin, verify switching employee, selected schedule, and visible week updates the calendar preview without recomputing availability in the browser.
+- As manager/admin, verify approved leave dates in the preview show `Approved leave` and `Leave / non-working`, while override-only dates show `Availability override` and effective override hours.
+- As manager/admin, verify the preview still shows the muted base schedule details when leave or override changed the effective day.
 - As manager/admin, verify `/leaves` shows only requested records, resolves employee names/positions from `GET /api/v1/employees/`, and never exposes date/type/comment editing controls.
 - As manager/admin, verify `/leaves` `Approve` and `Reject` both call the status-only action and remove the decided record from the queue after reload.
-- On `/tasks`, verify manager/admin see only tasks where `created_by_user === currentUser.id`.
+- On `/tasks`, verify `admin` sees all tasks, while `manager` sees creator-scoped tasks in v1.
+- On `/tasks`, verify the workspace is list-first: no permanent split edit pane, task cards are visually prominent, and `Edit` opens in a modal.
+- On `/tasks`, verify `Task board` shows selected-task emphasis and the requirements area stays scoped to the focused task.
 - On `/tasks/new`, verify task create uses the authenticated user from `/auth/me` and no longer requires reading `/users/`.
 - On `/tasks/new`, verify `Save task` persists the task without planner launch.
 - On `/tasks/new`, verify `Save + Assignment` requires `status=planned`, `start_date`, and `due_date`.
+- On `/tasks/new` and manager task edit forms, verify `estimated_hours` input is removed from manager UX and payloads keep `estimated_hours = null` unless introduced by legacy clients.
+- On `/tasks`, `/tasks/new`, and `/planning`, verify task priority pills use the shared color map: `low=blue`, `medium=yellow`, `high=orange`, `critical=red`.
+- On `/tasks`, `/tasks/new`, `/planning`, `/departments`, `/profile`, `/assignments`, `/schedule`, `/leaves`, and `/`, verify developer-facing contract/API hint blocks are no longer shown.
+- On manager task edit forms, verify `actual_hours` input appears only for `status=done`, and submit is blocked client-side when done has empty actual hours.
+- On `/schedule`, verify weekday rule save is blocked client-side when `end_time <= start_time`.
+- On `/schedule`, verify weekday rule save is blocked client-side when `capacity_hours` exceeds the selected time window duration.
+- On `/schedule`, verify the API rejects the same invalid combinations even if the browser validation is bypassed.
 - On `/tasks/new`, verify manual mode opens only when planner actually returned `unassigned`, not because the frontend skipped planner execution.
 - On `Planning`, verify manager/admin can launch a plan run with period-only scope, optional department filter, and optional selected task subset.
 - For single-task planning UX, verify `/tasks/new` still uses `POST /api/v1/plan-runs` with `task_ids=[task.id]` instead of inventing a new planner route.
 - Verify the planning launch summary shows the returned `plan_run_id`, status, assigned count, and unassigned count after `POST /api/v1/plan-runs`.
 - Verify entering a persisted `plan_run_id` reloads the run through `GET /api/v1/plan-runs/{plan_run_id}`.
 - Verify the persisted review screen still renders proposals, diagnostics, and solver statistics from planner-service.
+- Verify `/planning` proposal rows render both `planned_hours` and estimate source from `artifacts.time_estimates[task_id]`, and old runs without `time_estimates` still render safely.
 - On `/planning`, verify only selected proposal rows show `Explain with AI`.
 - On `/planning`, verify clicking `Explain with AI` for a selected proposal renders `summary`, `reasons`, `risks`, `similar cases`, `recommended actions`, and `advisory note` inline in the same row.
 - On `/planning`, verify selected-proposal explanations can explicitly mention why a competing candidate was not chosen when planner facts support that comparison.
@@ -176,6 +208,8 @@ docker compose up --build
 - On `/planning`, verify reopening the same selected proposal or diagnostic can reuse the component-local AI cache without a mandatory second request.
 - On `/planning`, verify `502/503` responses from `ai-layer` stay local to the affected row and do not block `Approve selected proposal`.
 - On `/tasks/new`, verify a selected proposal opens the planner suggestion modal, and no-candidate diagnostics open manual assignment mode.
+- On `/tasks/new`, verify planner suggestion shows estimate source (`Manual/Historical/Blended/Rules-based`) and non-manual effective hours from persisted planner artifacts.
+- For planner-generated estimates, verify task dates now limit non-manual `effective_hours` to the weekday window upper bound (for example, 5 weekdays -> `40h`).
 - On `/tasks/new`, verify `Explain with AI` appears in planner suggestion mode, loads only on click, and renders `summary`, `reasons`, `risks`, `similar cases`, `recommended actions`, and `advisory note`.
 - On `/tasks/new`, verify proposal explanations can explicitly mention hard-filtered alternatives such as approved-leave overlap or lower persisted score when those facts exist.
 - On `/tasks/new`, verify `Explain why no assignee` appears only when manual mode came from planner `unassigned` fallback, not after `Use manual assignment` from a suggestion.

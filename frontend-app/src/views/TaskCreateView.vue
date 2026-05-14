@@ -8,6 +8,8 @@ import { useRouter } from "vue-router";
 
 import DialogModal from "../components/DialogModal.vue";
 import TaskRequirementsSection from "../components/tasks/TaskRequirementsSection.vue";
+import { normalizeOptionalNumericInput, type OptionalNumericInput } from "../components/tasks/taskFormNumbers";
+import { priorityPillClass } from "../components/tasks/taskPriority";
 import { useAuth } from "../composables/useAuth";
 import { aiService } from "../services/ai-service";
 import { coreService } from "../services/core-service";
@@ -33,8 +35,7 @@ interface TaskFormState {
   description: string;
   status: string;
   priority: string;
-  estimated_hours: number;
-  actual_hours: string;
+  actual_hours: OptionalNumericInput;
   start_date: string;
   due_date: string;
 }
@@ -110,7 +111,6 @@ const form = reactive<TaskFormState>({
   description: "",
   status: "planned",
   priority: "medium",
-  estimated_hours: 8,
   actual_hours: "",
   start_date: "",
   due_date: "",
@@ -139,6 +139,7 @@ const canStartAssignment = computed(() => {
       auth.user.value?.id,
   );
 });
+const isDoneStatus = computed(() => form.status === "done");
 
 const assignmentReadOnlyDates = computed(() => {
   return {
@@ -157,6 +158,8 @@ const currentUnassignedDiagnostic = computed<UnassignedTaskDiagnostic | null>(()
   );
 });
 
+const visiblePriority = computed(() => currentTask.value?.priority || form.priority);
+
 const canExplainUnassigned = computed(() => {
   return (
     assignmentMode.value === "manual" &&
@@ -168,14 +171,15 @@ const canExplainUnassigned = computed(() => {
 });
 
 function buildTaskPayload(): TaskInput {
+  const actualHours = normalizeOptionalNumericInput(form.actual_hours);
   return {
     department: form.department ? Number(form.department) : null,
     title: form.title.trim(),
     description: form.description.trim(),
     status: form.status,
     priority: form.priority,
-    estimated_hours: Number(form.estimated_hours),
-    actual_hours: form.actual_hours ? Number(form.actual_hours) : null,
+    estimated_hours: null,
+    actual_hours: actualHours,
     start_date: form.start_date || null,
     due_date: form.due_date,
     created_by_user: auth.user.value?.id ?? 0,
@@ -189,7 +193,6 @@ function syncFormFromTask(task: Task) {
   form.description = task.description;
   form.status = task.status;
   form.priority = task.priority;
-  form.estimated_hours = task.estimated_hours;
   form.actual_hours = task.actual_hours === null ? "" : String(task.actual_hours);
   form.start_date = task.start_date || "";
   form.due_date = task.due_date;
@@ -197,9 +200,32 @@ function syncFormFromTask(task: Task) {
 
 function resetManualAssignmentForm() {
   manualAssignmentForm.employee = "";
-  manualAssignmentForm.planned_hours = currentTask.value?.estimated_hours || form.estimated_hours || 1;
+  manualAssignmentForm.planned_hours = 1;
   manualAssignmentForm.notes = "";
 }
+
+function estimateSourceLabel(source: string | undefined): string {
+  if (source === "manual") {
+    return "Manual estimate";
+  }
+  if (source === "history") {
+    return "Historical estimate";
+  }
+  if (source === "blended") {
+    return "Blended estimate";
+  }
+  if (source === "rules") {
+    return "Rules-based estimate";
+  }
+  return "Estimate source unavailable";
+}
+
+const selectedTaskTimeEstimate = computed(() => {
+  if (!currentPlanRun.value || !currentTask.value) {
+    return null;
+  }
+  return currentPlanRun.value.artifacts.time_estimates?.[String(currentTask.value.id)] || null;
+});
 
 /**
  * Builds a stable cache key for one task/employee/proposal explanation context.
@@ -337,6 +363,15 @@ async function persistTask(): Promise<Task | null> {
     errorMessage.value = "Authenticated manager/admin context is missing.";
     return null;
   }
+  const actualHours = normalizeOptionalNumericInput(form.actual_hours);
+  if (isDoneStatus.value && actualHours === null) {
+    errorMessage.value = "Done tasks require actual_hours before saving.";
+    return null;
+  }
+  if (!isDoneStatus.value && actualHours !== null) {
+    errorMessage.value = "Actual hours are allowed only when status is done.";
+    return null;
+  }
 
   isSavingTask.value = true;
   errorMessage.value = "";
@@ -420,7 +455,7 @@ async function handleSaveAndAssign() {
       assignmentContextMessage.value = "Planner selected one candidate for this task.";
       manualReason.value = null;
       manualAssignmentForm.employee = selectedProposal.value.employee_id;
-      manualAssignmentForm.planned_hours = selectedProposal.value.planned_hours || task.estimated_hours;
+      manualAssignmentForm.planned_hours = selectedProposal.value.planned_hours || 1;
       manualAssignmentForm.notes = "";
       isAssignmentModalOpen.value = true;
       restoreSuggestionAiStateFromCache();
@@ -580,15 +615,12 @@ onMounted(loadCreateContext);
       <p class="eyebrow">Task creation</p>
       <h3 class="page-title">Create a planned task and continue into assignment</h3>
       <p class="page-description">
-        This flow keeps task creation in `core-service`, adds task requirements on the same page, and reuses the
-        existing persisted planner boundary for single-task assignment.
+        Save the task, shape its requirements, and move straight into assignment without leaving the workflow.
       </p>
       <div class="pill-row">
-        <span class="pill">/tasks/new</span>
-        <span class="pill">POST /api/v1/tasks/</span>
-        <span class="pill is-warm">
-          {{ currentTask ? `Task #${currentTask.id}` : "Unsaved task" }}
-        </span>
+        <span class="pill">{{ currentTask ? `Task #${currentTask.id}` : "Unsaved task" }}</span>
+        <span class="pill" :class="priorityPillClass(visiblePriority)">Priority {{ visiblePriority }}</span>
+        <span class="pill">{{ form.status }}</span>
       </div>
     </section>
 
@@ -597,8 +629,7 @@ onMounted(loadCreateContext);
         <div>
           <p class="section-caption">Task details</p>
           <p class="resource-copy">
-            Save the task first. The assignment flow is enabled only for a saved task with `status=planned`,
-            `start_date`, and `due_date`.
+            Save the task first. Assignment is enabled only after the task stays planned and both planning dates are filled in.
           </p>
         </div>
       </div>
@@ -644,14 +675,9 @@ onMounted(loadCreateContext);
             </select>
           </label>
 
-          <label class="field-group">
-            <span class="field-label">Estimated hours</span>
-            <input v-model.number="form.estimated_hours" class="text-input" min="1" type="number" required />
-          </label>
-
-          <label class="field-group">
+          <label v-if="isDoneStatus" class="field-group">
             <span class="field-label">Actual hours</span>
-            <input v-model="form.actual_hours" class="text-input" min="0" type="number" />
+            <input v-model="form.actual_hours" class="text-input" min="1" type="number" required />
           </label>
 
           <label class="field-group">
@@ -665,10 +691,7 @@ onMounted(loadCreateContext);
           </label>
         </div>
 
-        <div class="notice">
-          Save + Assignment is available only when the task is already saved and stays in `planned` status with both
-          planning dates filled in.
-        </div>
+        <div class="notice">Save + Assignment becomes available only for a saved planned task with both planning dates.</div>
 
         <div class="action-row">
           <button class="button-secondary" type="button" :disabled="isSavingTask" @click="handleSaveTask">
@@ -689,17 +712,7 @@ onMounted(loadCreateContext);
       </form>
     </section>
 
-    <section v-if="currentTask" class="page-card">
-      <div class="editor-header">
-        <div>
-          <p class="section-caption">Task requirements</p>
-          <p class="resource-copy">Requirements attach to the saved task on the same route before assignment.</p>
-        </div>
-        <span class="pill">Task #{{ currentTask.id }}</span>
-      </div>
-
-      <TaskRequirementsSection :selected-task-id="currentTask.id" :reload-token="requirementReloadToken" />
-    </section>
+    <TaskRequirementsSection v-if="currentTask" :selected-task-id="currentTask.id" :reload-token="requirementReloadToken" />
 
     <DialogModal
       :open="isAssignmentModalOpen"
@@ -722,7 +735,18 @@ onMounted(loadCreateContext);
             </li>
             <li class="key-value-item">
               <span class="key-label">Planned hours</span>
-              <span class="key-value">{{ selectedProposal.planned_hours ?? currentTask?.estimated_hours ?? "n/a" }}</span>
+              <span class="key-value">{{ selectedProposal.planned_hours ?? "n/a" }}</span>
+            </li>
+            <li class="key-value-item">
+              <span class="key-label">Estimate source</span>
+              <span class="key-value">{{ estimateSourceLabel(selectedTaskTimeEstimate?.source) }}</span>
+            </li>
+            <li
+              v-if="selectedTaskTimeEstimate && selectedTaskTimeEstimate.source !== 'manual'"
+              class="key-value-item"
+            >
+              <span class="key-label">Planner used hours</span>
+              <span class="key-value">{{ selectedTaskTimeEstimate.effective_hours }}</span>
             </li>
             <li class="key-value-item">
               <span class="key-label">Start date</span>
@@ -806,8 +830,7 @@ onMounted(loadCreateContext);
           <p v-else-if="suggestionAiState.isLoading" class="resource-copy">Loading AI explanation...</p>
 
           <div class="notice">
-            Approval still goes through the persisted planner review handoff in `core-service`. The browser does not
-            create final assignments directly from planner data.
+            Final approval still happens through the saved planning review flow. This screen does not write final assignments directly from planner output.
           </div>
         </section>
       </div>

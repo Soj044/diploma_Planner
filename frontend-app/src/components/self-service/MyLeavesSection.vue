@@ -150,7 +150,7 @@ onMounted(async () => {
       <p class="eyebrow">Employee self-service</p>
       <h3 class="page-title">Own leave requests and periods</h3>
       <p class="page-description">
-        This screen stays thin: the browser sends CRUD payloads, while backend keeps validation and self-scope truth.
+        Track your own leave requests and update them while they are still pending.
       </p>
     </section>
 
@@ -164,7 +164,7 @@ onMounted(async () => {
           <div class="editor-header">
             <div>
               <p class="section-caption">{{ editingId === null ? "Create leave" : "Edit leave" }}</p>
-              <p class="resource-path">/employee-leaves/</p>
+              <p class="resource-copy">Choose dates, leave type, and an optional comment for your request.</p>
             </div>
             <div class="inline-actions">
               <button class="button-secondary" type="button" :disabled="isLoading" @click="load">Refresh</button>

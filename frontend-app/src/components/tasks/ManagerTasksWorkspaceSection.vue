@@ -2,11 +2,14 @@
 import { computed, onMounted, reactive, ref } from "vue";
 import { RouterLink } from "vue-router";
 
+import DialogModal from "../DialogModal.vue";
 import { useAuth } from "../../composables/useAuth";
 import { coreService } from "../../services/core-service";
 import { describeRequestError } from "../../services/http";
 import { consumeUiFlash } from "../../services/ui-flash-service";
 import type { Department, Task, TaskInput } from "../../types/api";
+import { normalizeOptionalNumericInput, type OptionalNumericInput } from "./taskFormNumbers";
+import { priorityPillClass } from "./taskPriority";
 
 const emit = defineEmits<{
   "selected-task-change": [taskId: number | null];
@@ -19,8 +22,7 @@ interface TaskFormState {
   description: string;
   status: string;
   priority: string;
-  estimated_hours: number;
-  actual_hours: string;
+  actual_hours: OptionalNumericInput;
   start_date: string;
   due_date: string;
 }
@@ -49,6 +51,7 @@ const editingId = ref<number | null>(null);
 const isLoading = ref(false);
 const isSaving = ref(false);
 const deletingId = ref<number | null>(null);
+const isEditModalOpen = ref(false);
 const errorMessage = ref("");
 const successMessage = ref("");
 
@@ -58,7 +61,6 @@ const form = reactive<TaskFormState>({
   description: "",
   status: "planned",
   priority: "medium",
-  estimated_hours: 8,
   actual_hours: "",
   start_date: "",
   due_date: "",
@@ -69,8 +71,13 @@ const departmentNameById = computed(() => {
 });
 
 const canDeleteTasks = computed(() => auth.role.value === "admin");
+const isDoneStatus = computed(() => form.status === "done");
+const selectedTask = computed(() => visibleTasks.value.find((task) => task.id === selectedTaskId.value) || null);
 
 const visibleTasks = computed(() => {
+  if (auth.role.value === "admin") {
+    return [...tasks.value].sort((left, right) => right.updated_at.localeCompare(left.updated_at));
+  }
   const currentUserId = auth.user.value?.id;
   return [...tasks.value]
     .filter((task) => task.created_by_user === currentUserId)
@@ -82,6 +89,11 @@ function setSelectedTask(taskId: number | null) {
   emit("selected-task-change", taskId);
 }
 
+function closeEditModal() {
+  isEditModalOpen.value = false;
+  editingId.value = null;
+}
+
 function resetForm() {
   editingId.value = null;
   form.department = "";
@@ -89,7 +101,6 @@ function resetForm() {
   form.description = "";
   form.status = "planned";
   form.priority = "medium";
-  form.estimated_hours = 8;
   form.actual_hours = "";
   form.start_date = "";
   form.due_date = "";
@@ -102,24 +113,26 @@ function startEditing(task: Task) {
   form.description = task.description;
   form.status = task.status;
   form.priority = task.priority;
-  form.estimated_hours = task.estimated_hours;
   form.actual_hours = task.actual_hours === null ? "" : String(task.actual_hours);
   form.start_date = task.start_date || "";
   form.due_date = task.due_date;
   setSelectedTask(task.id);
   errorMessage.value = "";
   successMessage.value = "";
+  isEditModalOpen.value = true;
 }
 
 function buildPayload(): TaskInput {
+  const actualHours = normalizeOptionalNumericInput(form.actual_hours);
+
   return {
     department: form.department ? Number(form.department) : null,
     title: form.title.trim(),
     description: form.description.trim(),
     status: form.status,
     priority: form.priority,
-    estimated_hours: Number(form.estimated_hours),
-    actual_hours: form.actual_hours ? Number(form.actual_hours) : null,
+    estimated_hours: null,
+    actual_hours: actualHours,
     start_date: form.start_date || null,
     due_date: form.due_date,
     created_by_user: auth.user.value?.id ?? 0,
@@ -131,10 +144,7 @@ async function load() {
   errorMessage.value = "";
 
   try {
-    const [taskRows, departmentRows] = await Promise.all([
-      coreService.listTasks(),
-      coreService.listDepartments(),
-    ]);
+    const [taskRows, departmentRows] = await Promise.all([coreService.listTasks(), coreService.listDepartments()]);
     tasks.value = taskRows;
     departments.value = departmentRows;
 
@@ -161,6 +171,15 @@ async function save() {
   if (editingId.value === null) {
     return;
   }
+  const actualHours = normalizeOptionalNumericInput(form.actual_hours);
+  if (isDoneStatus.value && actualHours === null) {
+    errorMessage.value = "Done tasks require actual_hours before saving.";
+    return;
+  }
+  if (!isDoneStatus.value && actualHours !== null) {
+    errorMessage.value = "Actual hours are allowed only when status is done.";
+    return;
+  }
 
   isSaving.value = true;
   errorMessage.value = "";
@@ -170,6 +189,8 @@ async function save() {
     const updatedTask = await coreService.updateTask(editingId.value, buildPayload());
     successMessage.value = "Task updated.";
     setSelectedTask(updatedTask.id);
+    closeEditModal();
+    resetForm();
     await load();
     emit("tasks-updated");
   } catch (error: unknown) {
@@ -188,6 +209,7 @@ async function remove(taskId: number) {
     await coreService.deleteTask(taskId);
     successMessage.value = "Task deleted.";
     if (editingId.value === taskId) {
+      closeEditModal();
       resetForm();
     }
     if (selectedTaskId.value === taskId) {
@@ -213,8 +235,8 @@ onMounted(async () => {
       <div>
         <p class="section-caption">My task workspace</p>
         <p class="resource-copy">
-          This list is scoped to tasks created by the current manager/admin session. New task creation moved into a
-          dedicated create-and-assign flow.
+          Keep the board in focus, jump into requirements from a specific card, and open edit details only when you
+          need them.
         </p>
       </div>
       <div class="inline-actions">
@@ -223,149 +245,236 @@ onMounted(async () => {
       </div>
     </div>
 
-    <div class="data-layout">
-      <section class="records-card">
-        <div class="editor-header">
-          <div>
-            <p class="section-caption">Existing tasks</p>
-            <p class="resource-copy">Use Requirements to focus the existing task requirement editor below.</p>
-          </div>
-          <span class="pill">{{ visibleTasks.length }} rows</span>
-        </div>
+    <div class="workspace-summary">
+      <span class="pill">{{ visibleTasks.length }} tasks in scope</span>
+      <span v-if="selectedTask" class="pill">Focused: {{ selectedTask.title }}</span>
+    </div>
 
-        <p v-if="isLoading" class="resource-copy">Loading tasks...</p>
-        <p v-else-if="visibleTasks.length === 0" class="empty-state">No tasks created by this user yet.</p>
-        <ul v-else class="resource-list">
-          <li
-            v-for="task in visibleTasks"
-            :key="task.id"
-            class="resource-item"
-            :class="{ 'resource-item-active': selectedTaskId === task.id }"
-          >
-            <div class="resource-heading">
-              <p class="resource-label">{{ task.title }}</p>
-              <div class="inline-actions">
-                <button class="button-secondary" type="button" @click="setSelectedTask(task.id)">Requirements</button>
-                <button class="button-secondary" type="button" @click="startEditing(task)">Edit</button>
-                <button
-                  v-if="canDeleteTasks"
-                  class="button-danger"
-                  type="button"
-                  :disabled="deletingId === task.id"
-                  @click="remove(task.id)"
-                >
-                  {{ deletingId === task.id ? "Deleting..." : "Delete" }}
-                </button>
-              </div>
-            </div>
+    <p v-if="errorMessage" class="status-banner is-error">{{ errorMessage }}</p>
+    <p v-if="successMessage" class="status-banner is-success">{{ successMessage }}</p>
+
+    <section class="records-card">
+      <div class="editor-header">
+        <div>
+          <p class="task-board-kicker">Task board</p>
+          <h3 class="task-board-title">Plan-visible tasks</h3>
+          <p class="resource-copy">Use a card to focus requirements, inspect timing, or open the task editor.</p>
+        </div>
+      </div>
+
+      <p v-if="isLoading" class="resource-copy">Loading tasks...</p>
+      <p v-else-if="visibleTasks.length === 0" class="empty-state">No tasks are available in this scope yet.</p>
+      <div v-else class="task-board-grid">
+        <article
+          v-for="task in visibleTasks"
+          :key="task.id"
+          class="task-card"
+          :class="{ 'is-selected': selectedTaskId === task.id }"
+        >
+          <div class="task-card-topline">
+            <span class="task-card-id">Task #{{ task.id }}</span>
+            <span class="task-card-updated">Updated {{ new Date(task.updated_at).toLocaleDateString() }}</span>
+          </div>
+
+          <div class="task-card-header">
+            <h4 class="task-card-title">{{ task.title }}</h4>
             <div class="pill-row">
               <span class="pill">{{ task.status }}</span>
-              <span class="pill is-warm">{{ task.priority }}</span>
+              <span class="pill" :class="priorityPillClass(task.priority)">{{ task.priority }}</span>
             </div>
-            <p class="resource-copy">
+          </div>
+
+          <p class="task-card-description">
+            {{ task.description || "No description yet. Use the edit modal to add more planning context." }}
+          </p>
+
+          <div class="task-card-meta">
+            <p>
               Department:
               {{ task.department === null ? "None" : departmentNameById.get(task.department) || `#${task.department}` }}
             </p>
-            <p class="resource-copy">
-              Estimated: {{ task.estimated_hours }}h
-              <span v-if="task.actual_hours !== null">· Actual: {{ task.actual_hours }}h</span>
-              · Start: {{ task.start_date || "Not set" }}
-              · Due: {{ task.due_date }}
-            </p>
-            <p class="item-meta">ID {{ task.id }} · updated {{ new Date(task.updated_at).toLocaleString() }}</p>
-          </li>
-        </ul>
-      </section>
-
-      <section class="editor-card">
-        <div class="editor-header">
-          <div>
-            <p class="section-caption">{{ editingId === null ? "Edit task" : `Editing task #${editingId}` }}</p>
-            <p class="resource-path">PATCH /tasks/{id}/</p>
+            <p>Start: {{ task.start_date || "Not set" }}</p>
+            <p>Due: {{ task.due_date }}</p>
+            <p v-if="task.actual_hours !== null">Actual: {{ task.actual_hours }}h</p>
           </div>
-          <div class="inline-actions">
-            <button v-if="editingId !== null" class="button-secondary" type="button" :disabled="isSaving" @click="resetForm">
-              Cancel edit
+
+          <div class="task-card-actions">
+            <button class="button-secondary" type="button" @click="setSelectedTask(task.id)">Requirements</button>
+            <button class="button-secondary" type="button" @click="startEditing(task)">Edit</button>
+            <button
+              v-if="canDeleteTasks"
+              class="button-danger"
+              type="button"
+              :disabled="deletingId === task.id"
+              @click="remove(task.id)"
+            >
+              {{ deletingId === task.id ? "Deleting..." : "Delete" }}
             </button>
           </div>
+        </article>
+      </div>
+    </section>
+
+    <DialogModal
+      :open="isEditModalOpen"
+      :title="editingId === null ? 'Edit task' : `Edit task #${editingId}`"
+      description="Adjust task details without leaving the board. Requirements stay focused in the main workspace."
+      @close="closeEditModal"
+    >
+      <form class="page-stack" @submit.prevent="save">
+        <div class="form-grid">
+          <label class="field-group">
+            <span class="field-label">Title</span>
+            <input v-model.trim="form.title" class="text-input" required />
+          </label>
+
+          <label class="field-group">
+            <span class="field-label">Department</span>
+            <select v-model="form.department" class="select-input">
+              <option value="">No department</option>
+              <option v-for="department in departments" :key="department.id" :value="String(department.id)">
+                {{ department.name }}
+              </option>
+            </select>
+          </label>
+
+          <label class="field-group field-group-span-2">
+            <span class="field-label">Description</span>
+            <textarea v-model.trim="form.description" class="text-area" rows="4" />
+          </label>
+
+          <label class="field-group">
+            <span class="field-label">Status</span>
+            <select v-model="form.status" class="select-input">
+              <option v-for="option in statusOptions" :key="option.value" :value="option.value">
+                {{ option.label }}
+              </option>
+            </select>
+          </label>
+
+          <label class="field-group">
+            <span class="field-label">Priority</span>
+            <select v-model="form.priority" class="select-input">
+              <option v-for="option in priorityOptions" :key="option.value" :value="option.value">
+                {{ option.label }}
+              </option>
+            </select>
+          </label>
+
+          <label v-if="isDoneStatus" class="field-group">
+            <span class="field-label">Actual hours</span>
+            <input v-model="form.actual_hours" class="text-input" min="1" type="number" required />
+          </label>
+
+          <label class="field-group">
+            <span class="field-label">Start date</span>
+            <input v-model="form.start_date" class="text-input" type="date" />
+          </label>
+
+          <label class="field-group">
+            <span class="field-label">Due date</span>
+            <input v-model="form.due_date" class="text-input" type="date" required />
+          </label>
         </div>
+      </form>
 
-        <div v-if="editingId === null" class="notice">
-          Select an existing task to edit it here, or start a new create-and-assignment flow from the “Create task”
-          button.
-        </div>
-
-        <form v-else @submit.prevent="save">
-          <div class="form-grid">
-            <label class="field-group">
-              <span class="field-label">Title</span>
-              <input v-model.trim="form.title" class="text-input" required />
-            </label>
-
-            <label class="field-group">
-              <span class="field-label">Department</span>
-              <select v-model="form.department" class="select-input">
-                <option value="">No department</option>
-                <option v-for="department in departments" :key="department.id" :value="String(department.id)">
-                  {{ department.name }}
-                </option>
-              </select>
-            </label>
-
-            <label class="field-group field-group-span-2">
-              <span class="field-label">Description</span>
-              <textarea v-model.trim="form.description" class="text-area" rows="4" />
-            </label>
-
-            <label class="field-group">
-              <span class="field-label">Status</span>
-              <select v-model="form.status" class="select-input">
-                <option v-for="option in statusOptions" :key="option.value" :value="option.value">
-                  {{ option.label }}
-                </option>
-              </select>
-            </label>
-
-            <label class="field-group">
-              <span class="field-label">Priority</span>
-              <select v-model="form.priority" class="select-input">
-                <option v-for="option in priorityOptions" :key="option.value" :value="option.value">
-                  {{ option.label }}
-                </option>
-              </select>
-            </label>
-
-            <label class="field-group">
-              <span class="field-label">Estimated hours</span>
-              <input v-model.number="form.estimated_hours" class="text-input" min="1" type="number" required />
-            </label>
-
-            <label class="field-group">
-              <span class="field-label">Actual hours</span>
-              <input v-model="form.actual_hours" class="text-input" min="0" type="number" />
-            </label>
-
-            <label class="field-group">
-              <span class="field-label">Start date</span>
-              <input v-model="form.start_date" class="text-input" type="date" />
-            </label>
-
-            <label class="field-group">
-              <span class="field-label">Due date</span>
-              <input v-model="form.due_date" class="text-input" type="date" required />
-            </label>
-          </div>
-
-          <div class="action-row">
-            <button class="button-primary" type="submit" :disabled="isSaving">
-              {{ isSaving ? "Saving..." : "Save task" }}
-            </button>
-          </div>
-        </form>
-
-        <p v-if="errorMessage" class="status-banner is-error">{{ errorMessage }}</p>
-        <p v-if="successMessage" class="status-banner is-success">{{ successMessage }}</p>
-      </section>
-    </div>
+      <template #actions>
+        <button class="button-secondary" type="button" :disabled="isSaving" @click="closeEditModal">Cancel</button>
+        <button class="button-primary" type="button" :disabled="isSaving" @click="save">
+          {{ isSaving ? "Saving..." : "Save task" }}
+        </button>
+      </template>
+    </DialogModal>
   </section>
 </template>
+
+<style scoped>
+.workspace-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.task-board-kicker {
+  color: var(--app-accent);
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.task-board-title {
+  font-size: clamp(1.45rem, 2vw, 2rem);
+  line-height: 1.05;
+  margin: 0.2rem 0 0;
+}
+
+.task-board-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+}
+
+.task-card {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.85), rgba(255, 252, 247, 0.95));
+  border: 1px solid var(--app-line);
+  border-radius: 1.2rem;
+  box-shadow: var(--app-shadow);
+  display: grid;
+  gap: 0.85rem;
+  padding: 1rem;
+  transition: transform 150ms ease, border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.task-card:hover {
+  transform: translateY(-2px);
+}
+
+.task-card.is-selected {
+  border-color: rgba(16, 125, 103, 0.45);
+  box-shadow: 0 0 0 1px rgba(16, 125, 103, 0.12), var(--app-shadow);
+}
+
+.task-card-topline,
+.task-card-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  justify-content: space-between;
+}
+
+.task-card-id,
+.task-card-updated {
+  color: var(--app-muted);
+  font-size: 0.8rem;
+}
+
+.task-card-header {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.task-card-title {
+  font-size: 1.15rem;
+  line-height: 1.15;
+  margin: 0;
+}
+
+.task-card-description,
+.task-card-meta p {
+  color: var(--app-muted);
+  margin: 0;
+}
+
+.task-card-meta {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.task-card-actions {
+  justify-content: start;
+}
+</style>
